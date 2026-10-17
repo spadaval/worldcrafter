@@ -67,3 +67,6 @@ yarn-error.log*
 # Impeccable runtime state
 .impeccable/hook.cache.json
 .impeccable/config.local.json
+
+# Claude Code agent worktrees
+.claude/worktrees/

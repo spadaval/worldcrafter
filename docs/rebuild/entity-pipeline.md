@@ -76,7 +76,7 @@ type DiscoveryResult = {
 };
 ```
 
-- Results are **proposals**. They are annotations or inbox items, never direct writes.
+- Canon results (new entries, fact changes, relations) are **proposals**. They are annotations or inbox items, never direct writes. Bookkeeping results (scene breakdowns, time placement) are applied automatically as *inferred* data instead. See `story-time.md` (Bookkeeping by AI).
 - Validate relation proposals against `relation-model.ts` domain/range rules before showing them.
 - Deduplicate against dismissals and existing proposals. Each proposal records its source block and model.
 
@@ -86,7 +86,7 @@ type DiscoveryResult = {
   - **Create entry** (prefilled with kind, short summary, aliases)
   - **Alias of…**
   - **Dismiss** (remembered; reuse the `entity-suppression.ts` idea, keyed by world + normalised surface)
-- **World inbox:** a batched review of everything proposed (new entities, facts, relations, possible contradictions). Inbox items are posted to the relevant **talk page** (see `talk-pages.md`). The inbox is the aggregate view of open AI-started talk threads.
+- **World inbox:** a batched review of everything proposed (new entities, facts, relations, possible contradictions). Inbox items are posted to the relevant **talk page** (see `talk-pages.md`). The inbox is the aggregate view of open AI-started talk topics.
 
 ## Manual path (still first-class)
 

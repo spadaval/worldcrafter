@@ -14,13 +14,13 @@ This replaces the old global chat threads (`src/lib/state/chat.ts`), which weren
 |---|---|---|
 | Document talk | Talk:Article | "Is Ardelia too young to lead the Ninefold?", rework this section, research |
 | World talk | Village pump | brainstorming before any document exists, cross-cutting questions |
-| Block anchor (optional) | — | a thread pinned to a specific paragraph (like a margin comment that grew up) |
+| Block anchor (optional) | — | a topic pinned to a specific paragraph (like a margin comment that grew up) |
 
 ## Structure
 
-- A talk page is a list of **threads (topics)**. Each has a title and a status: `open` / `resolved` / `archived`.
+- A talk page is a list of **topics** (Wikipedia's word; "thread" is avoided because it means story time to writers). Each has a title and a status: `open` / `resolved` / `archived`.
 - Each message records its **author**: you, or a model (with model id and an assembled-request reference, so you can inspect exactly what it saw).
-- **Either side can start a thread.** The AI posts discovery proposals, possible contradictions and upkeep suggestions as threads on the relevant page. The **world inbox** is just "all open threads started by AI, across the world".
+- **Either side can start a topic.** The AI posts discovery proposals, possible contradictions and upkeep suggestions as topics on the relevant page. The **world inbox** is just "all open topics started by AI, across the world".
 
 ## Context is automatic and visible
 
@@ -28,7 +28,7 @@ When you're on a document's talk page, the context builder includes:
 - that document (`prose` projection)
 - its world-fact card and relations
 - cards for entities it mentions
-- the current thread
+- the current topic
 
 Like generation requests, the assembled request can be viewed and edited.
 
@@ -40,14 +40,14 @@ The talk page is never where content lives. Useful results are moved into the do
 - **Propose fact or relation:** go to the world-facts store after you accept them.
 - **Record decision:** turns a conclusion ("Ardelia is 340 and looks 30") into a fact proposal, so the decision isn't buried in chat history.
 
-Closing a thread can prompt: "Record anything from this as a fact?"
+Closing a topic can prompt: "Record anything from this as a fact?"
 
 ## Data model
 
 Discussions are their own store (neither content nor annotations):
 
 ```ts
-type Thread = {
+type Topic = {
   id: string;
   scope: { kind: "world" } | { kind: "document"; docId: string; blockId?: string };
   title: string;
@@ -58,7 +58,7 @@ type Thread = {
 
 type TalkMessage = {
   id: string;
-  threadId: string;
+  topicId: string;
   author: { kind: "user" } | { kind: "model"; modelId: string; requestId: string };
   body: string;               // markdown; light schema
   proposals?: ProposalRef[];  // edits, facts, relations raised by this message
@@ -66,10 +66,10 @@ type TalkMessage = {
 };
 ```
 
-A thread whose block anchor goes stale falls back to the document scope.
+A topic whose block anchor goes stale falls back to the document scope.
 
 ## Why this fits the philosophy
 
 - Writing stays the main surface. Chat sits beside it, scoped to one thing.
 - The AI is a participant whose contributions are attributed and reviewable, the same way other people's are on Wikipedia, and like Patchwork's bots.
-- Every action available in a thread (propose edit, add fact) is a typed command that an external agent can call as well.
+- Every action available in a topic (propose edit, add fact) is a typed command that an external agent can call as well.

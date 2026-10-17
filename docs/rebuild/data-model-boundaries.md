@@ -22,7 +22,7 @@ There is no neat solution, because the tree will always hold more than the text.
 | **Content** | prose, headings, lists, quotes, internal links, AI-segment *boundaries*, placeholders | Plate tree (canonical) | user, accepted AI output |
 | **Annotations** | entity candidates, dismissals, AI provenance (prompt, messages, model, sampler, logprobs), comments | Sidecar store keyed by `blockId` (+ offset or quote anchor) | the system; the user only through UI actions |
 | **World facts** | doc type and template, frontmatter fields, aliases, typed relations, tags | Structured store (not in prose) | user, AI as *proposals* |
-| **Discussions** | talk-page threads and messages (see `talk-pages.md`) | Discussion store, scoped to world / document / block | user and AI; results go into the other three only as proposals |
+| **Discussions** | talk-page topics and messages (see `talk-pages.md`) | Discussion store, scoped to world / document / block | user and AI; results go into the other three only as proposals |
 
 Rules:
 

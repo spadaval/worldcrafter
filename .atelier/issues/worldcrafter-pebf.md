@@ -4,6 +4,9 @@ id: "worldcrafter-pebf"
 issue_type: "task"
 labels:
 - "rebuild"
+workflow_branch:
+  branch_base: master
+  work_branch: task/worldcrafter-pebf
 priority: "P2"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Add story-time design doc and rename talk-page threads to topics"
-updated_at: "2026-10-17T17:53:06.786911648+00:00"
+updated_at: "2026-10-17T17:53:24.710400357+00:00"
 ---
 
 ## Goal

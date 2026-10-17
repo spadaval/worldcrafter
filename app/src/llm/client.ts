@@ -54,7 +54,8 @@ export type SendOptions = {
   signal?: AbortSignal;
   /**
    * Called for each streamed delta, in order. If it throws, the stream is
-   * cancelled and `send` returns a `callback` error.
+   * cancelled and `send` returns a `callback` error. Must be synchronous:
+   * the rejection of an async callback is not observed.
    */
   onDelta?: (delta: StreamDelta) => void;
 };
@@ -222,7 +223,13 @@ async function readStream(
 }
 
 function describe(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
+  if (cause instanceof Error) return cause.message;
+  try {
+    return String(cause);
+  } catch {
+    // e.g. Object.create(null) has no toString; send() must still resolve.
+    return "<unprintable value>";
+  }
 }
 
 /** Accumulates choice 0 from a response or from successive stream chunks. */

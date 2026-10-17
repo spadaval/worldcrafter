@@ -442,6 +442,42 @@ describe("streaming", () => {
     expect(serverSawCancel).toBe(true);
   });
 
+  test("an unprintable thrown value is still a callback error", async () => {
+    handler = () => sse([chatChunk("a", { finish_reason: "stop" })]);
+    const thrown: unknown = Object.create(null);
+    const request = buildRequest(
+      profile,
+      { kind: "chat", messages: [] },
+      { stream: true },
+    );
+    const result = await send(profile, request, {
+      onDelta: () => {
+        throw thrown;
+      },
+    });
+    const error = expectErr(result, "callback");
+    expect(error.message).toContain("<unprintable value>");
+    expect(error).toMatchObject({ cause: thrown });
+  });
+
+  test("aborting in the last delta of a stream without [DONE] is aborted", async () => {
+    // No trailing blank line: the event is flushed only when the stream ends,
+    // so the abort lands after the final read rather than failing a later one.
+    handler = () =>
+      sse([chatChunk("end", { finish_reason: "stop" }).trimEnd()]);
+    const controller = new AbortController();
+    const request = buildRequest(
+      profile,
+      { kind: "chat", messages: [] },
+      { stream: true },
+    );
+    const result = await send(profile, request, {
+      signal: controller.signal,
+      onDelta: () => controller.abort(),
+    });
+    expectErr(result, "aborted");
+  });
+
   test("an event that is not JSON is a malformed error", async () => {
     handler = () => sse([chatChunk("ok"), "data: {not json\n\n"]);
     const request = buildRequest(

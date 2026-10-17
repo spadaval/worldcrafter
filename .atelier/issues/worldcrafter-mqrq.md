@@ -6,6 +6,9 @@ labels:
 - "ai"
 - "editor"
 - "rebuild"
+workflow_branch:
+  branch_base: master
+  work_branch: feature/worldcrafter-mqrq
 priority: "P1"
 relationships:
   blocks:
@@ -45,7 +48,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Core loop: write, generate with visible world context, accept or regenerate"
-updated_at: "2026-10-17T17:52:19.499189117+00:00"
+updated_at: "2026-10-17T23:44:54.326836818+00:00"
 ---
 
 ## Goal

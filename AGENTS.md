@@ -7,6 +7,7 @@
 This repository uses [Atelier](https://github.com/spadaval/atelier) for missions, issues, evidence and review (records live in `.atelier/`, base branch `master`).
 - Orient with `atelier status`; find work with `atelier work ready`; run `atelier land` before handoff.
 - Start work with `atelier start <id>` and integrate with `atelier merge <id>`. Only tracker records and mission strategies may be committed directly to `master`.
+- The rebuilt app lives in `app/` (its own package: run `bun install` and `bun run check` there). The root `src/` is the old app, kept for reference until it is retired.
 - Mission strategies live in `docs/strategies/`. The current mission is the rebuild (`docs/strategies/rebuild.md`); its design proposals are in `docs/rebuild/`. Where those docs conflict with the rest of this file, they describe the target and this file describes the old code.
 
 ## Commands

@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Spike: prove Plate block IDs survive split, merge, paste and reload"
-updated_at: "2026-10-17T07:07:33.749335561+00:00"
+updated_at: "2026-10-17T23:44:54.326838341+00:00"
 ---
 
 ## Goal

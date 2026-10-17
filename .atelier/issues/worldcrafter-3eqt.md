@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Storage adapter with IndexedDB implementation"
-updated_at: "2026-10-17T07:07:33.749856111+00:00"
+updated_at: "2026-10-17T23:47:00.283682487+00:00"
 ---
 
 ## Goal

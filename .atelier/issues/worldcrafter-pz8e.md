@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "One OpenAI-compatible LLM client with sampler passthrough and profiles"
-updated_at: "2026-10-17T07:07:33.747260123+00:00"
+updated_at: "2026-10-17T23:47:00.347878787+00:00"
 ---
 
 ## Goal

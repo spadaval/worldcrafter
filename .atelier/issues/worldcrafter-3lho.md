@@ -16,9 +16,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Restricted content schema with lossless export projection"
-updated_at: "2026-10-17T21:32:48.496375422+00:00"
+updated_at: "2026-10-17T23:47:00.220089353+00:00"
 ---
 
 ## Goal

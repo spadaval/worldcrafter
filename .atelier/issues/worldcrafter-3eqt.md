@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T23:57:20.201150583+00:00"
+status: "done"
 title: "Storage adapter with IndexedDB implementation"
-updated_at: "2026-10-17T23:47:00.283682487+00:00"
+updated_at: "2026-10-17T23:57:20.201150583+00:00"
 ---
 
 ## Goal
@@ -40,3 +41,7 @@ Interface, two implementations and tests. Nothing else may touch IndexedDB direc
 ## Context
 
 Strategy S9. Legend State notes: `docs/legend-state.md`. Old persistence: `src/lib/state/documents.ts`.
+
+## Close Reason
+
+Storage adapter merged into the increment branch: in-memory and IndexedDB implementations pass a shared contract suite (67 tests); independently reviewed, fixes re-reviewed and approved

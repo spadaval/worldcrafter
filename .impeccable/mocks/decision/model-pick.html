@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>WorldCrafter · The Prompt Book</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;1,7..72,400&family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--ground:#111317;--panel:#171a20;--ink:#ecebe6;--ink2:#a9aab0;--ink3:#8f929b;--rule:#262a33;--yel:#f2d33a;--pink:#ff5c8a;--cyan:#3ec8e0;--grn:#5fd47a}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1440px;height:900px;overflow:hidden;background:var(--ground);color:var(--ink);font-family:Barlow,system-ui,sans-serif}
+.app{display:grid;grid-template-columns:232px 1fr;height:900px}
+.rail{background:var(--panel);border-right:1px solid var(--rule);padding:18px 0;display:flex;flex-direction:column}
+.brand{padding:0 18px 16px;font:700 17px "Barlow Condensed";letter-spacing:.08em;text-transform:uppercase}
+.brand small{display:block;font:400 13px Barlow;letter-spacing:0;text-transform:none;color:var(--ink2)}
+.nav{display:flex;gap:2px;margin:0 12px 14px;background:#0d0f12;border-radius:6px;padding:3px}
+.nav a{flex:1;text-align:center;font:500 13px Barlow;padding:6px 0;border-radius:4px;color:var(--ink2)}
+.nav a.on{background:#262a33;color:var(--ink)}
+.act{font:600 12px "Barlow Condensed";letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);padding:12px 18px 6px}
+.ol a{display:flex;align-items:center;gap:9px;padding:6px 18px;font-size:14px;color:#cfd0d4}
+.ol a i{width:4px;height:16px;border-radius:1px;background:var(--rule)}
+.ol a.sc{padding-left:30px;font-size:13.5px;color:var(--ink2)}
+.ol a.cur{background:#1f232b;color:var(--ink)}.ol a.cur i{background:var(--yel)}
+.ol a b{margin-left:auto;font:500 12px Barlow;color:var(--ink3)}
+.legend{margin-top:auto;padding:14px 18px;border-top:1px solid var(--rule);font-size:12.5px;color:var(--ink2);display:grid;gap:6px}
+.legend span{display:flex;align-items:center;gap:8px}.legend em{width:16px;height:6px;border-radius:1px}
+.main{display:grid;grid-template-rows:52px auto 1fr}
+.bar{display:flex;align-items:center;gap:14px;padding:0 26px;border-bottom:1px solid var(--rule)}
+.crumb{font-size:14px;color:var(--ink2)}.crumb b{color:var(--ink);font-weight:500}
+.sp{flex:1}
+.btn{font:500 13.5px Barlow;padding:7px 14px;border-radius:5px;border:1px solid var(--rule);background:transparent;color:var(--ink)}
+.btn.pri{background:var(--yel);border-color:var(--yel);color:#141414;font-weight:600}
+.strip{display:grid;grid-template-columns:110px 110px 1.2fr 1.4fr 1.6fr 1.6fr;border-bottom:1px solid var(--rule);background:#14171c}
+.cell{padding:10px 16px;border-right:1px solid var(--rule)}
+.cell .l{font:600 12px "Barlow Condensed";letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);display:flex;justify-content:space-between}
+.cell .l u{text-decoration:none;color:var(--yel);letter-spacing:.06em}
+.cell .v{font:500 15px Barlow;margin-top:3px}
+.cell .v.big{font:700 22px "Barlow Condensed";letter-spacing:.04em}
+.tagc{display:inline-block;font-size:13px;padding:1px 7px;border-radius:3px;margin:2px 4px 0 0;color:#141414;font-weight:600}
+.page{display:grid;grid-template-columns:1fr 660px 120px 360px 1fr;padding-top:34px;overflow:hidden}
+.text{grid-column:2;font:400 18.5px/1.66 Literata,serif}
+.text h2{font:500 26px Literata;margin-bottom:22px}
+.p{margin-bottom:22px;position:relative}
+.mk{position:relative;padding-bottom:1px}
+.mk.c{box-shadow:inset 0 -2px 0 var(--cyan)}.mk.p{box-shadow:inset 0 -2px 0 var(--pink)}.mk.g{box-shadow:inset 0 -2px 0 var(--grn)}
+.mk.new{box-shadow:inset 0 -2px 0 var(--pink);background:rgba(255,92,138,.12)}
+.lines{grid-column:3;position:relative}
+.lines i{position:absolute;left:0;right:0;height:1px;background:#3a3f4a}
+.lines i:after{content:"";position:absolute;right:-3px;top:-3px;width:7px;height:7px;border-radius:50%;background:#3a3f4a}
+.cues{grid-column:4;display:flex;flex-direction:column;gap:12px}
+.cue{border:1px solid var(--rule);border-radius:6px;background:var(--panel);padding:10px 12px}
+.cue .h{display:flex;align-items:center;gap:8px;font:700 13px "Barlow Condensed";letter-spacing:.1em;text-transform:uppercase}
+.cue .n{padding:1px 6px;border-radius:3px;color:#141414}
+.cue .h em{margin-left:auto;font:500 12px Barlow;letter-spacing:0;text-transform:none;color:var(--ink3);font-style:normal}
+.cue p{font-size:13.5px;color:#d8d9dc;margin-top:5px;line-height:1.4}
+.cue .a{display:flex;gap:12px;margin-top:7px;font-size:12.5px;color:var(--ink2)}.cue .a b{color:var(--yel);font-weight:500}
+.ai{border:1px solid #4a4223;background:#1a1810;border-radius:6px;padding:12px 16px;margin:0 -17px 22px}
+.ai .t{display:flex;gap:10px;align-items:center;font:700 12px "Barlow Condensed";letter-spacing:.12em;text-transform:uppercase;color:var(--yel);margin-bottom:6px}
+.ai .t span{font:500 12px Barlow;letter-spacing:0;text-transform:none;color:var(--ink2)}
+.ai .t a{font:500 12.5px Barlow;letter-spacing:0;text-transform:none;color:var(--ink)}.ai .t a:first-of-type{margin-left:auto}
+</style></head><body><div class="app">
+<aside class="rail">
+  <div class="brand">WorldCrafter<small>The Ninefold</small></div>
+  <div class="nav"><a class="on">Script</a><a>World</a><a>Timeline</a></div>
+  <div class="act">Book One · The Salt Gate</div>
+  <nav class="ol">
+    <a><i></i>1 · The Drowned Archive<b>4.1k</b></a>
+    <a><i></i>2 · Ardelia<b>3.8k</b></a>
+    <a><i></i>3 · What the Tide Kept<b>5.2k</b></a>
+    <a><i></i>4 · The Salt Gate<b>2.9k</b></a>
+    <a class="sc"><i></i>4.1 Night Market<b>1.6k</b></a>
+    <a class="sc cur"><i></i>4.2 The Sealed Door<b>1.3k</b></a>
+    <a class="sc"><i></i>4.3 Aldric's Answer<b>—</b></a>
+    <a><i></i>5 · Undertow<b>—</b></a>
+  </nav>
+  <div class="legend">
+    <span><em style="background:var(--cyan)"></em>Character</span><span><em style="background:var(--grn)"></em>Place</span>
+    <span><em style="background:var(--pink)"></em>New: not in the world</span><span><em style="background:var(--yel)"></em>AI cue</span>
+  </div>
+</aside>
+<section class="main">
+  <header class="bar"><div class="crumb">Chapter 4 › <b>4.2 The Sealed Door</b></div><div class="sp"></div>
+    <button class="btn">Context · 4 cards</button><button class="btn pri">Generate next</button></header>
+  <div class="strip">
+    <div class="cell"><div class="l">Scene</div><div class="v big">4.2</div></div>
+    <div class="cell"><div class="l">Light</div><div class="v big">Night</div></div>
+    <div class="cell"><div class="l">Set <u>inferred</u></div><div class="v">The Salt Gate, lower stair</div></div>
+    <div class="cell"><div class="l">When <u>inferred</u></div><div class="v">Frost 12, 1203 · after 4.1</div></div>
+    <div class="cell"><div class="l">Cast</div><div class="v"><span class="tagc" style="background:var(--cyan)">Ardelia</span><span class="tagc" style="background:var(--pink)">Kesh</span></div></div>
+    <div class="cell"><div class="l">Props <u>inferred</u></div><div class="v">lamps · the sealed door</div></div>
+  </div>
+  <div class="page">
+    <article class="text">
+      <h2>The Sealed Door</h2>
+      <div class="p">The lamps along <span class="mk g">the Salt Gate</span> had burned down to their wicks by the time <span class="mk c">Ardelia</span> reached the sealed door. She set her palm against the iron, and it was colder than the sea had been.</div>
+      <div class="p">“Three hundred years,” said <span class="mk new">Kesh</span>, behind her. “And it still knows you.” Ardelia did not answer. The door remembered the hand that had sealed it, and that hand had been hers, in the winter <span class="mk c">Aldric</span> took the crown.</div>
+      <div class="ai"><div class="t">Standby · AI segment <span>llama-3.3-70b</span><a>Regenerate</a><a>Accept</a></div>Somewhere below them, the tide turned. She felt it in the iron before she heard it, a long and patient pull, like a breath drawn by something that had been waiting.</div>
+    </article>
+    <div class="lines"><i style="top:78px"></i><i style="top:208px"></i><i style="top:262px"></i><i style="top:395px"></i></div>
+    <aside class="cues">
+      <div class="cue"><div class="h"><span class="n" style="background:var(--cyan)">Q 41</span>Ardelia Vane<em>holds now</em></div><p>340 years old, looks thirty. Withheld until 19.3: she is Aldric's sister.</p></div>
+      <div class="cue"><div class="h"><span class="n" style="background:var(--pink)">Q 42</span>Enter Kesh<em>new</em></div><p>Not in the world. Seen 3 times since 4.1, probably a character.</p><div class="a"><b>Create entry</b><span>Alias of…</span><span>Dismiss</span></div></div>
+      <div class="cue"><div class="h"><span class="n" style="background:var(--yel)">Q 43</span>Reveal<em>first in reading order</em></div><p>Ardelia sealed the Salt Gate.</p><div class="a"><b>Confirm</b><span>Not a reveal</span></div></div>
+      <div class="cue"><div class="h"><span class="n" style="background:var(--yel)">Q 44</span>Continuity<em>topic opened</em></div><p>“Three hundred years”, but the seal was set in the winter of 902, which makes 301.</p></div>
+    </aside>
+  </div>
+</section>
+</div></body></html>

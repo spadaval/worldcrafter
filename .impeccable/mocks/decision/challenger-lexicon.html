@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>WorldCrafter · Night Lexicon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Old+Standard+TT:ital,wght@0,400;0,700;1,400&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--ground:#14120f;--ink:#e6dfcf;--ink2:#b3aa98;--ink3:#9a917f;--rule:#3a342b;--verm:#e34b2f;--chrome:#e8b923;--emer:#2f9e6e;--ultra:#3a5bd9}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1440px;height:900px;overflow:hidden;background:var(--ground);color:var(--ink);font-family:"Source Sans 3",system-ui,sans-serif}
+.app{display:grid;grid-template-columns:220px 1fr 44px;height:900px}
+.nav{border-right:1px solid var(--rule);padding:18px 0;display:flex;flex-direction:column}
+.brand{padding:0 18px 16px;font:700 16px "Old Standard TT";letter-spacing:.02em}
+.brand small{display:block;font:400 13px "Source Sans 3";color:var(--ink2);margin-top:2px}
+.seg{display:flex;margin:0 14px 16px;border:1px solid var(--rule);border-radius:5px;overflow:hidden}
+.seg a{flex:1;text-align:center;font:500 12.5px "Source Sans 3";padding:6px 8px;color:var(--ink2)}
+.seg a.on{background:var(--ink);color:var(--ground)}
+.h{font:600 12px "Source Sans 3";letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);padding:10px 18px 6px}
+.ol a{display:block;padding:5px 18px;font-size:14px;color:var(--ink2)}
+.ol a.s{padding-left:32px;font-size:13.5px}
+.ol a.cur{color:var(--ink);font-weight:600}
+.ol a.cur{box-shadow:inset 2px 0 0 var(--ink)}
+.bottom{margin-top:auto;padding:14px 18px;border-top:1px solid var(--rule);font-size:13px;color:var(--ink2)}
+.bottom b{color:var(--ink)}
+.main{display:grid;grid-template-rows:56px 1fr}
+.head{display:grid;grid-template-columns:1fr auto 1fr;align-items:end;padding:0 40px 10px;border-bottom:2px solid var(--ink)}
+.gw{font:400 15px "Old Standard TT";letter-spacing:.14em;text-transform:uppercase}
+.gw.r{text-align:right}
+.gw small{display:block;font:500 12px "Source Sans 3";letter-spacing:.14em;color:var(--ink3)}
+.mid{font:italic 15px "Old Standard TT";color:var(--ink2);text-align:center}
+.tools{display:flex;justify-content:flex-end;gap:10px;padding:10px 40px 0;position:absolute;right:44px;top:56px}
+.btn{font:500 13.5px "Source Sans 3";padding:6px 13px;border:1px solid var(--rule);border-radius:4px;background:transparent;color:var(--ink)}
+.btn.pri{background:var(--ink);color:var(--ground);border-color:var(--ink);font-weight:600}
+.body{display:grid;grid-template-columns:1fr 600px 56px 330px 1fr;padding-top:62px;overflow:hidden}
+.col{grid-column:2;font:400 18.5px/1.6 "Old Standard TT",serif}
+.title{font:700 13px "Source Sans 3";letter-spacing:.16em;text-transform:uppercase;color:var(--ink3);margin-bottom:8px}
+.title b{color:var(--ink)}
+.col h2{font:400 32px "Old Standard TT";margin-bottom:22px}
+.col p{margin-bottom:20px;text-indent:1.4em}
+.col p.first{text-indent:0}
+.e{font-weight:700}
+.e:after{content:"›";margin-left:2px;color:var(--ink2);font-weight:400}
+.cand{text-decoration:underline;text-decoration-style:dotted;text-underline-offset:4px;text-decoration-color:var(--ink2)}
+.plate{border:1px solid var(--verm);outline:1px solid var(--verm);outline-offset:3px;padding:14px 18px;margin:8px 0 24px;position:relative}
+.plate .cap{font:600 12px "Source Sans 3";letter-spacing:.14em;text-transform:uppercase;color:var(--verm);display:flex;gap:14px;margin-bottom:6px}
+.plate .cap a{margin-left:auto;color:var(--ink);letter-spacing:.06em}
+.plate .cap a+a{margin-left:0}
+.plate p{text-indent:0;margin:0;color:#f1e6d8}
+.shoulder{grid-column:4;border-left:1px solid var(--rule);padding-left:22px;font-size:13.5px;line-height:1.45;color:var(--ink2)}
+.sh{font:600 12px "Source Sans 3";letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);margin-bottom:12px}
+.n{margin-bottom:16px}
+.n .hd{font:700 15px "Old Standard TT";color:var(--ink);margin-left:-12px}
+.n .hd i{font:italic 400 13px "Old Standard TT";color:var(--ink3);margin-left:6px}
+.n.rank2 .hd{font-size:14px;font-weight:400}
+.n hr{border:0;border-top:1px solid var(--rule);margin:6px 0}
+.n .x{font-size:12px;color:var(--ink3)}
+.n .acts{font-size:12.5px;margin-top:4px;display:flex;gap:12px;color:var(--ink)}
+.n .acts span:after{content:" ›";color:var(--ink3)}
+.strike{text-decoration:line-through;color:var(--ink3)}
+.box{border:1px solid var(--chrome);padding:8px 10px;color:#efe0b0}
+.box b{font:600 12px "Source Sans 3";letter-spacing:.14em;text-transform:uppercase;color:var(--chrome);display:block;margin-bottom:3px}
+.thumb{border-left:1px solid var(--rule);display:flex;flex-direction:column;align-items:center;padding-top:72px;gap:2px}
+.thumb a{font:400 13px "Old Standard TT";color:var(--ink3);padding:7px 0;width:100%;text-align:center}
+.thumb a.cur{color:var(--ground);background:var(--ink)}
+.thumb a.done{text-decoration:line-through}
+</style></head><body><div class="app">
+<aside class="nav">
+  <div class="brand">WorldCrafter<small>The Ninefold</small></div>
+  <div class="seg"><a class="on">Manuscript</a><a>World</a><a>Timeline</a></div>
+  <div class="h">Book One</div>
+  <nav class="ol"><a>I · The Drowned Archive</a><a>II · Ardelia</a><a>III · What the Tide Kept</a><a>IV · The Salt Gate</a>
+    <a class="s">4.1 Night Market</a><a class="s cur">4.2 The Sealed Door</a><a class="s">4.3 Aldric's Answer</a><a>V · Undertow</a></nav>
+  <div class="bottom"><b>3 open topics</b> in the world inbox</div>
+</aside>
+<section class="main" style="position:relative">
+  <div class="head">
+    <div class="gw"><small>Story time, first in view</small>Frost 12, 1203</div>
+    <div class="mid">The Salt Gate · iv. 2</div>
+    <div class="gw r"><small>last in view</small>Frost 13, 1203</div>
+  </div>
+  <div class="tools"><button class="btn">Context · 4 cards</button><button class="btn pri">Generate next</button></div>
+  <div class="body">
+    <article class="col">
+      <div class="title">Chapter IV · <b>Scene 2</b></div>
+      <h2>The Sealed Door</h2>
+      <p class="first">The lamps along <span class="e">the Salt Gate</span> had burned down to their wicks by the time <span class="e">Ardelia</span> reached the sealed door. She set her palm against the iron, and it was colder than the sea had been.</p>
+      <p>“Three hundred years,” said <span class="cand">Kesh</span>, behind her. “And it still knows you.” Ardelia did not answer. The door remembered the hand that had sealed it, and that hand had been hers, in the winter <span class="e">Aldric</span> took the crown.</p>
+      <div class="plate"><div class="cap">Plate · AI segment · llama-3.3-70b<a>Regenerate ›</a><a>Accept ›</a></div>
+        <p>Somewhere below them, the tide turned. She felt it in the iron before she heard it, a long and patient pull, like a breath drawn by something that had been waiting.</p></div>
+    </article>
+    <aside class="shoulder">
+      <div class="sh">In this span</div>
+      <div class="n"><div class="hd">Ardelia Vane<i>character</i></div><hr>Holds: 340 years old; looks thirty.<div class="x">Withheld until 19.3: Aldric's sister.</div></div>
+      <div class="n rank2"><div class="hd">Kesh<i>not yet an entry</i></div><hr>Seen three times since 4.1.<div class="acts"><span>Create entry</span><span>Alias of</span><span>Dismiss</span></div></div>
+      <div class="n rank2"><div class="hd">Revealed here</div><hr>Ardelia sealed the Salt Gate. <span class="x">¶ 4.12</span></div>
+      <div class="n rank2"><div class="hd">Props<i>inferred</i></div><hr>lamps · the sealed door · <span class="strike">a lantern</span></div>
+      <div class="n"><div class="box"><b>Topic opened</b>“Three hundred years”, but the seal was set in the winter of 902, which makes 301.</div></div>
+    </aside>
+  </div>
+</section>
+<nav class="thumb"><a class="done">I</a><a class="done">II</a><a class="done">III</a><a class="cur">IV</a><a>V</a><a>VI</a><a>VII</a><a>VIII</a></nav>
+</div></body></html>

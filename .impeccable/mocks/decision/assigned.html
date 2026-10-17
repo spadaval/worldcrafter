@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>WorldCrafter · The Gloss</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Alegreya:ital,wght@0,400;0,500;0,700;1,400&family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&family=Alegreya+Sans+SC:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--ground:#17140f;--panel:#1d1913;--ink:#e9e1cf;--ink2:#b9ae98;--ink3:#9a8f7b;--rule:#2e281f;--rubric:#e2583e;--lapis:#6f8ff0;--lapisfield:#1c2650;--lapisdeep:#152045}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1440px;height:900px;overflow:hidden;background:var(--ground);color:var(--ink);font-family:"Alegreya Sans",system-ui,sans-serif}
+.app{display:grid;grid-template-columns:248px 1fr;height:900px}
+/* rail */
+.rail{background:var(--lapisfield);display:flex;flex-direction:column;padding:18px 0}
+.brand{padding:0 20px 18px;font:700 15px "Alegreya Sans SC";letter-spacing:.06em;color:#dfe4f7}
+.brand small{display:block;font:400 13px "Alegreya Sans";letter-spacing:0;color:#9fabd6;margin-top:2px}
+.tabs{display:flex;gap:4px;padding:0 14px 14px}
+.tabs a{flex:1;text-align:center;font:500 12.5px "Alegreya Sans";padding:6px 0;border-radius:4px;color:#aeb8de;text-decoration:none}
+.tabs a.on{background:var(--lapisdeep);color:#fff}
+.sec{font:700 12px "Alegreya Sans SC";letter-spacing:.1em;color:#a2aedb;padding:14px 20px 6px}
+.ol a{display:flex;justify-content:space-between;padding:5px 20px;font-size:14px;color:#c9d0ec;text-decoration:none}
+.ol a span{color:#9aa6d4;font-size:12px}
+.ol a.ch{font-weight:500;color:#e6e9f7}
+.ol a.sc{padding-left:34px;font-size:13.5px}
+.ol a.cur{background:var(--lapisdeep);color:#fff;box-shadow:inset 3px 0 0 #9fb4ff}
+.inbox{margin-top:auto;padding:14px 20px;border-top:1px solid #2a3768;font-size:13px;color:#c9d0ec}
+.inbox b{color:#fff}.inbox .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--rubric);margin-right:6px}
+/* main */
+.main{display:grid;grid-template-rows:52px 1fr}
+.bar{display:flex;align-items:center;gap:16px;padding:0 28px;border-bottom:1px solid var(--rule)}
+.crumb{font-size:14px;color:var(--ink2)}.crumb b{color:var(--ink);font-weight:500}
+.when{font-size:13px;color:var(--ink2);padding:4px 10px;border:1px solid var(--rule);border-radius:4px}
+.when b{color:var(--lapis);font-weight:500}
+.sp{flex:1}
+.btn{font:500 13.5px "Alegreya Sans";padding:7px 14px;border-radius:5px;border:1px solid var(--rule);color:var(--ink);background:transparent}
+.btn.pri{background:var(--rubric);border-color:var(--rubric);color:#1a0d08;font-weight:700}
+.page{display:grid;grid-template-columns:64px 640px 1fr;column-gap:0;padding:40px 0 0 0;overflow:hidden}
+.cites{padding-right:14px;text-align:right}
+.text{font-family:Alegreya,serif;font-size:19.5px;line-height:1.62;color:var(--ink)}
+h1{font:400 13px "Alegreya Sans SC";letter-spacing:.14em;color:var(--rubric);margin-bottom:6px}
+h2{font:500 30px Alegreya;margin-bottom:26px;letter-spacing:-.01em}
+.p{position:relative;margin-bottom:22px}
+.cite{position:absolute;left:-64px;width:52px;text-align:right;font:500 12px "Alegreya Sans";color:var(--ink3);top:5px}
+.m{border-bottom:1.5px dotted var(--lapis);color:#f3ecdc}
+.cand{border-bottom:1.5px dashed var(--rubric)}
+.reveal{background:linear-gradient(transparent 62%,rgba(111,143,240,.22) 0)}
+.ai{border-left:2px solid var(--rubric);padding-left:16px;margin-left:-18px;color:#efd9cc}
+.ai .tag{display:flex;gap:12px;align-items:center;margin-top:8px;font:500 12.5px "Alegreya Sans";color:var(--rubric)}
+.ai .tag a{color:var(--ink2);text-decoration:none;border-bottom:1px solid var(--rule)}
+.ph{font:italic 17px Alegreya;color:var(--ink3);border:1px dashed var(--rule);padding:10px 14px;border-radius:4px}
+/* gloss */
+.gloss{border-left:1px solid var(--rule);margin-left:44px;padding:0 32px 0 26px;font-size:13.5px;line-height:1.45;color:var(--ink2)}
+.ghead{font:700 12px "Alegreya Sans SC";letter-spacing:.12em;color:var(--ink3);margin-bottom:14px;display:flex;justify-content:space-between}
+.g{margin-bottom:16px;padding-left:12px;position:relative}
+.g:before{content:"¶";position:absolute;left:-4px;top:0;font:700 13px Alegreya;color:var(--lapis)}
+.g.inf:before{color:var(--rubric)}
+.g .k{font:700 14px "Alegreya Sans";color:var(--ink)}
+.g .k i{font-weight:400;color:var(--ink3);font-style:normal;margin-left:6px}
+.g .src{font-size:12px;color:var(--ink3);margin-left:4px}
+.hold{color:var(--ink)}
+.chip{display:inline-block;font:500 12px "Alegreya Sans";padding:1px 6px;border-radius:3px;margin-right:4px}
+.chip.h{background:#24305e;color:#c8d3ff}.chip.r{background:#3a2016;color:#ffb8a3}.chip.n{border:1px solid #6b3a2a;color:#e9a08c}
+.acts{margin-top:5px;display:flex;gap:10px;font-size:12px}.acts a{color:var(--rubric);text-decoration:none}
+.struck{text-decoration:line-through;text-decoration-color:var(--rubric);color:var(--ink3)}
+.topic{border:1px solid #4a2a1e;background:#1f1510;border-radius:5px;padding:9px 11px;margin-top:4px}
+.topic b{color:#ffb8a3;font-weight:500}
+</style></head><body><div class="app">
+<aside class="rail">
+  <div class="brand">WorldCrafter<small>The Ninefold</small></div>
+  <div class="tabs"><a class="on">Manuscript</a><a>World</a><a>Timeline</a></div>
+  <div class="sec">Book One · The Salt Gate</div>
+  <nav class="ol">
+    <a class="ch">1 · The Drowned Archive <span>4.1k</span></a>
+    <a class="ch">2 · Ardelia <span>3.8k</span></a>
+    <a class="ch">3 · What the Tide Kept <span>5.2k</span></a>
+    <a class="ch">4 · The Salt Gate <span>2.9k</span></a>
+    <a class="sc">4.1 Night Market <span>1.6k</span></a>
+    <a class="sc cur">4.2 The Sealed Door <span>1.3k</span></a>
+    <a class="sc">4.3 Aldric's Answer <span>—</span></a>
+    <a class="ch">5 · Undertow <span>—</span></a>
+  </nav>
+  <div class="sec">Pinned entries</div>
+  <nav class="ol"><a>Ardelia Vane</a><a>The Salt Gate</a><a>Aldric II</a></nav>
+  <div class="inbox"><span class="dot"></span><b>3 open topics</b> from the AI · world inbox</div>
+</aside>
+<section class="main">
+  <header class="bar">
+    <div class="crumb">Chapter 4 › <b>4.2 The Sealed Door</b></div>
+    <div class="when">Story time <b>Frost 12, 1203</b> · night · after 4.1</div>
+    <div class="sp"></div>
+    <button class="btn">Context · 4 cards · 2,140 tokens</button>
+    <button class="btn pri">Generate next</button>
+  </header>
+  <div class="page">
+    <div></div>
+    <article class="text">
+      <h1>Chapter Four · Scene Two</h1>
+      <h2>The Sealed Door</h2>
+      <div class="p"><span class="cite">¶ 4.11</span>The lamps along <span class="m">the Salt Gate</span> had burned down to their wicks by the time <span class="m">Ardelia</span> reached the sealed door. She set her palm against the iron, and it was colder than the sea had been.</div>
+      <div class="p"><span class="cite">¶ 4.12</span>“Three hundred years,” said <span class="cand">Kesh</span>, behind her. “And it still knows you.” Ardelia did not answer. <span class="reveal">The door remembered the hand that had sealed it, and that hand had been hers</span>, in the winter <span class="m">Aldric</span> took the crown.</div>
+      <div class="p ai"><span class="cite">¶ 4.13</span>Somewhere below them, the tide turned. She felt it in the iron before she heard it, a long and patient pull, like a breath drawn by something that had been waiting.
+        <div class="tag">AI segment · llama-3.3-70b · <a>Regenerate</a><a>Accept</a><a>View request</a></div></div>
+      <div class="ph">Placeholder: Kesh asks what is behind the door. Ardelia lies.</div>
+    </article>
+    <aside class="gloss">
+      <div class="ghead"><span>Gloss · ¶ 4.11–4.13</span><span>holds at Frost 12, 1203</span></div>
+      <div class="g"><div class="k">Ardelia Vane <i>character</i></div><span class="chip h">holds</span><span class="hold">340 years old; looks thirty.</span><span class="src">§ Ardelia ¶2.4</span></div>
+      <div class="g"><div class="k">Revealed here <i>first time in reading order</i></div><span class="chip h">reveal</span>Ardelia sealed the Salt Gate.<span class="src">¶ 4.12</span><div class="acts"><a>Confirm as canon</a><a>Not a reveal</a></div></div>
+      <div class="g inf"><div class="k">Kesh <i>not in the world yet</i></div><span class="chip n">candidate</span>Character, probably. Seen 3 times since 4.1.<div class="acts"><a>Create entry</a><a>Alias of…</a><a>Dismiss</a></div></div>
+      <div class="g"><div class="k">Withheld <i>holds, not yet revealed</i></div><span class="chip r">don't reveal</span>Ardelia is Aldric's sister. Revealed in 19.3.</div>
+      <div class="g inf"><div class="k">Scene breakdown <i>inferred</i></div>Night · The Salt Gate · Ardelia, Kesh · lamps, the sealed door<div class="struck" style="margin-top:4px">Props: a lantern</div></div>
+      <div class="g inf"><div class="topic"><b>Topic opened:</b> “Three hundred years”, but the seal was set in the winter of 902, which makes 301. Keep, or adjust?</div></div>
+    </aside>
+  </div>
+</section>
+</div></body></html>

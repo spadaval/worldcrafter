@@ -63,3 +63,7 @@ yarn-error.log*
 /.atelier/agent.json
 /.atelier/runtime/
 /.atelier-bundle-stage-*/
+
+# Impeccable runtime state
+.impeccable/hook.cache.json
+.impeccable/config.local.json

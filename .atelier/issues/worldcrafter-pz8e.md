@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T23:58:30.658811579+00:00"
+status: "done"
 title: "One OpenAI-compatible LLM client with sampler passthrough and profiles"
-updated_at: "2026-10-17T23:47:00.347878787+00:00"
+updated_at: "2026-10-17T23:58:30.658811579+00:00"
 ---
 
 ## Goal
@@ -38,3 +39,7 @@ A client module, a profile type and tests. No UI. Do not port transformers.js.
 ## Context
 
 Old code: `src/lib/state/llm.ts` (`callLLM`, `callLLMStreaming`, `SAMPLER_PRESETS`), `src/llamacpp-client/`. Error handling: `docs/neverthrow.md`.
+
+## Close Reason
+
+LLM client merged into the increment branch: chat and completions, streaming, sampler passthrough, logprobs, profiles, cancel and typed errors, tested against a stub server (25 tests); independently reviewed, fixes re-reviewed and approved

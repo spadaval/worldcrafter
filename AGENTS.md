@@ -3,6 +3,12 @@
 ## ⚠️ CRITICAL WARNING
 **DO NOT RUN THE DEV SERVER!** `bun dev` is a watch command that never terminates. The dev server is always running - starting it will duplicate the server _and_ cause you to wait indefinitely.
 
+## Work tracking
+This repository uses [Atelier](https://github.com/spadaval/atelier) for missions, issues, evidence and review (records live in `.atelier/`, base branch `master`).
+- Orient with `atelier status`; find work with `atelier work ready`; run `atelier land` before handoff.
+- Start work with `atelier start <id>` and integrate with `atelier merge <id>`. Only tracker records and mission strategies may be committed directly to `master`.
+- Mission strategies live in `docs/strategies/`. The current mission is the rebuild (`docs/strategies/rebuild.md`); its design proposals are in `docs/rebuild/`. Where those docs conflict with the rest of this file, they describe the target and this file describes the old code.
+
 ## Commands
 Use bun for all commands.
 - **Build**: `bun run build` | **Start**: `bun run start`

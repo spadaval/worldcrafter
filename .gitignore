@@ -58,3 +58,8 @@ yarn-error.log*
 .vercel
 
 .tanstack
+
+# Atelier local runtime state
+/.atelier/agent.json
+/.atelier/runtime/
+/.atelier-bundle-stage-*/

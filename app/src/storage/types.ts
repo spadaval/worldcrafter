@@ -120,7 +120,10 @@ export interface AnnotationCollection extends Collection<AnnotationRecord> {
   ): ResultAsync<AnnotationRecord[], StorageError>;
 }
 
-/** Revision history of documents. Snapshots are append-only. */
+/**
+ * Revision history of documents. Snapshots are append-only and kept on
+ * purpose, including after their document is deleted, so it can be recovered.
+ */
 export interface SnapshotCollection {
   save(snapshot: NewSnapshot): ResultAsync<SnapshotInfo, StorageError>;
   /** Snapshots of one document, oldest first. */
@@ -130,7 +133,8 @@ export interface SnapshotCollection {
 
 /**
  * The only way the app persists data. Deleting a document does not delete its
- * world entry, annotations, requests or snapshots; callers decide that.
+ * world entry, annotations or requests; callers delete those explicitly. Its
+ * snapshots are never deleted (see `SnapshotCollection`).
  */
 export interface StorageAdapter {
   readonly documents: Collection<StoredDocument>;

@@ -1,10 +1,5 @@
 import { errAsync, okAsync, ResultAsync } from "neverthrow";
-import {
-  type FailureContext,
-  failure,
-  notFound,
-  snapshotInfo,
-} from "./internal";
+import { type FailureContext, failure, notFound } from "./internal";
 import type {
   AnnotationCollection,
   AnnotationRecord,
@@ -12,6 +7,7 @@ import type {
   CollectionName,
   Snapshot,
   SnapshotCollection,
+  SnapshotInfo,
   StorageAdapter,
   StorageError,
 } from "./types";
@@ -23,6 +19,20 @@ import type {
 export const DB_VERSION = 1;
 
 const DOCUMENT_INDEX = "byDocument";
+
+/**
+ * Snapshot content lives apart from snapshot metadata so listing history
+ * never reads every revision's full tree. Both are keyed by snapshot ID and
+ * written in one transaction.
+ */
+const SNAPSHOT_CONTENT = "snapshotContent";
+
+type StoreName = CollectionName | typeof SNAPSHOT_CONTENT;
+
+interface SnapshotContentRecord {
+  readonly id: number;
+  readonly content: Snapshot["content"];
+}
 
 function upgrade(db: IDBDatabase, oldVersion: number): void {
   if (oldVersion < 1) {
@@ -37,6 +47,7 @@ function upgrade(db: IDBDatabase, oldVersion: number): void {
       keyPath: "id",
       autoIncrement: true,
     }).createIndex(DOCUMENT_INDEX, "documentId");
+    db.createObjectStore(SNAPSHOT_CONTENT, { keyPath: "id" });
   }
 }
 
@@ -86,36 +97,63 @@ function openDatabase(factory: IDBFactory, name: string): Promise<IDBDatabase> {
 }
 
 /**
- * Runs one request in its own transaction and resolves with its result once
- * the transaction commits, so a resolved write is durable.
+ * Runs `issue` in one transaction over `stores` and, once the transaction
+ * commits, resolves with the value its returned getter reads. Either every
+ * write in the transaction takes effect or none does. `issue` may call
+ * `abort(cause)` from a request callback to roll back with that cause.
+ *
+ * Writes request strict durability, so the browser reports completion only
+ * after flushing to disk: a resolved write survives a reload, a crash or a
+ * power cut. Not guaranteed: data the browser evicts under storage pressure
+ * (unless storage is persisted), the user clearing site data, or a browser
+ * that ignores the durability hint.
  */
-function transact(
+function transact<T>(
   db: IDBDatabase,
-  store: CollectionName,
+  stores: readonly StoreName[],
   mode: IDBTransactionMode,
-  issue: (store: IDBObjectStore) => IDBRequest,
-): Promise<unknown> {
+  issue: (tx: IDBTransaction, abort: (cause: unknown) => void) => () => T,
+): Promise<T> {
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, mode);
-    const request = issue(tx.objectStore(store));
-    tx.oncomplete = () => resolve(request.result);
+    const tx =
+      mode === "readwrite"
+        ? db.transaction(stores, mode, { durability: "strict" })
+        : db.transaction(stores, mode);
+    let abortCause: unknown;
+    const result = issue(tx, (cause) => {
+      abortCause = cause;
+      tx.abort();
+    });
+    tx.oncomplete = () => resolve(result());
     tx.onabort = () =>
-      reject(tx.error ?? request.error ?? new Error("transaction aborted"));
+      reject(abortCause ?? tx.error ?? new Error("transaction aborted"));
   });
 }
 
 function createAdapter(db: IDBDatabase): StorageAdapter {
   // Values read back are trusted to have the shape this module wrote; the
   // schema is versioned by DB_VERSION and moved forward only by `upgrade`.
+  function runIn<T>(
+    context: FailureContext,
+    stores: readonly StoreName[],
+    mode: IDBTransactionMode,
+    issue: (tx: IDBTransaction, abort: (cause: unknown) => void) => () => T,
+  ): ResultAsync<T, StorageError> {
+    return ResultAsync.fromPromise(transact(db, stores, mode, issue), (cause) =>
+      failure(context, cause),
+    );
+  }
+
+  /** One request against the context's own collection. */
   function run<T>(
     context: FailureContext & { readonly collection: CollectionName },
     mode: IDBTransactionMode,
     issue: (store: IDBObjectStore) => IDBRequest,
   ): ResultAsync<T, StorageError> {
-    return ResultAsync.fromPromise(
-      transact(db, context.collection, mode, issue) as Promise<T>,
-      (cause) => failure(context, cause),
-    );
+    return runIn(context, [context.collection], mode, (tx) => {
+      const request = issue(tx.objectStore(context.collection));
+      return () => request.result as T;
+    });
   }
 
   function load<T>(
@@ -175,23 +213,38 @@ function createAdapter(db: IDBDatabase): StorageAdapter {
 
   const snapshots: SnapshotCollection = {
     save: (input) => {
-      const record: Omit<Snapshot, "id"> = {
+      const info: Omit<SnapshotInfo, "id"> = {
         documentId: input.documentId,
         reason: input.reason,
-        content: input.content,
         createdAt: Date.now(),
       };
-      return run<IDBValidKey>(
+      return runIn(
         { operation: "save", collection: "snapshots", id: input.documentId },
+        ["snapshots", SNAPSHOT_CONTENT],
         "readwrite",
-        (store) => store.add(record),
-      ).andThen((key) =>
-        typeof key === "number"
-          ? okAsync(snapshotInfo({ ...record, id: key }))
+        (tx, abort) => {
+          const add = tx.objectStore("snapshots").add(info);
+          add.onsuccess = () => {
+            const record: SnapshotContentRecord = {
+              id: Number(add.result),
+              content: input.content,
+            };
+            try {
+              tx.objectStore(SNAPSHOT_CONTENT).put(record);
+            } catch (cause) {
+              // E.g. uncloneable content: don't keep metadata without content.
+              abort(cause);
+            }
+          };
+          return () => add.result;
+        },
+      ).andThen((id) =>
+        typeof id === "number"
+          ? okAsync({ ...info, id })
           : errAsync(
               failure(
                 { operation: "save", collection: "snapshots" },
-                new Error(`expected a numeric key, got ${String(key)}`),
+                new Error(`expected a numeric key, got ${String(id)}`),
               ),
             ),
       );
@@ -199,12 +252,36 @@ function createAdapter(db: IDBDatabase): StorageAdapter {
     // The index orders equal documentIds by primary key, which is the
     // auto-incremented snapshot ID, so this is oldest first.
     list: (documentId) =>
-      run<Snapshot[]>(
+      run<SnapshotInfo[]>(
         { operation: "list", collection: "snapshots", id: documentId },
         "readonly",
         (store) => store.index(DOCUMENT_INDEX).getAll(documentId),
-      ).map((all) => all.map(snapshotInfo)),
-    load: (id) => load<Snapshot>("snapshots", id),
+      ),
+    load: (id) =>
+      runIn(
+        { operation: "load", collection: "snapshots", id },
+        ["snapshots", SNAPSHOT_CONTENT],
+        "readonly",
+        (tx) => {
+          const info = tx.objectStore("snapshots").get(id);
+          const record = tx.objectStore(SNAPSHOT_CONTENT).get(id);
+          return () => ({
+            info: info.result as SnapshotInfo | undefined,
+            record: record.result as SnapshotContentRecord | undefined,
+          });
+        },
+      ).andThen(({ info, record }) => {
+        if (info === undefined) return errAsync(notFound("snapshots", id));
+        if (record === undefined) {
+          return errAsync(
+            failure(
+              { operation: "load", collection: "snapshots", id },
+              new Error("snapshot metadata exists but its content is missing"),
+            ),
+          );
+        }
+        return okAsync({ ...info, content: record.content });
+      }),
   };
 
   return {

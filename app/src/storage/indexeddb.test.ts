@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { IDBFactory } from "fake-indexeddb";
 import { contentFixture, describeStorageContract } from "./contract";
 import { DB_VERSION, openIndexedDbStorage } from "./indexeddb";
+import type { JsonValue } from "./types";
 
 async function open(factory: IDBFactory) {
   return (
@@ -80,6 +81,67 @@ describe("IndexedDB persistence", () => {
     )._unsafeUnwrap();
     expect(after.id).toBeGreaterThan(before.id);
     second.close();
+  });
+
+  test("snapshot list reads metadata only; content is a separate store", async () => {
+    const factory = new IDBFactory();
+    const storage = await open(factory);
+    const info = (
+      await storage.snapshots.save({
+        documentId: "doc1",
+        reason: "periodic",
+        content: contentFixture,
+      })
+    )._unsafeUnwrap();
+    storage.close();
+
+    // Remove the content behind the adapter's back.
+    await new Promise<void>((resolve, reject) => {
+      const request = factory.open("worldcrafter", DB_VERSION);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction("snapshotContent", "readwrite");
+        tx.objectStore("snapshotContent").delete(info.id);
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onabort = () => reject(tx.error);
+      };
+      request.onerror = () => reject(request.error);
+    });
+
+    const reopened = await open(factory);
+    expect((await reopened.snapshots.list("doc1"))._unsafeUnwrap()).toEqual([
+      info,
+    ]);
+    expect(
+      (await reopened.snapshots.load(info.id))._unsafeUnwrapErr(),
+    ).toMatchObject({
+      kind: "failure",
+      operation: "load",
+      id: String(info.id),
+    });
+    reopened.close();
+  });
+
+  test("a snapshot whose content can't be stored leaves no metadata", async () => {
+    const storage = await open(new IDBFactory());
+    // A function is not cloneable, so the content write throws DataCloneError.
+    // The type system already forbids this; the cast simulates a caller bug.
+    const content = [{ handler: () => 1 }] as unknown as JsonValue;
+    const result = await storage.snapshots.save({
+      documentId: "doc1",
+      reason: "periodic",
+      content,
+    });
+    expect(result._unsafeUnwrapErr()).toMatchObject({
+      kind: "failure",
+      operation: "save",
+      collection: "snapshots",
+    });
+    expect((await storage.snapshots.list("doc1"))._unsafeUnwrap()).toEqual([]);
+    storage.close();
   });
 
   test("opening a database from a newer schema fails as a Result", async () => {

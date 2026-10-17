@@ -17,9 +17,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-17T17:11:19.161727+00:00"
+status: "done"
 title: "Rebuild approach: fresh skeleton or prune in place"
-updated_at: "2026-10-17T07:07:33.744253370+00:00"
+updated_at: "2026-10-17T17:11:19.161727+00:00"
 ---
 
 ## Question
@@ -35,3 +36,11 @@ built, so it blocks the shell issue of the first increment.
   until the "retire the old app" increment deletes it. Cost: the old app's UI has to be rebuilt.
 - **Prune in place.** Keeps the existing routes and UI. Cost: every slice also has to fix old errors, and
   dead code and the data-loss paths stay in the way until they are removed.
+
+## Decision
+
+Fresh skeleton. Decided by Sumeet (2026-10-17): the repo has been dormant long enough that pruning in place costs more than rebuilding. Keep-list modules are ported deliberately; the old app stays readable for reference until the retire increment deletes it.
+
+## Close Reason
+
+Fresh skeleton (user direction)

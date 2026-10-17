@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-10-17: first draft, written while reviving the project"
+last_changed: "2026-10-17: browser-only, fresh skeleton, time-indexed facts from the start (Sumeet)"
 ---
 
 # Why
@@ -62,6 +62,13 @@ generate with world context you can inspect and edit, then accept or regenerate.
 
 # Shape
 
+- **Fresh skeleton, browser-only.** A new static app is built and the
+  keep-list modules are ported into it. The old app is reference only until it
+  is retired. There's no server: storage is in the browser and LLM calls go
+  directly to the configured endpoints.
+- **World facts are time-indexed from the start.** A fact holds from a point
+  in the story, so context for a scene never leaks later facts. This is in the
+  world-fact schema from the first increment, not added afterwards.
 - **Data boundaries** (`docs/rebuild/data-model-boundaries.md`). Content,
   annotations, world facts and discussions live in separate stores.
   Annotations never write to the content tree.
@@ -130,8 +137,8 @@ The orchestrator may change, without asking:
 These must come back to the human:
 
 - the success criteria
-- the platform choice (browser-only or Electron)
-- the rebuild approach (fresh skeleton or pruning in place)
+- reopening the platform, the rebuild approach, or time-indexed facts
+- the story-position model behind time-indexed facts
 - adding node types beyond the schema list
 - dropping a keep-list item
 - adding a backend service
@@ -146,5 +153,6 @@ These must come back to the human:
   needs. Grammar-constrained decoding on llama.cpp is the planned mitigation.
 - It is not yet settled whether annotations anchor by offset or by quote
   (`data-model-boundaries.md`, open questions).
-- Time-indexed facts ("progressions") may need to be in the world-fact schema
-  from the start. This must be decided before discovery writes facts.
+- What "a point in the story" means: reading order, in-world chronology,
+  or per-thread positions. Every time-indexed fact depends on this model, so
+  it has to be settled before world facts are built.

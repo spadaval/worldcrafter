@@ -15,9 +15,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-17T17:11:19.201432998+00:00"
+status: "done"
 title: "Platform: browser-only or Electron"
-updated_at: "2026-10-17T07:07:33.744816960+00:00"
+updated_at: "2026-10-17T17:11:19.201432998+00:00"
 ---
 
 ## Context
@@ -37,3 +38,11 @@ because all persistence goes through a storage adapter (S9). It does decide the 
 - **Electron.** Real files on disk, can host an MCP server, and no CORS issues with local model servers.
   Cost: packaging and IPC security.
 - **Browser first, Electron wrapper later.** The adapter and the lossless markdown schema keep this cheap.
+
+## Decision
+
+Browser-only for now. Decided by Sumeet (2026-10-17). IndexedDB is the first storage adapter; Electron stays a later wrapper that the adapter and lossless markdown schema keep cheap.
+
+## Close Reason
+
+Browser-only for now (user direction)

@@ -14,7 +14,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Validate core loop against S1, S2, S4, S9, S10"
-updated_at: "2026-10-17T17:52:19.498440709+00:00"
+updated_at: "2026-10-17T23:59:45.518920748+00:00"
 ---
 
 ## Goal
@@ -31,3 +31,7 @@ the limits of the proof.
 Claims: `docs/strategies/rebuild.md` (Success Criteria). Method: run the tests and the generate scenario, search
 for direct IndexedDB access and whole-document re-parse paths, check the story-time fixture (a flashback and a
 paused frame), and do one manual pass in the browser.
+
+## Notes
+
+- 2026-10-17 [note] From integration (2026-10-17): the LLM client calls endpoints straight from the browser, so CORS applies. The unit tests use Bun's fetch, which ignores CORS; check against real llama.cpp and OpenRouter from the browser during validation, and make the client's network error say 'blocked by CORS?' when that's the likely cause.

@@ -52,7 +52,10 @@ export function buildRequest(
 
 export type SendOptions = {
   signal?: AbortSignal;
-  /** Called for each streamed delta, in order. Must not throw. */
+  /**
+   * Called for each streamed delta, in order. If it throws, the stream is
+   * cancelled and `send` returns a `callback` error.
+   */
   onDelta?: (delta: StreamDelta) => void;
 };
 
@@ -79,16 +82,22 @@ function headers(profile: BackendProfile): Record<string, string> {
 async function sendAsync(
   profile: BackendProfile,
   request: LlmRequest,
-  { signal, onDelta }: SendOptions,
+  options: SendOptions,
 ): Promise<Result<Completion, LlmError>> {
   const { url } = request;
+  const { signal } = options;
+  const aborted: LlmError = {
+    kind: "aborted",
+    url,
+    message: `Request to ${url} was cancelled`,
+  };
   const failure = (cause: unknown, doing: string): LlmError =>
     signal?.aborted
-      ? { kind: "aborted", url, message: `Request to ${url} was cancelled` }
+      ? aborted
       : {
           kind: "network",
           url,
-          message: `${doing} ${url} failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+          message: `${doing} ${url} failed: ${describe(cause)}`,
           cause,
         };
 
@@ -115,9 +124,9 @@ async function sendAsync(
     try {
       detail = errorMessage(JSON.parse(text));
     } catch {
-      detail = text.trim().slice(0, 500) || undefined;
+      // Not JSON; the raw text below is the best detail available.
     }
-    const reason = detail ?? response.statusText;
+    const reason = detail ?? (text.trim().slice(0, 500) || response.statusText);
     return err({
       kind: "http",
       url,
@@ -146,41 +155,62 @@ async function sendAsync(
     return err({ kind: "malformed", url, message: `${url} sent no body` });
   }
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
-  const parser = new SseParser();
   try {
-    while (true) {
-      const { done, value } = await reader.read();
-      const events = done ? parser.end() : parser.push(value);
-      for (const data of events) {
-        if (data === "[DONE]") {
-          await reader.cancel();
-          return ok(assembly.result());
-        }
-        let payload: unknown;
+    return await readStream(reader, assembly, aborted, failure, options);
+  } finally {
+    // Stops generation server-side on every early exit; a no-op once done.
+    await reader.cancel().catch(() => undefined);
+  }
+}
+
+async function readStream(
+  reader: ReadableStreamDefaultReader<string>,
+  assembly: Assembly,
+  aborted: LlmError,
+  failure: (cause: unknown, doing: string) => LlmError,
+  { signal, onDelta }: SendOptions,
+): Promise<Result<Completion, LlmError>> {
+  const { url } = aborted;
+  const parser = new SseParser();
+  while (true) {
+    let chunk: Awaited<ReturnType<typeof reader.read>>;
+    try {
+      chunk = await reader.read();
+    } catch (cause) {
+      return err(failure(cause, "Reading stream from"));
+    }
+    const events = chunk.done ? parser.end() : parser.push(chunk.value);
+    for (const data of events) {
+      if (signal?.aborted) return err(aborted);
+      if (data === "[DONE]") return ok(assembly.result());
+      let payload: unknown;
+      try {
+        payload = JSON.parse(data);
+      } catch {
+        return err({
+          kind: "malformed",
+          url,
+          message: `${url} sent an SSE event that is not JSON: ${data.slice(0, 200)}`,
+        });
+      }
+      const delta = assembly.add(payload);
+      if (delta.isErr()) return err(delta.error);
+      if (onDelta && (delta.value.text || delta.value.logprobs.length)) {
         try {
-          payload = JSON.parse(data);
-        } catch {
-          await reader.cancel();
+          onDelta(delta.value);
+        } catch (cause) {
           return err({
-            kind: "malformed",
+            kind: "callback",
             url,
-            message: `${url} sent an SSE event that is not JSON: ${data.slice(0, 200)}`,
+            message: `onDelta threw while streaming from ${url}: ${describe(cause)}`,
+            cause,
           });
         }
-        const delta = assembly.add(payload);
-        if (delta.isErr()) {
-          await reader.cancel();
-          return err(delta.error);
-        }
-        if (onDelta && (delta.value.text || delta.value.logprobs.length)) {
-          onDelta(delta.value);
-        }
       }
-      if (done) break;
     }
-  } catch (cause) {
-    return err(failure(cause, "Reading stream from"));
+    if (chunk.done) break;
   }
+  if (signal?.aborted) return err(aborted);
   if (assembly.finishReason === null) {
     return err({
       kind: "malformed",
@@ -189,6 +219,10 @@ async function sendAsync(
     });
   }
   return ok(assembly.result());
+}
+
+function describe(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
 }
 
 /** Accumulates choice 0 from a response or from successive stream chunks. */

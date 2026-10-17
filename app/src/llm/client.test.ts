@@ -384,6 +384,64 @@ describe("streaming", () => {
     expect(serverSawCancel).toBe(true);
   });
 
+  test("aborting stops events already received in the same read", async () => {
+    handler = () =>
+      sse([
+        chatChunk("a") +
+          chatChunk("b") +
+          chatChunk("c", { finish_reason: "stop" }) +
+          "data: [DONE]\n\n",
+      ]);
+    const controller = new AbortController();
+    const deltas: string[] = [];
+    const request = buildRequest(
+      profile,
+      { kind: "chat", messages: [] },
+      { stream: true },
+    );
+    const result = await send(profile, request, {
+      signal: controller.signal,
+      onDelta: (d) => {
+        deltas.push(d.text);
+        controller.abort();
+      },
+    });
+    expect(deltas).toEqual(["a"]);
+    expectErr(result, "aborted");
+  });
+
+  test("a throwing onDelta cancels the stream and is a callback error", async () => {
+    let serverSawCancel = false;
+    handler = () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encoder.encode(chatChunk("first")));
+          },
+          cancel() {
+            serverSawCancel = true;
+          },
+        }),
+        { headers: { "Content-Type": "text/event-stream" } },
+      );
+    const thrown = new Error("ui blew up");
+    const request = buildRequest(
+      profile,
+      { kind: "chat", messages: [] },
+      { stream: true },
+    );
+    const result = await send(profile, request, {
+      onDelta: () => {
+        throw thrown;
+      },
+    });
+    const error = expectErr(result, "callback");
+    expect(error).toMatchObject({ cause: thrown });
+    expect(error.message).toContain("ui blew up");
+    await Bun.sleep(20);
+    expect(serverSawCancel).toBe(true);
+  });
+
   test("an event that is not JSON is a malformed error", async () => {
     handler = () => sse([chatChunk("ok"), "data: {not json\n\n"]);
     const request = buildRequest(
@@ -445,6 +503,18 @@ describe("failures", () => {
     );
     const error = expectErr(await send(profile, request), "http");
     expect(error.message).toContain("model not loaded");
+  });
+
+  test("a JSON error body without a message field is used verbatim", async () => {
+    handler = () =>
+      Response.json({ detail: "Model xyz not found" }, { status: 404 });
+    const request = buildRequest(
+      profile,
+      { kind: "completion", prompt: "" },
+      { stream: false },
+    );
+    const error = expectErr(await send(profile, request), "http");
+    expect(error.message).toContain("Model xyz not found");
   });
 
   test("connection refused returns a network error", async () => {

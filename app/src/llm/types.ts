@@ -108,4 +108,6 @@ export type LlmError =
   /** The server reported an error inside a 200 response (e.g. mid-stream). */
   | { kind: "server"; url: string; message: string }
   /** The response body or an SSE event was not what the protocol promises. */
-  | { kind: "malformed"; url: string; message: string };
+  | { kind: "malformed"; url: string; message: string }
+  /** The caller's `onDelta` threw; the stream was cancelled. */
+  | { kind: "callback"; url: string; message: string; cause: unknown };

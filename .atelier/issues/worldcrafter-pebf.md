@@ -18,9 +18,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T17:53:32.594302452+00:00"
+status: "done"
 title: "Add story-time design doc and rename talk-page threads to topics"
-updated_at: "2026-10-17T17:53:24.710400357+00:00"
+updated_at: "2026-10-17T17:53:32.594302452+00:00"
 ---
 
 ## Goal
@@ -34,3 +35,7 @@ Commit the prose design changes from the story-time decision (worldcrafter-3ajq)
 ## Scope
 
 Prose under `docs/rebuild/` only.
+
+## Close Reason
+
+Story-time doc added, topics rename applied

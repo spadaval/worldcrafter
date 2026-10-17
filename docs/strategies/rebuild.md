@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-10-17: browser-only, fresh skeleton, time-indexed facts from the start (Sumeet)"
+last_changed: "2026-10-17: story time is world-first; AI does bookkeeping, canon stays proposed (Sumeet)"
 ---
 
 # Why
@@ -25,7 +25,7 @@ edit before it is sent. AI output arrives as attributed, reviewable segments or
 proposals. Talk pages hold discussion next to the thing being discussed. The
 old app's dead paths are gone, and the checks pass.
 
-Worth shipping on its own: the core loop (S1, S2, S4, S9). Write a document,
+Worth shipping on its own: the core loop (S1, S2, S4, S9, S10). Write a document,
 generate with world context you can inspect and edit, then accept or regenerate.
 
 # Success Criteria
@@ -45,11 +45,17 @@ generate with world context you can inspect and edit, then accept or regenerate.
   provenance in the sidecar, and accept and regenerate work. Shown by a
   scenario test against a stub OpenAI-compatible server.
 - S5: Discovery (heuristic tier, then LLM tier) proposes new entities and
-  facts as suggestions. Nothing is written until accepted, and dismissals
-  persist. Shown by fixture-text scenario tests.
-- S6: Talk pages exist for each document and for the world. Threads have
+  fact changes. Canon isn't written until accepted, and dismissals persist.
+  Bookkeeping (scene breakdowns, time placement) is applied automatically as
+  inferred data, and the writer's corrections are never overwritten. Shown by
+  fixture-text scenario tests.
+- S10: For any scene, the app can say which facts hold at its event and which
+  have been revealed by its position in narrative order, including under a
+  stasis or time-dilation frame. Shown by tests over a fixture world with a
+  flashback and a paused frame.
+- S6: Talk pages exist for each document and for the world. Topics have
   status, and model messages record the model and request. Proposed edits
-  and facts take effect only when accepted. Open threads started by the AI form
+  and facts take effect only when accepted. Open topics started by the AI form
   the world inbox. Shown by scenario tests.
 - S7: Every action in S3–S6 is a typed command callable without the UI.
   Shown by tests that call the commands directly.
@@ -66,9 +72,14 @@ generate with world context you can inspect and edit, then accept or regenerate.
   keep-list modules are ported into it. The old app is reference only until it
   is retired. There's no server: storage is in the browser and LLM calls go
   directly to the configured endpoints.
-- **World facts are time-indexed from the start.** A fact holds from a point
-  in the story, so context for a scene never leaks later facts. This is in the
-  world-fact schema from the first increment, not added afterwards.
+- **Story time is world-first** (`docs/rebuild/story-time.md`). Events are
+  ordered by happens-before. Clocks are frames, with the world calendar as the
+  default frame. Fact changes are anchored to events. Narrative order comes
+  from the manuscript outline. This is in the world-fact schema from the
+  first increment, not added afterwards.
+- **The AI does the bookkeeping.** Useful but tedious structure is kept up to
+  date by the AI as inferred data with provenance. The writer's corrections pin
+  values. Only conflicts and canon changes are escalated for review.
 - **Data boundaries** (`docs/rebuild/data-model-boundaries.md`). Content,
   annotations, world facts and discussions live in separate stores.
   Annotations never write to the content tree.
@@ -153,6 +164,5 @@ These must come back to the human:
   needs. Grammar-constrained decoding on llama.cpp is the planned mitigation.
 - It is not yet settled whether annotations anchor by offset or by quote
   (`data-model-boundaries.md`, open questions).
-- What "a point in the story" means: reading order, in-world chronology,
-  or per-thread positions. Every time-indexed fact depends on this model, so
-  it has to be settled before world facts are built.
+- Bookkeeping cost and accuracy on local models. If it's too slow or too
+  wrong, the automatic tier has to be throttled or moved to a hosted model.

@@ -17,6 +17,8 @@ relationships:
   - kind: "issue"
     id: "worldcrafter-2hcn"
   - kind: "issue"
+    id: "worldcrafter-2ony"
+  - kind: "issue"
     id: "worldcrafter-3eqt"
   - kind: "issue"
     id: "worldcrafter-3lho"
@@ -43,21 +45,21 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Core loop: write, generate with visible world context, accept or regenerate"
-updated_at: "2026-10-17T07:07:33.759455782+00:00"
+updated_at: "2026-10-17T17:52:19.499189117+00:00"
 ---
 
 ## Goal
 
 A writer can create a world with a few entries, write a document, and generate a continuation. The request
-they see (and can edit) contains a window of the document plus cards for entities mentioned nearby, and the
-output arrives as an AI segment that they accept or regenerate. Content persists through a storage adapter,
-and every block has a stable ID.
+they see (and can edit) contains a window of the document, plus cards for entities mentioned nearby, filtered
+to what holds at the scene and marked by what has been revealed. The output arrives as an AI segment that they
+accept or regenerate. Content persists through a storage adapter, and every block has a stable ID.
 
 ## Done when
 
-The child tests pass (round trip, block IDs, adapter contract, LLM client, context builder), the generate scenario
-passes against a stub OpenAI-compatible server, and the independent validation child records pass/fail for
-S1, S2, S4 and S9.
+The child tests pass (round trip, block IDs, adapter contract, story time, LLM client, context builder), the
+generate scenario passes against a stub OpenAI-compatible server, and the independent validation child records
+pass/fail for S1, S2, S4, S9 and S10.
 
 ## Unknowns
 
@@ -66,7 +68,8 @@ S1, S2, S4 and S9.
 
 ## Background
 
-Design: `docs/rebuild/data-model-boundaries.md`. Actions are typed commands (a function with typed input
-and a `Result` output, using neverthrow); the UI only calls commands. Use bun (`bun test`), Biome and
-Legend State as in AGENTS.md. Recognition in this increment is a naive title/alias presence check for card
-selection only. The real matcher is the next increment.
+Design: `docs/rebuild/data-model-boundaries.md`, `docs/rebuild/story-time.md`. Actions are typed commands (a
+function with typed input and a `Result` output, using neverthrow); the UI only calls commands. Use bun
+(`bun test`), Biome and Legend State as in AGENTS.md. Recognition in this increment is a naive title/alias
+presence check for card selection only. The real matcher is the next increment. Writer-entered story-time data
+is enough here; AI bookkeeping comes with discovery.

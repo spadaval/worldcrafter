@@ -18,7 +18,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Restricted content schema with lossless export projection"
-updated_at: "2026-10-17T07:07:33.748285204+00:00"
+updated_at: "2026-10-17T21:32:48.496375422+00:00"
 ---
 
 ## Goal
@@ -44,3 +44,7 @@ A pure TypeScript module under `src/` with tests. No editor or UI changes.
 ## Unknowns
 
 Whether `@platejs/markdown` can be configured to do this or a small custom serializer is simpler. Pick whichever passes the round trip.
+
+## Notes
+
+- 2026-10-17 [note] Before starting: the Night Edition direction (.impeccable/surfaces/writing-workspace.md) adds Fountain-style layers that live in the source but never in the prose export: inline writer notes ([[ ]]), a synopsis per scene (=), a boneyard for cut text, and a forced speaker on a dialogue line (@). Decide which belong in the restricted schema now, add them to docs/rebuild/data-model-boundaries.md, and include them in the round-trip fixture. The prose projection must drop them; the lossless export must keep them.

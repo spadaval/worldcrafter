@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Generate command with context viewer and AI segments"
-updated_at: "2026-10-17T07:07:33.746743611+00:00"
+updated_at: "2026-10-17T23:53:16.222640383+00:00"
 ---
 
 ## Goal
@@ -40,3 +40,7 @@ Command, context viewer and segment UI. Port the AI-segment node from the keep l
 ## Context
 
 `src/components/editor/plugins/ai-segment-kit.tsx`, `ai-segment-node.tsx`; old generate path in `src/components/editor/PlateDocumentEditor.tsx` (does not send world context). Boundary 3, entry point 1.
+
+## Notes
+
+- 2026-10-17 [note] Deferred from the pz8e review (2026-10-17): (R4) the LLM client's `aborted` error carries no partial completion; decide here whether a cancelled generation keeps its partial text and logprobs in the AI segment (no-data-loss), and either attach `partial` to aborted/mid-stream errors or accumulate from onDelta. (R6) token text comes only from `token`, ignoring `bytes`, so a multi-byte character split across llama.cpp tokens shows U+FFFD; handle it wherever logprobs are first displayed.

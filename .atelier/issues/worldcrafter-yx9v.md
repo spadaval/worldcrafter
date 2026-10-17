@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "AI edit proposals by block ID"
-updated_at: "2026-10-17T07:07:33.752010096+00:00"
+updated_at: "2026-10-17T23:58:59.009043995+00:00"
 ---
 
 ## Goal
@@ -40,3 +40,7 @@ Suggestion rendering in Plate (the suggestion plugin, or a custom one).
 ## Design
 
 `docs/rebuild/data-model-boundaries.md` (Boundary 3, entry point 2).
+
+## Notes
+
+- 2026-10-17 [note] From the wtj4 block-ID review (2026-10-17): (R3) set_node is not guarded, so setNodes({id}) can duplicate an ID and unsetNodes('id') can remove one. AI edit operations must edit blocks in place without touching id, or BlockIdPlugin must dedupe/refill on set_node; decide when building edit proposals.

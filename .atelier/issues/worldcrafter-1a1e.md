@@ -17,9 +17,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-17T22:52:20.208322083+00:00"
+status: "done"
 title: "Commit the design groundwork: PRODUCT.md and the Night Edition direction"
-updated_at: "2026-10-17T22:52:06.775767495+00:00"
+updated_at: "2026-10-17T22:52:20.208322083+00:00"
 ---
 
 ## Goal
@@ -29,3 +30,7 @@ Put the product brief and the Impeccable design artefacts under version control:
 ## Done when
 
 They are merged to master, and Impeccable runtime caches are gitignored.
+
+## Close Reason
+
+Design groundwork committed; Impeccable tooling held back pending a decision on vendoring

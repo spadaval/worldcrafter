@@ -171,6 +171,25 @@ describe("loading", () => {
 });
 
 describe("links", () => {
+  test("internal link targets are put in canonical-name form", () => {
+    const editor = createDocumentEditor([
+      {
+        type: "p",
+        id: "a",
+        children: [
+          { text: "" },
+          { type: "a", url: "Old-Mill", children: [{ text: "mill" }] },
+          { text: " " },
+          { type: "a", url: "cafe\u0301 Noir", children: [{ text: "cafe" }] },
+          { text: "" },
+        ],
+      },
+    ]);
+    const json = JSON.stringify(content(editor));
+    expect(json).toContain('"url":"old-mill"');
+    expect(json).toContain('"url":"caf\u00e9-noir"');
+  });
+
   test("link URLs are kept in canonical (NFC) form", () => {
     const editor = createDocumentEditor([
       {
@@ -257,6 +276,35 @@ describe("editing stays inside the schema", () => {
     expect(content(editor)[1]).toEqual(
       p("plain", "b") as ContentDocument[number],
     );
+  });
+
+  test("pasted h4–h6 become separate h3 blocks", () => {
+    const paste = (editor: DocumentEditor) => {
+      editor.tf.select(editor.api.end([editor.children.length - 1]) ?? []);
+      editor.tf.insertData(
+        dataTransfer({
+          "text/html": "<h4>four</h4><h5>five</h5><h6>six</h6>",
+          "text/plain": "four\nfive\nsix",
+        }),
+      );
+      content(editor);
+      return editor.children.map((block, i) => [
+        block.type,
+        editor.api.string([i]),
+      ]);
+    };
+    expect(paste(createDocumentEditor([p("start", "a"), p("", "b")]))).toEqual([
+      ["p", "start"],
+      ["h3", "four"],
+      ["h3", "five"],
+      ["h3", "six"],
+    ]);
+    // Into non-empty text, the first block joins it, as any paste does.
+    expect(paste(createDocumentEditor([p("start", "a")]))).toEqual([
+      ["p", "startfour"],
+      ["h3", "five"],
+      ["h3", "six"],
+    ]);
   });
 
   test("pasted HTML outside the schema is brought into it", () => {

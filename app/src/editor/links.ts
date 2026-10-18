@@ -1,4 +1,5 @@
 import { isInternalLinkTarget } from "~/content/schema";
+import { canonicalizeName } from "~/world/names";
 
 /** Schemes a rendered link may navigate to. Everything else gets no href. */
 const SAFE_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
@@ -42,16 +43,16 @@ export function linkAttributes(url: string): LinkAttributes {
   };
 }
 
+const SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/;
+
 /**
  * The form the editor stores a link URL in. Every link the editor makes or
  * keeps passes through here (see `ContentSchemaPlugin`), so a link target
  * outside the schema is fixed rather than making the document unsaveable.
- *
- * TODO(worldcrafter-mxlo): when `src/world/names.ts` lands, map internal-link
- * targets through its `canonicalizeName` here (e.g. `Old-Mill` → `old-mill`).
- * The canonical-name rule belongs to that module; until then this only
- * NFC-normalises, as `canonicalize()` does on save.
+ * A URL with a scheme is external and only NFC-normalised (as
+ * `canonicalize()` does on save); anything else names a document and is put
+ * in canonical-name form (`Old-Mill` becomes `old-mill`).
  */
 export function canonicalLinkUrl(url: string): string {
-  return url.normalize("NFC");
+  return SCHEME.test(url) ? url.normalize("NFC") : canonicalizeName(url);
 }

@@ -95,6 +95,23 @@ const ChangePlugin = createSlatePlugin({
   },
 }));
 
+/**
+ * The schema stops at h3. Pasted h4–h6 become h3, so they stay separate
+ * blocks instead of running into their neighbours.
+ */
+const MinorHeadingPastePlugin = createSlatePlugin({
+  key: "minorHeadingPaste",
+  node: { isElement: true },
+  parsers: {
+    html: {
+      deserializer: {
+        rules: [{ validNodeName: ["H4", "H5", "H6"] }],
+        parse: () => ({ type: "h3" }),
+      },
+    },
+  },
+});
+
 const blockRule = (match: string, type: string): AutoformatRule => ({
   mode: "block",
   match,
@@ -146,6 +163,7 @@ export const documentPlugins = [
   H1Plugin,
   H2Plugin,
   H3Plugin,
+  MinorHeadingPastePlugin,
   BlockquotePlugin,
   HorizontalRulePlugin.withComponent(HrElement),
   BoldPlugin,

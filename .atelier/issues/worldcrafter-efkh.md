@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-18T04:48:41.309925314+00:00"
+status: "done"
 title: "Generate command with context viewer and AI segments"
-updated_at: "2026-10-18T02:39:19.697132298+00:00"
+updated_at: "2026-10-18T04:48:41.309925314+00:00"
 ---
 
 ## Goal
@@ -48,3 +49,7 @@ Command, context viewer and segment UI. Port the AI-segment node from the keep l
 - 2026-10-17 [note] Also from the 3eqt re-review (N1): transact() rolls back only if issue() throws before issuing any write; when adding the multi-collection batch, wrap issue() so any throw aborts the transaction.
 - 2026-10-17 [note] From the lua8 projections review (2026-10-17): (R2) projectProse includes AI segments whose status is still 'generating', so a continuation request would send the model partial text. The continuation caller must skip or wait on generating segments, or add an option to the projection.
 - 2026-10-17 [note] From the jcj3 context-builder review (2026-10-17): before sending, validate that the request body matches its endpoint (messages for chat, prompt for completions) and that request.profile matches the profile whose key is used, since an edited url could otherwise send the named profile's key to another host; revise() stores any LlmRequest unchecked. A pin pointing at a deleted entry fails the build with unknown_pin: the pins UI must let the writer clear it. Uncertain facts ignore revealedSince, so the model isn't told which possible value the reader has seen. Until reveal bookkeeping exists (8agg), every fact sits in 'not yet revealed', so generation is maximally cautious about revealing.
+
+## Close Reason
+
+Generate command merged: builds the request, editable context viewer (sent equals shown, checked against endpoint and profile), streams into an AI segment through a small grammar (everything else flattened to text), provenance in the sidecar, atomic accept with an accepted-AI-change snapshot, regenerate archiving the replaced output and the writer's edits, stop/cancel keeping partial text, any writer edit touching a live segment stops it, linear streaming (50 KB in ~0.1-1 s); scenario test against a stub server; reviewed over seven rounds. UI components are not wired into the workspace yet (worldcrafter-2tz9).

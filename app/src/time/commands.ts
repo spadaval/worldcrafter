@@ -1,7 +1,8 @@
 /**
  * Typed edits to a timeline. Each is checked against the timeline and the
  * current outline, and rejected if it would add a problem: a contradiction in
- * the order, or a frame whose correspondences disagree. Problems already in
+ * the order, a frame whose correspondences disagree, or a duration the
+ * positions rule out. Problems already in
  * the timeline don't block edits, so they can be repaired one at a time.
  *
  * Values written by the AI (inferred) never replace values the writer
@@ -17,7 +18,7 @@ import {
   problemKeys,
   type TimelineProblem,
 } from "./chronology";
-import { frameProblems } from "./frames";
+import { durationProblems, frameProblems } from "./frames";
 import {
   type Duration,
   type EventId,
@@ -107,9 +108,13 @@ export type TimelineError =
   /** The command would add this problem. */
   | TimelineProblem;
 
-/** Order problems and frame problems together. */
+/** Order problems, frame problems and duration problems together. */
 export function timelineProblems(chronology: Chronology): TimelineProblem[] {
-  return [...chronology.problems, ...frameProblems(chronology)];
+  return [
+    ...chronology.problems,
+    ...frameProblems(chronology),
+    ...durationProblems(chronology),
+  ];
 }
 
 /**
@@ -166,9 +171,12 @@ function edit(
       ? undefined
       : !Number.isFinite(duration.amount) || duration.amount < 0
         ? "duration must be a non-negative number"
-        : findFrame(timeline, duration.frame) === undefined
-          ? `frame ${duration.frame} does not exist`
-          : undefined;
+        : duration.tolerance !== undefined &&
+            (!Number.isFinite(duration.tolerance) || duration.tolerance < 0)
+          ? "a duration's tolerance must be a non-negative number"
+          : findFrame(timeline, duration.frame) === undefined
+            ? `frame ${duration.frame} does not exist`
+            : undefined;
   /** Whether `existing` is asserted, so an inferred value can't replace it. */
   const pinned = (existing: Authority | undefined, authority: Authority) =>
     existing?.level === "asserted" && authority.level === "inferred";

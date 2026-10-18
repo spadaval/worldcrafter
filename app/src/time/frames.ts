@@ -5,9 +5,11 @@
  * A frame runs at its usual rate against its reference frame, except between
  * the events of a correspondence (a pause is rate 0). Elapsed time comes from
  * the events' positions on the frame itself when both have one; otherwise
- * from their positions on the reference frame, integrating the rate. Fuzzy
- * positions give a range: the true value is always inside it, though with
- * fuzzy correspondence bounds it can be wider than necessary. Only one level
+ * from their positions on the reference frame, integrating the rate. Where an
+ * event has no position on a frame, the interval its position on a frame
+ * referencing it gives (`referenceIntervals`) stands in. Fuzzy positions
+ * give a range: the true value is always inside it, though with fuzzy
+ * correspondence bounds it can be wider than necessary. Only one level
  * of reference is followed: a frame whose reference isn't the world frame
  * needs positions on that reference frame.
  */
@@ -15,12 +17,14 @@
 import type { Chronology, PointOrder, TimelineProblem } from "./chronology";
 import {
   type Correspondence,
+  type Duration,
   type EventId,
   type Frame,
   type FrameId,
   findFrame,
   type Position,
   sceneEventId,
+  type Timeline,
   WORLD_FRAME,
 } from "./timeline";
 
@@ -36,6 +40,9 @@ export type Elapsed =
   | { status: "unknown"; frame: FrameId; reason: string };
 
 type Range = { min: number; max: number };
+
+/** A closed range on a clock: an event within it starts and ends inside. */
+export type Interval = { start: number; end: number };
 
 const NOT_AFTER: readonly PointOrder[] = ["before", "same_or_before", "same"];
 
@@ -65,8 +72,8 @@ export function elapsed(
     min,
     max,
   });
-  const a = chronology.position(from, frameId);
-  const b = chronology.position(to, frameId);
+  const a = chronology.interval(from, frameId);
+  const b = chronology.interval(to, frameId);
   if (a !== undefined && b !== undefined) return known(span(a, b));
   const missing = a === undefined ? from : to;
   if (frameId === WORLD_FRAME) {
@@ -209,8 +216,393 @@ export function frameProblems(chronology: Chronology): TimelineProblem[] {
   return problems;
 }
 
-/** Bounds of `b - a` for events within positions `a` and `b`. */
-function span(a: Position, b: Position): Range {
+/**
+ * Where an event positioned on `frame`'s clock but not on its reference
+ * frame's lies on the reference clock, derived from the frame's sync points
+ * and rates. The event starts no earlier than `start` and ends no later than
+ * `end`; either may be infinite when the frame's clock doesn't bound it.
+ */
+export type ReferenceInterval = {
+  event: EventId;
+  frame: FrameId;
+  reference: FrameId;
+  start: number;
+  end: number;
+};
+
+/**
+ * Reference intervals for every event positioned on a frame other than the
+ * world frame and not on that frame's reference (one level; derived
+ * intervals don't feed further derivations).
+ *
+ * The frame's clock reading c(t) at reference time t is nondecreasing, and
+ * changes at a rate the frame's rates bound: at a time inside a
+ * correspondence for certain, its rate; at a time it may or may not cover
+ * (fuzzy or missing positions of its events on the reference frame), the
+ * usual rate or its rate; elsewhere the usual rate (an unknown usual rate is
+ * anywhere from 0 to infinite). A sync point P, at reference time within
+ * [ps, pe] and frame time within [qs, qe], bounds c(t) above by qe plus the
+ * fastest the clock can run from ps to t, and below by qs plus the slowest
+ * it can run from pe to t. An event within [fs, fe] on the frame then starts
+ * no earlier than the first t where the upper bound reaches fs and ends no
+ * later than the last t where the lower bound hasn't passed fe. Bounds from
+ * the nearest sync points on each side are intersected, then widened by a
+ * rounding margin, so the interval always contains the true time.
+ *
+ * Cost: O(K^2 + S log S) per frame for K correspondences and S sync points,
+ * plus O(log S + K) per derived event.
+ */
+export function referenceIntervals(timeline: Timeline): ReferenceInterval[] {
+  const positions = new Map<string, Position>();
+  const inFrame = new Map<FrameId, Position[]>();
+  for (const position of timeline.positions) {
+    const key = JSON.stringify([position.event, position.frame]);
+    if (positions.has(key)) continue;
+    positions.set(key, position);
+    const list = inFrame.get(position.frame) ?? [];
+    list.push(position);
+    inFrame.set(position.frame, list);
+  }
+  const at = (event: EventId, frame: FrameId) =>
+    positions.get(JSON.stringify([event, frame]));
+
+  const derived: ReferenceInterval[] = [];
+  for (const frame of timeline.frames) {
+    const { reference } = frame;
+    if (
+      frame.id === WORLD_FRAME ||
+      reference === frame.id ||
+      findFrame(timeline, reference) === undefined
+    ) {
+      continue;
+    }
+    const own = inFrame.get(frame.id) ?? [];
+    const syncs = own
+      .flatMap((p) => {
+        const r = at(p.event, reference);
+        return r === undefined ? [] : [{ own: p, reference: r }];
+      })
+      .sort((x, y) => x.own.start - y.own.start);
+    if (syncs.length === 0) continue;
+    const rates = rateBounds(
+      frame.rate,
+      timeline.correspondences
+        .filter((c) => c.frame === frame.id)
+        .map((c) => ({
+          rate: c.rate,
+          from: at(c.from, reference),
+          to: at(c.to, reference),
+        })),
+    );
+    // Rounding error grows with the inputs' magnitudes, and frame time is
+    // divided by the rate, so it grows as the slowest running rate shrinks.
+    const slowest = Math.min(
+      1,
+      ...[...rates.low, ...rates.high].filter(
+        (r) => r > 0 && Number.isFinite(r),
+      ),
+    );
+    const breakScale = Math.max(1, ...rates.breaks.map(Math.abs));
+    for (const position of own) {
+      if (at(position.event, reference) !== undefined) continue;
+      // The nearest sync points by frame time, one on each side.
+      let next = 0;
+      for (let hi = syncs.length; next < hi; ) {
+        const mid = (next + hi) >> 1;
+        if ((syncs[mid]?.own.start ?? 0) <= position.start) next = mid + 1;
+        else hi = mid;
+      }
+      const nearest = syncs.slice(Math.max(0, next - 1), next + 1);
+      let start = Number.NEGATIVE_INFINITY;
+      let end = Number.POSITIVE_INFINITY;
+      let scale = Math.max(
+        breakScale,
+        Math.abs(position.start) / slowest,
+        Math.abs(position.end) / slowest,
+      );
+      for (const sync of nearest) {
+        scale = Math.max(
+          scale,
+          Math.abs(sync.reference.start),
+          Math.abs(sync.reference.end),
+          Math.abs(sync.own.start) / slowest,
+          Math.abs(sync.own.end) / slowest,
+        );
+        const bounds = boundsFrom(rates, sync, position);
+        start = Math.max(start, bounds.start);
+        end = Math.min(end, bounds.end);
+      }
+      if (Number.isFinite(start) || Number.isFinite(end)) {
+        derived.push({
+          event: position.event,
+          frame: frame.id,
+          reference,
+          start: start - margin(start, scale),
+          end: end + margin(end, scale),
+        });
+      }
+    }
+  }
+  return derived;
+}
+
+/**
+ * How far floating-point rounding may have moved `value`, computed from
+ * inputs no larger than `scale`.
+ */
+function margin(value: number, scale: number): number {
+  return Number.isFinite(value)
+    ? 1e-9 * Math.max(1, Math.abs(value), scale)
+    : 0;
+}
+
+/**
+ * The slowest and fastest a frame's clock can run, piece by piece over its
+ * reference clock: piece i runs from `breaks[i - 1]` to `breaks[i]` (minus
+ * and plus infinity at the ends).
+ */
+type RateBounds = { breaks: number[]; low: number[]; high: number[] };
+
+function rateBounds(
+  usual: number | null,
+  correspondences: readonly {
+    rate: number;
+    from: Interval | undefined;
+    to: Interval | undefined;
+  }[],
+): RateBounds {
+  // Each correspondence covers [from.end, to.start] for certain and may
+  // cover [from.start, to.end]; a missing position leaves that side open.
+  const spans = correspondences.map(({ rate, from, to }) => ({
+    rate,
+    certain:
+      from !== undefined && to !== undefined
+        ? { start: from.end, end: to.start }
+        : undefined,
+    possible: {
+      start: from?.start ?? Number.NEGATIVE_INFINITY,
+      end: to?.end ?? Number.POSITIVE_INFINITY,
+    },
+  }));
+  const breaks = [
+    ...new Set(
+      spans.flatMap(({ certain, possible }) =>
+        [possible.start, possible.end, certain?.start, certain?.end].filter(
+          (v): v is number => v !== undefined && Number.isFinite(v),
+        ),
+      ),
+    ),
+  ].sort((x, y) => x - y);
+  const low: number[] = [];
+  const high: number[] = [];
+  for (let i = 0; i <= breaks.length; i++) {
+    const before = breaks[i - 1];
+    const after = breaks[i];
+    // A time strictly inside the piece.
+    const t =
+      before === undefined
+        ? after === undefined
+          ? 0
+          : after - 1
+        : after === undefined
+          ? before + 1
+          : (before + after) / 2;
+    const inside = (span: Interval | undefined) =>
+      span !== undefined && span.start < t && t < span.end;
+    const certain = spans.filter((s) => inside(s.certain)).map((s) => s.rate);
+    const possible =
+      certain.length > 0
+        ? certain
+        : spans
+            .filter((s) => inside(s.possible))
+            .map((s) => s.rate)
+            .concat(usual === null ? [0, Number.POSITIVE_INFINITY] : [usual]);
+    low.push(Math.min(...possible));
+    high.push(Math.max(...possible));
+  }
+  return { breaks, low, high };
+}
+
+/**
+ * Reference-clock bounds of an event within `target` on the frame's clock,
+ * from one sync point (see `referenceIntervals`).
+ */
+function boundsFrom(
+  rates: RateBounds,
+  sync: { own: Interval; reference: Interval },
+  target: Interval,
+): Interval {
+  const { own, reference } = sync;
+  const start =
+    target.start <= own.end
+      ? walk(
+          rates,
+          rates.low,
+          reference.start,
+          -1,
+          own.end - target.start,
+          "last",
+        )
+      : walk(
+          rates,
+          rates.high,
+          reference.start,
+          1,
+          target.start - own.end,
+          "first",
+        );
+  const end =
+    target.end >= own.start
+      ? walk(rates, rates.low, reference.end, 1, target.end - own.start, "last")
+      : walk(
+          rates,
+          rates.high,
+          reference.end,
+          -1,
+          own.start - target.end,
+          "first",
+        );
+  return {
+    start: start ?? Number.NEGATIVE_INFINITY,
+    end: end ?? Number.POSITIVE_INFINITY,
+  };
+}
+
+/**
+ * Walks the reference clock from `origin` in `direction`, integrating
+ * `rates`, to where the frame's clock has moved by `amount`: the nearest such
+ * point ("first"), or the farthest point where it has not yet moved further
+ * ("last"). "first" is undefined if it never gets there; "last" is infinite
+ * if it never moves further.
+ */
+function walk(
+  { breaks }: RateBounds,
+  rates: readonly number[],
+  origin: number,
+  direction: 1 | -1,
+  amount: number,
+  mode: "first" | "last",
+): number | undefined {
+  if (mode === "first" && amount <= 0) return origin;
+  // The piece the walk starts in.
+  let i =
+    direction === 1
+      ? breaks.filter((b) => b <= origin).length
+      : breaks.filter((b) => b < origin).length;
+  let cursor = origin;
+  let moved = 0;
+  for (;;) {
+    const bound = direction === 1 ? breaks[i] : breaks[i - 1];
+    const length =
+      bound === undefined ? Number.POSITIVE_INFINITY : Math.abs(bound - cursor);
+    const rate = rates[i] ?? 0;
+    if (rate > 0) {
+      const reach = moved + rate * length;
+      if (mode === "first" ? reach >= amount : reach > amount) {
+        return cursor + (direction * (amount - moved)) / rate;
+      }
+      moved = reach;
+    }
+    if (bound === undefined) {
+      return mode === "first"
+        ? undefined
+        : direction * Number.POSITIVE_INFINITY;
+    }
+    cursor = bound;
+    i += direction;
+  }
+}
+
+/**
+ * Durations of `before` and `after` orderings (constraints and scene
+ * placements) that the events' positions rule out: the gap from the end of
+ * the earlier event to the start of the later lies within their elapsed
+ * time on the duration's frame (`elapsed`), so a duration outside that range
+ * can't hold. Durations whose elapsed time is unknown aren't checked.
+ */
+export function durationProblems(chronology: Chronology): TimelineProblem[] {
+  const { timeline } = chronology;
+  const stated = [
+    ...timeline.constraints.map((c) => ({
+      by: `constraint ${c.id}`,
+      a: c.a,
+      relation: c.relation,
+      b: c.b,
+      duration: c.duration,
+    })),
+    ...timeline.placements.flatMap((p) =>
+      p.constraints.map((c) => ({
+        by: `the placement of scene ${p.scene} (${c.relation} ${c.event})`,
+        a: sceneEventId(p.scene),
+        relation: c.relation,
+        b: c.event,
+        duration: c.duration,
+      })),
+    ),
+  ];
+  const problems: TimelineProblem[] = [];
+  for (const { by, a, relation, b, duration } of stated) {
+    if (duration === null) continue;
+    if (relation !== "before" && relation !== "after") continue;
+    const [earlier, later] = relation === "before" ? [a, b] : [b, a];
+    const gap = elapsed(chronology, duration.frame, earlier, later);
+    if (gap.status !== "known") continue;
+    const tolerance = duration.tolerance ?? DEFAULT_TOLERANCE;
+    const slack = 1e-9 * roundingScale(chronology, duration, [earlier, later]);
+    if (
+      duration.amount + tolerance < gap.min - slack ||
+      duration.amount - tolerance > gap.max + slack
+    ) {
+      const stated =
+        tolerance === 0
+          ? `exactly ${duration.amount}`
+          : `${duration.amount} give or take ${tolerance}`;
+      problems.push({
+        kind: "inconsistent_duration",
+        referencedBy: by,
+        events: [earlier, later],
+        message: `${by} puts ${stated} ${gap.unit} between ${earlier} and ${later}, but their positions put ${formatRange(gap)} ${gap.unit} between them`,
+      });
+    }
+  }
+  return problems;
+}
+
+/** A duration without a tolerance is as precise as its unit: half a unit. */
+const DEFAULT_TOLERANCE = 0.5;
+
+/**
+ * The largest magnitude the elapsed time between `events` on the duration's
+ * frame is computed from: their intervals there and on its reference frame,
+ * scaled by the fastest rate between the two.
+ */
+function roundingScale(
+  chronology: Chronology,
+  duration: Duration,
+  events: readonly EventId[],
+): number {
+  const frame = findFrame(chronology.timeline, duration.frame);
+  const frames = frame === undefined ? [] : [frame.id, frame.reference];
+  const rates = chronology.timeline.correspondences
+    .filter((c) => c.frame === duration.frame)
+    .map((c) => c.rate)
+    .concat(frame?.rate ?? 1);
+  const magnitudes = events.flatMap((event) =>
+    frames.flatMap((f) => {
+      const interval = chronology.interval(event, f);
+      return interval === undefined
+        ? []
+        : [Math.abs(interval.start), Math.abs(interval.end)];
+    }),
+  );
+  return (
+    Math.max(1, Math.abs(duration.amount), ...magnitudes) *
+    Math.max(1, ...rates)
+  );
+}
+
+/** Bounds of `b - a` for events within intervals `a` and `b`. */
+function span(a: Interval, b: Interval): Range {
   return { min: b.start - a.end, max: b.end - a.start };
 }
 
@@ -285,15 +677,15 @@ function viaReference(
   last: EventId,
 ): Range | string {
   const reference = frame.reference;
-  const a = chronology.position(first, reference);
-  const b = chronology.position(last, reference);
+  const a = chronology.interval(first, reference);
+  const b = chronology.interval(last, reference);
   if (a === undefined || b === undefined) {
     return `event ${a === undefined ? first : last} has no position in its reference frame ${reference}`;
   }
   const usual = frame.rate;
   if (usual === null) return `frame ${frame.id} has no usual rate`;
 
-  const relevant: { c: Correspondence; x: Position; y: Position }[] = [];
+  const relevant: { c: Correspondence; x: Interval; y: Interval }[] = [];
   for (const c of chronology.timeline.correspondences) {
     if (c.frame !== frame.id) continue;
     if (!chronology.hasEvent(c.from) || !chronology.hasEvent(c.to)) {
@@ -307,8 +699,8 @@ function viaReference(
     ) {
       continue;
     }
-    const x = chronology.position(c.from, reference);
-    const y = chronology.position(c.to, reference);
+    const x = chronology.interval(c.from, reference);
+    const y = chronology.interval(c.to, reference);
     if (x === undefined || y === undefined) {
       return `correspondence ${c.id} may apply but event ${x === undefined ? c.from : c.to} has no position in ${reference}`;
     }
@@ -347,7 +739,7 @@ function viaReference(
   return { min: Math.max(0, min), max: Math.max(0, max) };
 }
 
-type Mark = { event: EventId; at: Position };
+type Mark = { event: EventId; at: Interval };
 
 /**
  * Elapsed time as a sum of pieces: the usual rate up to the first
@@ -362,7 +754,7 @@ function piecewise(
   usual: number,
   from: Mark,
   to: Mark,
-  segments: readonly { c: Correspondence; x: Position; y: Position }[],
+  segments: readonly { c: Correspondence; x: Interval; y: Interval }[],
 ): Range | undefined {
   const notAfter = (
     p: EventId,

@@ -43,8 +43,8 @@ export type Candidate = {
  * with the fact's changes.
  */
 export type Uncertainty =
-  /** `relativeTo` starts during `event`, which changes the fact. */
-  | { kind: "during"; relativeTo: EventId; event: EventId }
+  /** `relativeTo` starts during each of `events`, which change the fact. */
+  | { kind: "during"; relativeTo: EventId; events: EventId[] }
   /** Changes at `events` may or may not take effect before `relativeTo`. */
   | { kind: "unordered"; relativeTo: EventId; events: EventId[] }
   /** Changes at `events` are all in effect, but which is latest is unknown. */
@@ -364,10 +364,9 @@ function stateAt<T extends FactValueAt>(
       reasons.push({ kind: "unknown_event", event: e });
     }
   }
-  for (const e of during) {
-    if (relevant.has(e)) {
-      reasons.push({ kind: "during", relativeTo: event, event: e });
-    }
+  const duringEvents = [...during].filter((e) => relevant.has(e));
+  if (duringEvents.length > 0) {
+    reasons.push({ kind: "during", relativeTo: event, events: duringEvents });
   }
   const openEvents = [...unordered].filter((e) => relevant.has(e));
   if (openEvents.length > 0) {

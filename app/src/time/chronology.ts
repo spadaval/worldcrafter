@@ -11,7 +11,17 @@
  *   bound, joined by `<` edges. A position `[start, end)` is
  *   `T(start) <= e.start` and `e.end < T(end)` (`<=` for an exact position),
  *   so positions in one frame order events without any pairwise edges, and an
- *   event positioned in two frames (a sync point) links their clocks;
+ *   event positioned in two frames (a sync point) links their clocks. A frame
+ *   that may pause (rate 0 or unknown, or a rate-0 correspondence, on it or
+ *   on any frame up its reference chain) holds a
+ *   reading for a while, so each reading v is two points lo(v) <= hi(v): a
+ *   start bounds against lo, an exact end against hi, and an end before v
+ *   against lo. Two events at one reading of such a frame are then not
+ *   simultaneous;
+ * - an event positioned in a frame but not in its reference frame gets the
+ *   interval its frame's sync points and rates give it on the reference
+ *   clock (`referenceIntervals`), as `<=` edges against that clock; where
+ *   they don't bound it, it stays unordered;
  * - a scene without an explicit placement comes right after the main-line
  *   anchor; see `compileChronology`.
  *
@@ -26,12 +36,15 @@
  * that such answers rest on an inconsistent order.
  *
  * Cost: compiling is O(V + E + P log P) for V points, E edges and P
- * positions, plus O(V + E) for each explicitly placed scene. Each comparison
- * walks the graph once from each point it starts from (O(V + E)) and caches
- * the walk for the life of the chronology.
+ * positions, plus O(V + E) for each explicitly placed scene, plus deriving
+ * reference intervals (`referenceIntervals`: O(K^2 + S log S) per frame and
+ * O(log S + K) per event, for K correspondences and S sync points). Each
+ * comparison walks the graph once from each point it starts from (O(V + E))
+ * and caches the walk for the life of the chronology.
  */
 
 import type { SceneRef } from "../outline/outline";
+import { type Interval, referenceIntervals } from "./frames";
 import {
   type EventId,
   type FrameId,
@@ -40,6 +53,7 @@ import {
   sceneEventId,
   type Timeline,
   type TimeRelation,
+  WORLD_FRAME,
 } from "./timeline";
 
 /** Where an ordering edge came from, so a contradiction can name its causes. */
@@ -49,6 +63,13 @@ export type Origin =
   /** `scene` was placed by default right after `after`. */
   | { kind: "default_placement"; scene: string; after: string }
   | { kind: "position"; event: EventId; frame: FrameId }
+  /** The event's position in `frame`, carried to `reference` by its rates. */
+  | {
+      kind: "derived_position";
+      event: EventId;
+      frame: FrameId;
+      reference: FrameId;
+    }
   | { kind: "clock"; frame: FrameId }
   | { kind: "span"; event: EventId };
 
@@ -80,6 +101,14 @@ export type TimelineProblem =
       /** The frame's correspondences and sync points disagree. */
       kind: "inconsistent_frame";
       frame: FrameId;
+      events: EventId[];
+      message: string;
+    }
+  | {
+      /** The duration of a `before` or `after` disagrees with positions. */
+      kind: "inconsistent_duration";
+      /** The constraint or scene placement that states the duration. */
+      referencedBy: string;
       events: EventId[];
       message: string;
     };
@@ -145,6 +174,12 @@ export interface Chronology {
   comparePoints(p: number, q: number): PointOrder;
   /** The event's position in the frame, if it has one. */
   position(event: EventId, frame: FrameId): Position | undefined;
+  /**
+   * Where the event lies on the frame's clock: its position there, or else
+   * the interval derived from its position in a frame that references this
+   * one (see `referenceIntervals`), if that is bounded on both sides.
+   */
+  interval(event: EventId, frame: FrameId): Interval | undefined;
 }
 
 type Edge = { to: number; strict: boolean; origin: Origin };
@@ -270,11 +305,22 @@ export function compileChronology(
     }
   }
 
-  // Each frame's clock: one point per distinct bound, in order.
-  const byFrame = new Map<
-    FrameId,
-    { event: number; start: number; end: number }[]
-  >();
+  // Each frame's clock: one point per distinct bound, in order. A bound
+  // says an event starts no earlier, or ends no later (or before), than a
+  // time on the clock.
+  type Bound = {
+    event: number;
+    value: number;
+    side: "start" | "end";
+    strict: boolean;
+    origin: Origin;
+  };
+  const byFrame = new Map<FrameId, Bound[]>();
+  const addBound = (frame: FrameId, bound: Bound) => {
+    const bounds = byFrame.get(frame) ?? [];
+    bounds.push(bound);
+    byFrame.set(frame, bounds);
+  };
   for (const position of timeline.positions) {
     const by = `its position in frame ${position.frame}`;
     const event = resolve(position.event, by);
@@ -288,35 +334,103 @@ export function compileChronology(
       continue;
     }
     if (event === undefined) continue;
-    const entries = byFrame.get(position.frame) ?? [];
-    entries.push({ event, start: position.start, end: position.end });
-    byFrame.set(position.frame, entries);
+    const origin: Origin = {
+      kind: "position",
+      event: position.event,
+      frame: position.frame,
+    };
+    addBound(position.frame, {
+      event,
+      value: position.start,
+      side: "start",
+      strict: false,
+      origin,
+    });
+    addBound(position.frame, {
+      event,
+      value: position.end,
+      side: "end",
+      strict: position.end > position.start,
+      origin,
+    });
   }
-  for (const [frame, entries] of byFrame) {
-    const values = [
-      ...new Set(entries.flatMap(({ start, end }) => [start, end])),
-    ].sort((x, y) => x - y);
-    const clock = new Map<number, number>();
+  const derived = new Map<string, Interval>();
+  for (const interval of referenceIntervals(timeline)) {
+    const event = eventIndex.get(interval.event);
+    if (event === undefined) continue;
+    const origin: Origin = {
+      kind: "derived_position",
+      event: interval.event,
+      frame: interval.frame,
+      reference: interval.reference,
+    };
+    for (const [side, value] of [
+      ["start", interval.start],
+      ["end", interval.end],
+    ] as const) {
+      if (Number.isFinite(value)) {
+        addBound(interval.reference, {
+          event,
+          value,
+          side,
+          strict: false,
+          origin,
+        });
+      }
+    }
+    if (Number.isFinite(interval.start) && Number.isFinite(interval.end)) {
+      derived.set(JSON.stringify([interval.event, interval.reference]), {
+        start: interval.start,
+        end: interval.end,
+      });
+    }
+  }
+  // A frame that may pause holds each reading for a while of world time, so
+  // a reading v is two points lo(v) <= hi(v) (when the clock reaches v, and
+  // when it leaves), with hi(v) < lo(v') for v < v'. An event starts no
+  // earlier than lo of its start; an exact event ends by hi of its reading,
+  // and an event within [s, e) ends before lo(e).
+  // A frame pauses in world time whenever any frame up its reference chain
+  // does. A missing frame or a cycle of references may pause.
+  const mayPause = (frame: FrameId) => {
+    const seen = new Set<FrameId>();
+    for (let id = frame; id !== WORLD_FRAME; ) {
+      const found = findFrame(timeline, id);
+      if (found === undefined || seen.has(id)) return true;
+      seen.add(id);
+      if (
+        found.rate === null ||
+        found.rate === 0 ||
+        timeline.correspondences.some((c) => c.frame === id && c.rate === 0)
+      ) {
+        return true;
+      }
+      id = found.reference;
+    }
+    return false;
+  };
+  for (const [frame, bounds] of byFrame) {
+    const values = [...new Set(bounds.map(({ value }) => value))].sort(
+      (x, y) => x - y,
+    );
+    const pauses = mayPause(frame);
+    const reading = new Map<number, { lo: number; hi: number }>();
     let previous: number | undefined;
     for (const value of values) {
-      const node = addNode();
-      clock.set(value, node);
+      const lo = addNode();
+      const hi = pauses ? addNode() : lo;
+      if (pauses) addEdge(lo, hi, false, { kind: "clock", frame });
+      reading.set(value, { lo, hi });
       if (previous !== undefined) {
-        addEdge(previous, node, true, { kind: "clock", frame });
+        addEdge(previous, lo, true, { kind: "clock", frame });
       }
-      previous = node;
+      previous = hi;
     }
-    for (const { event, start, end } of entries) {
-      const origin: Origin = {
-        kind: "position",
-        event: eventIds[event] ?? "",
-        frame,
-      };
-      const from = clock.get(start);
-      const to = clock.get(end);
-      if (from === undefined || to === undefined) continue;
-      addEdge(from, startOf(event), false, origin);
-      addEdge(endOf(event), to, end > start, origin);
+    for (const { event, value, side, strict, origin } of bounds) {
+      const time = reading.get(value);
+      if (time === undefined) continue;
+      if (side === "start") addEdge(time.lo, startOf(event), false, origin);
+      else addEdge(endOf(event), strict ? time.lo : time.hi, strict, origin);
     }
   }
 
@@ -402,6 +516,10 @@ export function compileChronology(
     problems,
     hints,
     position: (event, frame) => positions.get(JSON.stringify([event, frame])),
+    interval(event, frame) {
+      const key = JSON.stringify([event, frame]);
+      return positions.get(key) ?? derived.get(key);
+    },
     hasEvent: (event) => eventIndex.has(event),
     point(event, end) {
       const i = eventIndex.get(event);
@@ -454,6 +572,8 @@ export function describeOrigin(origin: Origin): string {
       return `scene ${origin.scene} following scene ${origin.after} by default`;
     case "position":
       return `the position of ${origin.event} in frame ${origin.frame}`;
+    case "derived_position":
+      return `the position of ${origin.event} in frame ${origin.frame}, carried to frame ${origin.reference} by its sync points and rates`;
     case "clock":
       return `the clock of frame ${origin.frame}`;
     case "span":
@@ -468,9 +588,15 @@ export function describeOrigin(origin: Origin): string {
  * growing a contradiction counts as adding one, and shrinking it does not.
  */
 export function problemKeys(problem: TimelineProblem): string[] {
-  return problem.kind === "contradiction"
-    ? problem.conflicting.map((origin) => JSON.stringify(origin))
-    : [problem.message];
+  switch (problem.kind) {
+    case "contradiction":
+      return problem.conflicting.map((origin) => JSON.stringify(origin));
+    case "inconsistent_duration":
+      // Not the message: it quotes ranges that other edits can change.
+      return [`the duration of ${problem.referencedBy}`];
+    default:
+      return [problem.message];
+  }
 }
 
 /** Walks from `from` along `adjacency`, recording the strongest path to each point. */

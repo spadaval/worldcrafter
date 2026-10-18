@@ -316,7 +316,7 @@ for (const [name, open] of [
         "harrow.border uncertain: the river since base | the mountains since war",
       ]);
       expect(during.uncertain[0]?.state).toMatchObject({
-        reasons: [{ kind: "during", relativeTo: s("s2"), event: "war" }],
+        reasons: [{ kind: "during", relativeTo: s("s2"), events: ["war"] }],
       });
       expect(border(await context("s3"))).toEqual([
         "harrow.border=the mountains since war",

@@ -16,6 +16,9 @@ relationships:
   - kind: "issue"
     id: "worldcrafter-mxlo"
     type: "blocked_by"
+  - kind: "issue"
+    id: "worldcrafter-zr67"
+    type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
 status: "todo"

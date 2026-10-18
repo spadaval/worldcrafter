@@ -17,9 +17,10 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-18T02:39:13.861143187+00:00"
+status: "done"
 title: "Context builder and stored, editable requests"
-updated_at: "2026-10-18T02:19:10.718480287+00:00"
+updated_at: "2026-10-18T02:39:13.861143187+00:00"
 ---
 
 ## Goal
@@ -42,3 +43,7 @@ A builder module, a request record type and tests.
 ## Context
 
 `docs/rebuild/data-model-boundaries.md` (Boundary 5). Prior art: the context order of Novelcrafter's Codex and NovelAI's Context Viewer (`docs/rebuild/prior-art-2026.md`).
+
+## Close Reason
+
+Context builder merged: prose window before the cursor (generating segments excluded), cards for mentioned and pinned entries rendered at the scene's story position (revealed, not-yet-revealed, uncertain), budgeted by priority with the window's limits recorded, chat and completion layouts, deterministic; stored as assembled records with explicit revisions; reviewed twice.

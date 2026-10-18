@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "App shell and editor on the restricted schema"
-updated_at: "2026-10-18T00:32:27.055955685+00:00"
+updated_at: "2026-10-18T00:40:59.630149510+00:00"
 ---
 
 ## Goal
@@ -48,3 +48,4 @@ Spike result on block IDs; `src/components/editor/plugins/` for the old kits (AI
 - 2026-10-17 [note] From the integration review (2026-10-17): (R6) list indent is capped at MAX_LIST_INDENT (32) in the content schema; configure the editor's indent plugin with the same maximum (or clamp on import), so a deep indent can't make a document unsaveable.
 - 2026-10-17 [note] From the zr67 outline review (2026-10-17): deleting a document does not remove its scene from the manuscript outline. Whoever implements document deletion must also run the outline's removeScene (or offer to), and the UI should confirm before removeBook/removeChapter, which turn their scenes into drafts. loadOutline reports dangling scene references; show them so the writer can repair.
 - 2026-10-17 [note] From the mxlo world-entries review (2026-10-17): (R3) the world store's renameEntry loads the whole document and saves it back with a new title, which would overwrite editor content saved in between. The shell must give documents one write owner (or a title-only update) before the editor's save path ships, and route renames through it. (R4) document creation belongs to the document store here; the world store only attaches facts to an existing document. (R6) a non-canonical internal link (Old-Mill, or decomposed unicode pasted on macOS) makes the whole document unsaveable: link insertion must produce canonical names (canonicalizeName / resolveName from app/src/world/names.ts), and canonicalize() on the save path should normalise link URLs to NFC.
+- 2026-10-17 [note] 2026-10-17, route and layout (pending review): TanStack Router with code-defined routes (no codegen) and hash history (#/doc/<id>), because the app is static and browser-only and dist/ must work from any host without rewrite rules; Vite base './'. The URL is the single source of truth for the active tab. Open tabs and the last active tab are workspace UI state in localStorage under worldcrafter:<worldId>:tabs, outside documents and the world store. One world for now ('default', IndexedDB worldcrafter-default). Layout follows .impeccable/surfaces/writing-workspace.md: 300px rail, 56px header with the tab strip, 620px prose column at 19px/1.62, 340px gloss column (empty); Night Edition palette and fonts as CSS variables in app/src/app/styles.css, no component library or Tailwind, so worldcrafter-9get can replace the stylesheet.

@@ -88,6 +88,8 @@ The text sent to the model is *assembled* by a context builder from:
 
 Every assembled request is stored and **viewable and editable before sending**. That's the "extreme AI control" promise, and it's also how we debug prompts.
 
+As built (`app/src/context/`): `builder.ts` assembles the exact `LlmRequest` plus a breakdown for the context viewer, and its header comment documents the window, mention matching and budget priority (fixed text and minimum window, then pins, then the rest of the window, then mentioned cards nearest the cursor first). `cards.ts` renders cards at the scene's story position. A document that isn't a scene in the outline gets start-of-story values, with facts that change later flagged. `requests.ts` stores each request under an ID; an edit is a new revision that points to its parent.
+
 ## Open questions
 
 - Anchoring annotations within a block: offsets (fast, but fragile while typing) or quote-plus-context (robust, slower)? We could use offsets live and re-anchor by quote on load.

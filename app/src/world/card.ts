@@ -3,9 +3,9 @@
  * (docs/rebuild/data-model-boundaries.md, Boundary 5). It is projected from
  * structured facts, never from the entry's prose.
  *
- * Cards show base values: what holds from the start of the story. Values that
- * change at events are left to the story-time engine, which will choose the
- * values that hold at the scene being written.
+ * Cards show base values: what holds from the start of the story. Cards at a
+ * scene's story position, which the context builder sends to the model, are
+ * rendered by `src/context/cards.ts` with the same header (`cardHeader`).
  */
 
 import type { Entry } from "./facts";
@@ -32,16 +32,7 @@ export type CardRelation = { type: RelationType; title: string };
  * by semicolons because they may contain commas.
  */
 export function renderCard(entry: Entry, relations: CardRelation[]): string {
-  const kind = KIND_DEFINITIONS[entry.kind].label;
-  const template =
-    entry.template === null ? undefined : templateDefinition(entry.template);
-  const lines = [
-    `${entry.title} (${template ? `${kind}: ${template.label}` : kind})`,
-  ];
-  if (entry.aliases.length > 0) {
-    lines.push(`Aliases: ${entry.aliases.join("; ")}`);
-  }
-  if (entry.tags.length > 0) lines.push(`Tags: ${entry.tags.join(", ")}`);
+  const lines = cardHeader(entry);
 
   const fields = Object.entries(entry.fields).flatMap(([name, fact]) =>
     fact.base === null ? [] : [`- ${name}: ${String(fact.base.value)}`],
@@ -57,4 +48,22 @@ export function renderCard(entry: Entry, relations: CardRelation[]): string {
     );
   }
   return lines.join("\n");
+}
+
+/**
+ * A card's first lines: the title with its kind and template, then aliases
+ * and tags when it has any.
+ */
+export function cardHeader(entry: Entry): string[] {
+  const kind = KIND_DEFINITIONS[entry.kind].label;
+  const template =
+    entry.template === null ? undefined : templateDefinition(entry.template);
+  const lines = [
+    `${entry.title} (${template ? `${kind}: ${template.label}` : kind})`,
+  ];
+  if (entry.aliases.length > 0) {
+    lines.push(`Aliases: ${entry.aliases.join("; ")}`);
+  }
+  if (entry.tags.length > 0) lines.push(`Tags: ${entry.tags.join(", ")}`);
+  return lines;
 }

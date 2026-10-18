@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Generation ergonomics: shortcuts, pins, stable profile IDs"
-updated_at: "2026-10-18T05:27:28.188005921+00:00"
+updated_at: "2026-10-18T05:32:12.618329974+00:00"
 ---
 
 ## Goal
@@ -26,3 +26,7 @@ Follow-ups from wiring generation (2026-10-18): keyboard shortcuts for generate,
 ## Done when
 
 Each item is either built with tests or explicitly dropped with a reason.
+
+## Notes
+
+- 2026-10-18 [note] From the 2tz9 code review (2026-10-18): (R6) if the block a request continues from has been deleted or unwrapped, the slip still says 'continues the text at the end' but Send fails with block_not_found, and 'Put it together again' also misses the cursor; say the place is gone and offer to rebuild from the caret. The stable profile ID item is being done in 2tz9.

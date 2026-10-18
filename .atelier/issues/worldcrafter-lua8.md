@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-18T00:28:37.743854984+00:00"
+status: "done"
 title: "Prose and plain+map projections with source maps"
-updated_at: "2026-10-18T00:18:01.681669782+00:00"
+updated_at: "2026-10-18T00:28:37.743854984+00:00"
 ---
 
 ## Goal
@@ -37,3 +38,7 @@ Pure module next to the schema, with tests.
 ## Context
 
 `docs/rebuild/data-model-boundaries.md` (Boundary 3, projections table).
+
+## Close Reason
+
+prose and plain+map projections with source maps merged: expected text for fixtures and a property test over generated trees mapping every output character back to its block and offset, plus the inverse map; independently reviewed, fixes re-reviewed. An empty bullet between numbered items can still show a repeated number in prose (no action: model-facing only).

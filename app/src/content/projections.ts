@@ -34,7 +34,9 @@
  *       1. Numbered               per indent level beyond 1
  *
  * Blocks are separated by a blank line; consecutive list items by a single
- * newline. Numbered items count up from 1 among consecutive items at the same
+ * newline, unless their numbering restarted between them (a dropped empty
+ * paragraph or placeholder, or an AI segment boundary), so a model never
+ * sees one list with repeated numbers. Numbered items count up from 1 among consecutive items at the same
  * indent and style, as in the editor and the export: a shallower item resets
  * deeper counts, a non-list block (even a dropped placeholder) resets all of
  * them, and empty items count.
@@ -205,12 +207,15 @@ function proseMarker(block: Block, listNumber: number): string {
 
 function writeProse(document: ContentDocument): Projection {
   const out = new Writer();
-  let previousWasListItem = false;
+  // True while the last written block is a list item whose list is still
+  // open: no numbering reset since. Only then is a single newline used.
+  let listContinues = false;
 
   // Numbering counts empty items and restarts at a placeholder, as the
   // editor does, even though neither is written.
   for (const siblings of siblingRuns(document)) {
     const counts = new Map<number, { style: ListStyle; count: number }>();
+    listContinues = false;
     for (const block of siblings) {
       let listNumber = 0;
       if (block.type === "p" && block.listStyleType && block.indent) {
@@ -223,15 +228,16 @@ function writeProse(document: ContentDocument): Projection {
         counts.set(indent, { style, count: listNumber });
       } else {
         counts.clear();
+        listContinues = false;
       }
 
       const text = blockText(block);
       if (text === "" && block.type !== "hr") continue;
       const listItem = listNumber > 0;
       if (out.text !== "") {
-        out.insert(listItem && previousWasListItem ? "\n" : "\n\n");
+        out.insert(listItem && listContinues ? "\n" : "\n\n");
       }
-      previousWasListItem = listItem;
+      listContinues = listItem;
       out.insert(proseMarker(block, listNumber));
       if (block.type !== "hr") out.block(block.id, text);
     }

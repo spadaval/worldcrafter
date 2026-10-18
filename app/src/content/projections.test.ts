@@ -206,8 +206,11 @@ describe("prose", () => {
         "- e",
         "1. f",
         "3. h",
+        "",
         "1. i",
+        "",
         "1. k",
+        "",
         "1. j",
       ].join("\n"),
     );
@@ -307,6 +310,76 @@ describe("plain+map", () => {
 
   test("rejects a tree outside the schema", () => {
     expect(projectPlain("not a tree").isErr()).toBe(true);
+  });
+});
+
+// Offsets are UTF-16 units: an astral character (emoji) is two of them.
+describe("surrogate pairs", () => {
+  const tree: ContentDocument = [
+    p("x", { text: "🐉" }),
+    {
+      type: "blockquote",
+      id: "u",
+      children: [
+        { text: "😀 at " },
+        { type: "a", url: "old-mill", children: [{ text: "the 🏰" }] },
+        { text: "\n🌊 end" },
+      ],
+    },
+  ];
+  const own = "😀 at the 🏰\n🌊 end";
+
+  test("block text counts UTF-16 units", () => {
+    expect(blockText(tree[1] as Block)).toBe(own);
+    expect(own.length).toBe(19);
+  });
+
+  test("plain+map", () => {
+    const projection = plain(tree);
+    const { text, map } = projection;
+    expect(text).toBe(`🐉\n${own}`);
+    expect(map.toBlock(1)).toEqual({ blockId: "x", offset: 1 });
+    expect(map.toBlock(2)).toBeNull();
+    expect(map.toBlock(3)).toEqual({ blockId: "u", offset: 0 });
+    expect(map.toBlock(4)).toEqual({ blockId: "u", offset: 1 });
+    expect(map.toBlock(15)).toEqual({ blockId: "u", offset: 12 });
+    expect(text[15]).toBe("\n");
+    expect(map.toText("u", 10)).toBe(13);
+    expect(map.toBlockRange(13, 15)).toEqual({
+      blockId: "u",
+      start: 10,
+      end: 12,
+    });
+    expect(text.slice(13, 15)).toBe("🏰");
+    expect(map.toBlockRange(16, 18)).toEqual({
+      blockId: "u",
+      start: 13,
+      end: 15,
+    });
+    expect(text.slice(16, 18)).toBe("🌊");
+    checkMap(tree, projection, ["x", "u"]);
+  });
+
+  test("prose", () => {
+    const projection = prose(tree);
+    const { text, map } = projection;
+    expect(text).toBe(`🐉\n\n> ${own}`);
+    expect(map.toBlock(2)).toBeNull();
+    expect(map.toBlock(6)).toEqual({ blockId: "u", offset: 0 });
+    expect(map.toBlock(18)).toEqual({ blockId: "u", offset: 12 });
+    expect(map.toText("u", 13)).toBe(19);
+    expect(map.toBlockRange(19, 21)).toEqual({
+      blockId: "u",
+      start: 13,
+      end: 15,
+    });
+    expect(text.slice(19, 21)).toBe("🌊");
+    expect(map.toBlockRange(16, 18)).toEqual({
+      blockId: "u",
+      start: 10,
+      end: 12,
+    });
+    checkMap(tree, projection, ["x", "u"]);
   });
 });
 

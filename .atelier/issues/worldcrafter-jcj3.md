@@ -11,7 +11,10 @@ relationships:
     id: "worldcrafter-efkh"
   children: []
   attachments: []
-  relates: []
+  relates:
+  - kind: "issue"
+    id: "worldcrafter-a8b0"
+    type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
 status: "todo"

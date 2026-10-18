@@ -2,17 +2,19 @@
  * Randomised check of streaming into AI segments against writer edits. Each
  * seed interleaves streamed text (new and growing paragraphs) with typing,
  * Backspace/Delete, deletes and typing over selections crossing segment
- * edges both ways, Enter, cut and paste, select-all, undo, redo, bold and
- * losing the selection; generations insert new segments or regenerate
- * (replace) ready ones.
+ * edges both ways, Enter, cut and paste, dragging text (as slate-react's
+ * drop does it), select-all, undo, redo, bold and losing the selection;
+ * generations insert new segments or regenerate (replace) ready ones.
  * After every step: nothing threw; a live segment was changed by no writer
  * edit (an edit touching it must stop it first); a render changed nothing
- * outside its segment; the selection is valid. At the end, undoing
+ * outside its segment; the document is inside the content schema and its
+ * block IDs are unique; the selection is valid. At the end, undoing
  * everything gives back the original document. Deterministic per seed.
  */
 import { describe, expect, test } from "bun:test";
 import {
   type Descendant,
+  ElementApi,
   NodeApi,
   type Point,
   TextApi,
@@ -21,6 +23,7 @@ import {
 } from "platejs";
 import { canonicalize } from "~/content/canonicalize";
 import { GeneratedTextStream } from "~/content/generated-text";
+import { validateDocument } from "~/content/schema";
 import {
   type SegmentGeneration,
   segmentIndex,
@@ -65,6 +68,27 @@ const flush = async () => {
 
 const json = (editor: DocumentEditor) =>
   JSON.stringify(canonicalize(editor.children));
+
+/** Why the document is outside the schema or repeats a block ID, or null. */
+function documentProblem(editor: DocumentEditor): string | null {
+  const valid = validateDocument(canonicalize(editor.children));
+  if (valid.isErr()) return `invalid document: ${JSON.stringify(valid.error)}`;
+  const seen = new Set<string>();
+  const visit = (nodes: readonly Descendant[]): string | null => {
+    for (const node of nodes) {
+      if (!ElementApi.isElement(node)) continue;
+      // Links are inline elements, not blocks.
+      if (node.type === "a") continue;
+      const id = String(node.id);
+      if (seen.has(id)) return `block ID ${id} is repeated`;
+      seen.add(id);
+      const inner = visit(node.children);
+      if (inner) return inner;
+    }
+    return null;
+  };
+  return visit(editor.children);
+}
 
 function selectionValid(editor: DocumentEditor): boolean {
   const { selection } = editor;
@@ -136,6 +160,15 @@ async function run(seed: number): Promise<void> {
       if (!clipboard || clipboard.length === 0) return;
       editor.tf.select(point());
       editor.tf.insertFragment(structuredClone(clipboard));
+    },
+    // slate-react's onDrop for a drag inside the editor: select the drop
+    // point, delete the dragged range, insert what was dragged.
+    drag: () => {
+      const dragged = range();
+      const fragment = editor.api.fragment(dragged);
+      editor.tf.select(point());
+      editor.tf.delete({ at: dragged });
+      if (fragment.length > 0) editor.tf.insertFragment(fragment);
     },
     selectAllType: () => {
       editor.tf.select([]);
@@ -224,6 +257,8 @@ async function run(seed: number): Promise<void> {
         }
       }
       if (!selectionValid(editor)) throw new Error("the selection is invalid");
+      const problem = documentProblem(editor);
+      if (problem) throw new Error(problem);
       await flush();
     } catch (cause) {
       throw new Error(

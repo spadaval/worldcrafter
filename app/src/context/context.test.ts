@@ -508,12 +508,13 @@ for (const [name, open] of [
         newId: () => `req-${++id}`,
       });
       const assembled = await built("s3");
-      const saved = (await requests.save(assembled))._unsafeUnwrap();
+      const saved = (await requests.save(assembled, "b2"))._unsafeUnwrap();
       expect(saved).toEqual({
         id: "req-1",
         documentId: "s3",
         createdAt: 42,
         request: assembled.request,
+        after: "b2",
         origin: "assembled",
         breakdown: assembled.breakdown,
       });
@@ -531,6 +532,7 @@ for (const [name, open] of [
         documentId: "s3",
         createdAt: 42,
         request: edited,
+        after: "b2",
         origin: "revision",
         parentId: "req-1",
         assembledFrom: "req-1",
@@ -542,6 +544,7 @@ for (const [name, open] of [
         documentId: "s3",
         createdAt: 42,
         request: again,
+        after: "b2",
         origin: "revision",
         parentId: "req-2",
         assembledFrom: "req-1",
@@ -561,7 +564,12 @@ for (const [name, open] of [
         await storage.requests.save({
           id: "bad",
           documentId: "s3",
-          request: { version: 2, origin: "revision", parentId: null },
+          request: {
+            version: 3,
+            after: null,
+            origin: "revision",
+            parentId: null,
+          },
           createdAt: 1,
         })
       )._unsafeUnwrap();

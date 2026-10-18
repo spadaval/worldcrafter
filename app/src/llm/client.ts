@@ -129,6 +129,8 @@ export type SendOptions = {
    * the rejection of an async callback is not observed.
    */
   onDelta?: (delta: StreamDelta) => void;
+  /** Defaults to the global `fetch`. */
+  fetch?: typeof fetch;
 };
 
 /**
@@ -178,7 +180,7 @@ async function sendAsync(
 
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await (options.fetch ?? fetch)(url, {
       method: "POST",
       headers: headers(profile),
       body: JSON.stringify(request.body),

@@ -32,6 +32,7 @@ const assembled: AssembledRecord = {
   documentId: "doc1",
   createdAt: 1,
   request: chat,
+  after: null,
   origin: "assembled",
   breakdown: {
     layout: "chat",
@@ -230,6 +231,7 @@ describe("context viewer", () => {
       documentId: "doc1",
       createdAt: 2,
       request: chat,
+      after: null,
       origin: "revision",
       parentId: "r1",
       assembledFrom: "r1",

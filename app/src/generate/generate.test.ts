@@ -24,6 +24,7 @@ import {
 } from "~/content/schema";
 import { gatherWorldContext } from "~/context/gather";
 import { createRequestStore } from "~/context/requests";
+import { segmentIndex } from "~/editor/ai-segment";
 import type { BackendProfile } from "~/llm/types";
 import { openIndexedDbStorage } from "~/storage/indexeddb";
 import { createMemoryStorage } from "~/storage/memory";
@@ -770,6 +771,71 @@ for (const [name, open] of [
       expect((await storage.annotations.list())._unsafeUnwrap()).toEqual([]);
     });
 
+    test("send puts the output after the block the request continues from", async () => {
+      const assembled = (
+        await generator.prepare({
+          after: "p1",
+          profile: "local",
+          instruction: null,
+          pins: [],
+          layout: "chat",
+          budget: { limit: 100_000 },
+        })
+      )._unsafeUnwrap();
+      expect(assembled.after).toBe("p1");
+      expect(assembled.breakdown.window.text).toBe(
+        "# The Salt Road\n\nMara crossed the flats.",
+      );
+      // An edit keeps where its parent continues from.
+      const revision = (
+        await generator.revise(assembled.id, assembled.request)
+      )._unsafeUnwrap();
+      expect(revision.after).toBe("p1");
+      scripts.push(streamText("Between."));
+      const result = (await generator.send(revision.id))._unsafeUnwrap();
+      const document = content(session);
+      expect(document.map((block) => block.id)).toEqual([
+        "h",
+        "p1",
+        result.segmentId as string,
+        "p2",
+      ]);
+      expect(textOf(segmentAt(document, 2))).toEqual(["Between."]);
+    });
+
+    test("Stop while the request is still loading cancels it unsent", async () => {
+      const assembled = await prepare();
+      scripts.push(streamText("Never sent."));
+      const sending = generator.send(assembled.id);
+      expect(generator.active.get()).toMatchObject({
+        segmentId: null,
+        requestId: assembled.id,
+      });
+      // Busy while loading: a second send is refused.
+      expect(
+        (await generator.send(assembled.id))._unsafeUnwrapErr(),
+      ).toMatchObject({ kind: "busy", segmentId: null });
+      generator.cancel();
+      const result = (await sending)._unsafeUnwrap();
+      expect(result).toMatchObject({ outcome: "cancelled", segmentId: null });
+      expect(received).toHaveLength(0);
+      expect(content(session)).toEqual(ORIGINAL);
+      expect(generator.active.get()).toBeNull();
+      // Not left busy.
+      scripts.length = 0;
+      scripts.push(streamText("Sent."));
+      expect((await generator.send(assembled.id))._unsafeUnwrap().outcome).toBe(
+        "complete",
+      );
+    });
+
+    test("a request that can't be loaded leaves the generator free", async () => {
+      expect(
+        (await generator.send("missing"))._unsafeUnwrapErr(),
+      ).toMatchObject({ kind: "not_found" });
+      expect(generator.active.get()).toBeNull();
+    });
+
     test("a render that throws mid-stream ends the generation as failed, with provenance", async () => {
       const assembled = await prepare();
       scripts.push(
@@ -786,6 +852,7 @@ for (const [name, open] of [
         blockId: "p2",
       });
       await until(() => (generator.active.get()?.text.length ?? 0) > 6);
+      const live = generator.active.get()?.segmentId as string;
       const tf = session.editor.tf;
       const { apply } = tf;
       // Edits inside the segment's paragraphs fail from now on.
@@ -793,7 +860,7 @@ for (const [name, open] of [
         if (
           (op.type === "insert_text" || op.type === "insert_node") &&
           op.path.length >= 2 &&
-          op.path[0] === 3
+          op.path[0] === segmentIndex(session.editor, live)
         ) {
           throw new Error("boom");
         }
@@ -934,7 +1001,7 @@ for (const [name, open] of [
         kind: "after",
         blockId: "p2",
       });
-      await until(() => generator.active.get() !== null);
+      await until(() => (generator.active.get()?.segmentId ?? null) !== null);
       const id = generator.active.get()?.segmentId as string;
       expect((await generator.accept(id))._unsafeUnwrapErr()).toMatchObject({
         kind: "segment_generating",

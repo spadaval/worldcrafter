@@ -61,8 +61,12 @@ export function Shell() {
         <StoryTimeStamp active={active} />
         <div className="masthead-controls">
           {active && <LayerToggles documentId={active} />}
-          <ContextButton active={active} onInfo={info} />
-          <GenerateNext active={active} onInfo={info} />
+          {active && (
+            <>
+              <ContextButton active={active} onInfo={info} />
+              <GenerateNext active={active} onInfo={info} />
+            </>
+          )}
         </div>
       </header>
       <div className="notices" aria-live="polite">
@@ -392,6 +396,9 @@ function GenerationNotice() {
   const { generation } = useServices();
   const notice = useStore(generation.notice);
   if (!notice) return null;
+  if (notice.kind === "announce") {
+    return <output className="visually-hidden">{notice.text}</output>;
+  }
   return (
     <p
       className={notice.kind === "error" ? "notice notice-error" : "notice"}

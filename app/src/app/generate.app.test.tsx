@@ -333,6 +333,27 @@ test("generate next: see and edit the request, stream, accept", async () => {
 test("regenerate replaces the segment; its request can be seen again", async () => {
   await render(withProfile());
   await generateNext();
+  // Writing on with the slip open: the slip says the request is out of
+  // date, and can put it together again from the same place.
+  expect(query(".request-slip-stale")).toBeNull();
+  const editor = workspace.session("doc1")?.editor;
+  await act(async () =>
+    editor?.tf.insertText(" Wind.", { at: { path: [2, 0], offset: 11 } }),
+  );
+  await until(() => query(".request-slip-stale") !== null, "the stale note");
+  await click(button("Put it together again", ".request-slip"));
+  await until(
+    () =>
+      query(".request-slip-stale") === null &&
+      (query<HTMLTextAreaElement>(
+        ".request-slip [data-role=user] textarea",
+      )?.value.includes("Night fell. Wind.") ??
+        false),
+    "the request put together again",
+  );
+  expect(query(".request-slip")?.textContent).toContain(
+    "continues the text after “Night fell. Wind.”",
+  );
   scripts.push(stream("First try."));
   await click(button("Send", ".request-slip"));
   await until(
@@ -437,6 +458,16 @@ test("with no model set up, Generate next leads to the model settings, which sto
     sampler: { temperature: 0.5 },
   });
   expect(query(".rail-model")?.textContent).toContain("Stub");
+
+  // A rename is explained before it is made: earlier AI text keeps the old name.
+  await type(field("Name") as HTMLInputElement, "Renamed");
+  await click(button("Save", ".settings"));
+  expect(query(".settings [role=alert]")?.textContent).toContain(
+    "Save again to rename it anyway",
+  );
+  expect(query(".rail-model")?.textContent).toContain("Stub");
+  await click(button("Save", ".settings"));
+  expect(query(".rail-model")?.textContent).toContain("Renamed");
   // Nothing about the model went into the world's storage.
   expect(
     JSON.stringify((await storage.documents.list())._unsafeUnwrap()),

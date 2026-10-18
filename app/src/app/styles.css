@@ -1273,8 +1273,30 @@ a {
   cursor: default;
 }
 
+.request-slip:focus {
+  outline: none;
+}
+
 .request-slip-where {
   margin: 2px 0 12px;
+}
+
+.request-slip-stale {
+  margin: 0 0 12px;
+  padding: 7px 10px;
+  background: var(--raised);
+  color: var(--ink);
+}
+
+.request-slip-stale button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--ink-3);
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
 
 .context-viewer-header p {
@@ -1326,14 +1348,65 @@ a {
   border: 0;
 }
 
-.context-viewer-message,
-.context-viewer-parameters {
-  display: block;
-  margin-bottom: 12px;
+/* Each part of the request folds to a line: its name and size. */
+.context-viewer-part {
+  border-top: 1px solid var(--rule);
 }
 
-.context-viewer-message > span,
-.context-viewer-parameters > span,
+.context-viewer-part:last-of-type {
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.context-viewer-part summary {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 7px 0;
+  list-style: none;
+  cursor: pointer;
+}
+
+.context-viewer-part summary::-webkit-details-marker {
+  display: none;
+}
+
+.context-viewer-part summary::before {
+  content: "›";
+  width: 8px;
+  color: var(--ink-3);
+  transition: rotate var(--fade) var(--ease-out);
+}
+
+.context-viewer-part[open] summary::before {
+  rotate: 90deg;
+}
+
+.context-viewer-part summary:hover .context-viewer-part-label {
+  color: var(--ink);
+}
+
+.context-viewer-part summary:focus-visible {
+  outline-offset: -1px;
+}
+
+.context-viewer-part-size {
+  margin-left: auto;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+
+.context-viewer-part textarea {
+  margin-bottom: 10px;
+}
+
+.context-viewer-part .context-viewer-part-label {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.context-viewer-part-label,
 .settings-label {
   display: block;
   margin-bottom: 4px;
@@ -1366,7 +1439,7 @@ a {
   resize: vertical;
 }
 
-.context-viewer-parameters textarea,
+.context-viewer-code,
 .settings-code {
   font:
     400 12.5px / 1.5 ui-monospace,

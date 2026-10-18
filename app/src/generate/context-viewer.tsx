@@ -96,36 +96,28 @@ export function ContextViewer({
         <fieldset className="context-viewer-fields" disabled={sending}>
           {draft.input?.kind === "chat"
             ? draft.input.messages.map((message, index) => (
-                <label
+                <Part
                   // Messages are edited in place, never reordered.
                   // biome-ignore lint/suspicious/noArrayIndexKey: position is the identity
                   key={index}
-                  className="context-viewer-message"
-                  data-role={message.role}
-                >
-                  <span>{message.role}</span>
-                  <textarea
-                    value={message.content}
-                    onChange={(event) => setMessage(index, event.target.value)}
-                    rows={Math.min(20, message.content.split("\n").length + 1)}
-                  />
-                </label>
+                  label={`${ROLE_LABELS[message.role]} message`}
+                  kind={message.role}
+                  value={message.content}
+                  original={originalMessage(request, index)}
+                  onChange={(content) => setMessage(index, content)}
+                />
               ))
             : null}
           {draft.input?.kind === "completion" ? (
-            <label className="context-viewer-message" data-role="prompt">
-              <span>prompt</span>
-              <textarea
-                value={draft.input.prompt}
-                onChange={(event) =>
-                  setDraft({
-                    ...draft,
-                    input: { kind: "completion", prompt: event.target.value },
-                  })
-                }
-                rows={Math.min(20, draft.input.prompt.split("\n").length + 1)}
-              />
-            </label>
+            <Part
+              label="Prompt"
+              kind="prompt"
+              value={draft.input.prompt}
+              original={originalPrompt(request)}
+              onChange={(prompt) =>
+                setDraft({ ...draft, input: { kind: "completion", prompt } })
+              }
+            />
           ) : null}
           {draft.input === null ? (
             <p className="context-viewer-note">
@@ -133,17 +125,14 @@ export function ContextViewer({
               reads; it is shown with the parameters below.
             </p>
           ) : null}
-          <label className="context-viewer-parameters">
-            <span>Parameters (JSON)</span>
-            <textarea
-              value={draft.parameters}
-              onChange={(event) =>
-                setDraft({ ...draft, parameters: event.target.value })
-              }
-              rows={Math.min(20, draft.parameters.split("\n").length + 1)}
-              spellCheck={false}
-            />
-          </label>
+          <Part
+            label="Parameters (JSON)"
+            kind="parameters"
+            value={draft.parameters}
+            original={draftOf(request).parameters}
+            onChange={(parameters) => setDraft({ ...draft, parameters })}
+            code
+          />
         </fieldset>
         {problem ? (
           <p className="context-viewer-problem" role="alert">
@@ -182,6 +171,62 @@ export function ContextViewer({
         </div>
       </form>
     </section>
+  );
+}
+
+const ROLE_LABELS = {
+  system: "System",
+  user: "User",
+  assistant: "Assistant",
+} as const;
+
+const originalMessage = (request: LlmRequest, index: number) => {
+  const input = draftOf(request).input;
+  return input?.kind === "chat" ? (input.messages[index]?.content ?? "") : "";
+};
+
+const originalPrompt = (request: LlmRequest) => {
+  const input = draftOf(request).input;
+  return input?.kind === "completion" ? input.prompt : "";
+};
+
+/**
+ * One part of the request, folded to a line with its size until the writer
+ * opens it: the exact text is there to read and edit, not in the way.
+ */
+function Part({
+  label,
+  kind,
+  value,
+  original,
+  onChange,
+  code = false,
+}: {
+  label: string;
+  kind: string;
+  value: string;
+  original: string;
+  onChange: (value: string) => void;
+  code?: boolean;
+}) {
+  return (
+    <details className="context-viewer-part" data-role={kind}>
+      <summary>
+        <span className="context-viewer-part-label">{label}</span>
+        <span className="context-viewer-part-size">
+          {value === original ? "" : "edited · "}
+          {count(value.length)} characters
+        </span>
+      </summary>
+      <textarea
+        aria-label={label}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        rows={Math.min(20, value.split("\n").length + 1)}
+        spellCheck={!code}
+        className={code ? "context-viewer-code" : undefined}
+      />
+    </details>
   );
 }
 

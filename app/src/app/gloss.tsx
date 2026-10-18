@@ -115,6 +115,15 @@ export function Sheet({
 
   const openSlip = useStore(generation.slip);
   const slip = openSlip?.documentId === documentId ? openSlip : null;
+  // When the slip goes (its output placed, say) with focus in it, focus
+  // would fall to the page: give it back to the text.
+  const hadSlip = useRef(false);
+  useEffect(() => {
+    if (hadSlip.current && !slip && document.activeElement === document.body) {
+      session.editor.tf.focus();
+    }
+    hadSlip.current = slip !== null;
+  }, [slip, session]);
   const idle = useStore(generation.active(documentId)) === null;
   const segmentActions = useCallback(
     (segment: { id: string; status: AiSegmentStatus }) => (
@@ -346,9 +355,11 @@ function Gloss({
     if (!slipId || !element) return;
     const frame = requestAnimationFrame(() => {
       element.scrollIntoView?.({ block: "nearest" });
-      element
-        .querySelector<HTMLElement>(".context-viewer-send")
-        ?.focus({ preventScroll: true });
+      // Ready to send with Enter, but only if Send can be seen.
+      const send = element.querySelector<HTMLElement>(".context-viewer-send");
+      const box = send?.getBoundingClientRect();
+      const seen = box && box.top >= 0 && box.bottom <= window.innerHeight;
+      (seen && send ? send : element).focus({ preventScroll: true });
     });
     const observer = new ResizeObserver(() => measure.current());
     observer.observe(element);

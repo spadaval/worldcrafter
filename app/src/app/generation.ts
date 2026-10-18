@@ -28,7 +28,8 @@ import type { Manuscript } from "./manuscript";
 
 /** A sentence about generation for the notice row. */
 export interface GenerationNotice {
-  readonly kind: "error" | "info";
+  /** `announce`: for screen readers only, as the change is plain to see. */
+  readonly kind: "error" | "info" | "announce";
   readonly text: string;
 }
 
@@ -48,6 +49,12 @@ export interface Slip {
   readonly replaces: string | null;
   /** From Send until the output's segment is placed, or sending fails. */
   readonly sending: boolean;
+  /**
+   * The document's content when the request was assembled (the editor's
+   * immutable tree), to tell the writer when the text has changed since;
+   * null for a segment's past request.
+   */
+  readonly assembledOver: unknown;
 }
 
 /**
@@ -63,10 +70,11 @@ export interface Generation {
   /** The generation running in a document, if it is open. */
   active(documentId: string): Store<ActiveGeneration | null>;
   /**
-   * Assembles the request that continues from the block holding the caret
-   * (the end of the document without one) and shows it in the slip.
+   * Assembles the request that continues from block `after` (by default the
+   * block holding the caret; the end of the document without one) and
+   * shows it in the slip.
    */
-  openRequest(documentId: string): Promise<void>;
+  openRequest(documentId: string, after?: string | null): Promise<void>;
   /** Shows the request that made a segment; sending it regenerates the segment. */
   showSegmentRequest(documentId: string, segmentId: string): Promise<void>;
   closeSlip(): void;
@@ -139,11 +147,17 @@ export function createGeneration(options: GenerationOptions): Generation {
     notice.set({ kind: "error", text: describeGenerateError(error) });
   const report = (result: GenerationResult) => {
     const text = describeGenerationResult(result);
-    if (text)
+    if (text) {
       notice.set({
         kind: result.outcome === "failed" ? "error" : "info",
         text,
       });
+    } else if (result.segmentId) {
+      notice.set({
+        kind: "announce",
+        text: "The AI text is ready. Accept or regenerate it from its caption.",
+      });
+    }
   };
 
   /** The breakdown that describes `record`: its own, or its root's. */
@@ -164,6 +178,8 @@ export function createGeneration(options: GenerationOptions): Generation {
     start: () => ReturnType<Generator["send"]>,
     shown: Slip | null,
   ): Promise<void> => {
+    // What the last one came to no longer applies.
+    notice.set(null);
     const placed = generator.active.subscribe(() => {
       if (shown && generator.active.get()?.segmentId && slip.get() === shown) {
         slip.set(null);
@@ -192,7 +208,7 @@ export function createGeneration(options: GenerationOptions): Generation {
     dismissNotice: () => notice.set(null),
     active: (documentId) => generatorOf(documentId)?.active ?? IDLE,
 
-    async openRequest(documentId) {
+    async openRequest(documentId, after) {
       const session = workspace.session(documentId);
       const generator = generatorOf(documentId);
       const current = profile.get();
@@ -204,8 +220,9 @@ export function createGeneration(options: GenerationOptions): Generation {
         });
         return;
       }
+      const assembledOver = session.editor.children;
       const prepared = await generator.prepare({
-        after: caretBlock(session),
+        after: after === undefined ? caretBlock(session) : after,
         profile: current.name,
         instruction: null,
         pins: [],
@@ -220,6 +237,7 @@ export function createGeneration(options: GenerationOptions): Generation {
             breakdown: record.breakdown,
             replaces: null,
             sending: false,
+            assembledOver,
           }),
         fail,
       );
@@ -237,6 +255,7 @@ export function createGeneration(options: GenerationOptions): Generation {
         breakdown: await breakdownOf(record),
         replaces: segmentId,
         sending: false,
+        assembledOver: null,
       });
     },
 

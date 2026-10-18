@@ -10,6 +10,8 @@ export interface SegmentControlsProps {
   readonly onShowRequest?: () => void;
   /** Disables the ready segment's actions, e.g. while another generation runs. */
   readonly disabled?: boolean;
+  /** Why they are disabled, shown with them. */
+  readonly disabledReason?: string;
 }
 
 /**
@@ -23,7 +25,9 @@ export function SegmentControls({
   onStop,
   onShowRequest,
   disabled = false,
+  disabledReason,
 }: SegmentControlsProps) {
+  const why = disabled ? disabledReason : undefined;
   return (
     <span className="ai-segment-controls" role="toolbar" aria-label="AI text">
       {status === "generating" ? (
@@ -33,14 +37,29 @@ export function SegmentControls({
       ) : (
         <>
           {onShowRequest && (
-            <button type="button" onClick={onShowRequest} disabled={disabled}>
+            <button
+              type="button"
+              onClick={onShowRequest}
+              disabled={disabled}
+              title={why}
+            >
               Request
             </button>
           )}
-          <button type="button" onClick={onRegenerate} disabled={disabled}>
+          <button
+            type="button"
+            onClick={onRegenerate}
+            disabled={disabled}
+            title={why}
+          >
             Regenerate
           </button>
-          <button type="button" onClick={onAccept} disabled={disabled}>
+          <button
+            type="button"
+            onClick={onAccept}
+            disabled={disabled}
+            title={why}
+          >
             Accept
           </button>
         </>

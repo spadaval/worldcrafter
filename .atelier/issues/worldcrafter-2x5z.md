@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Retire the old app and its dependencies"
-updated_at: "2026-10-18T06:47:52.048257044+00:00"
+updated_at: "2026-10-17T07:07:33.752717474+00:00"
 ---
 
 ## Goal
@@ -33,7 +33,3 @@ Provisional: typecheck, lint, test and build are clean on `master`, and a search
 ## Unknowns
 
 The scope depends on the rebuild-approach decision.
-
-## Notes
-
-- 2026-10-18 [note] From the mqrq integration review (2026-10-18, finding worldcrafter-w4hj): rewrite AGENTS.md's Architecture, Tech Stack and File Structure sections for the new app (no Legend State, no TanStack Start or trpc, app/ paths, add bun run build); the old app's description goes with the old app. Also remove app/src/smoke.test.ts (scaffold leftover) and reconcile the two Provenance types (world/facts.ts vs generate/provenance.ts, model nullable or not) and the duplicate JsonValue (llm/types.ts, storage/types.ts).

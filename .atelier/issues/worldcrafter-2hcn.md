@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "App shell and editor on the restricted schema"
-updated_at: "2026-10-18T00:18:01.618312445+00:00"
+updated_at: "2026-10-18T00:25:11.266996696+00:00"
 ---
 
 ## Goal
@@ -46,3 +46,4 @@ Spike result on block IDs; `src/components/editor/plugins/` for the old kits (AI
 - 2026-10-17 [note] From the wtj4 block-ID review (2026-10-17): (R2) BlockIdPlugin's idInUse scans the whole tree per inserted block: on a 3000-block document, select-all/delete/undo took 5.9 s vs 2.3 s stock; collect IDs once per insert before shipping the editor. (R4) repair duplicate IDs on load (the plugin only fills missing ones). (R7) add nested-block split/merge tests once lists and quotes are wired in, and confirm real-DOM copy/paste in the browser.
 - 2026-10-17 [note] From the 3lho content-format review (2026-10-17): (R5) configure the editor so it cannot produce shapes the content schema rejects: flat-list styles (listStyleType/indent) on headings or blockquotes, plain paragraphs with indent but no list style (Indent plugin), to-do items (checked), and numbering restarts (listRestart/listRestartPolite). Run content canonicalize() then validate on every save, and surface a validation failure to the writer instead of dropping the save. (R7) the schema accepts any URL scheme, including javascript:; whatever renders links must sanitise them.
 - 2026-10-17 [note] From the integration review (2026-10-17): (R6) list indent is capped at MAX_LIST_INDENT (32) in the content schema; configure the editor's indent plugin with the same maximum (or clamp on import), so a deep indent can't make a document unsaveable.
+- 2026-10-17 [note] From the zr67 outline review (2026-10-17): deleting a document does not remove its scene from the manuscript outline. Whoever implements document deletion must also run the outline's removeScene (or offer to), and the UI should confirm before removeBook/removeChapter, which turn their scenes into drafts. loadOutline reports dangling scene references; show them so the writer can repair.

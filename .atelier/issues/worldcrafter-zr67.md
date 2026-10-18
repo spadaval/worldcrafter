@@ -11,9 +11,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-18T00:31:35.962725817+00:00"
+status: "done"
 title: "Manuscript outline: an ordered tree of scene documents"
-updated_at: "2026-10-18T00:18:01.803458039+00:00"
+updated_at: "2026-10-18T00:31:35.962725817+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ Pure module plus storage wiring and tests under app/src/. No UI.
 ## Context
 
 docs/rebuild/story-time.md (narrative order), decision worldcrafter-9zj1, storage adapter in app/src/storage/.
+
+## Close Reason
+
+Manuscript outline merged: books > chapters > scene document IDs with typed commands, reading order and positions, duplicate and missing-document rejection, a per-adapter command queue, dangling scenes and stored-record problems reported on load, persisted through both storage adapters; independently reviewed three times. Known limits (no current path): the new-problem check compares sets not counts, so a future command that inserts without the existing guards could hide a third copy; caught throws are labelled as save failures.

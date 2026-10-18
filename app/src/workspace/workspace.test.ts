@@ -193,6 +193,52 @@ describe("workspace commands", () => {
     ).toBe("Later");
   });
 
+  test("opening a document while it is being renamed keeps its session alive", async () => {
+    const storage = createMemoryStorage();
+    const ws = workspace({ storage });
+    const created = (await ws.commands.createDocument())._unsafeUnwrap();
+    (await ws.commands.closeTab(created.documentId))._unsafeUnwrap();
+
+    // Rename (not open as a tab) and open race for the same session.
+    const [renamed, opened] = await Promise.all([
+      ws.commands.renameDocument(created.documentId, "Raced"),
+      ws.commands.openDocument(created.documentId),
+    ]);
+    renamed._unsafeUnwrap();
+    const session = opened._unsafeUnwrap();
+    expect(ws.session(created.documentId)).toBe(session);
+
+    session.editor.tf.insertText("Kept", { at: { path: [0, 0], offset: 0 } });
+    await tick();
+    expect(session.status.get()).toEqual({ kind: "unsaved" });
+    expect(ws.hasUnsavedChanges()).toBe(true);
+    await ws.flushAll();
+    const saved = (
+      await storage.documents.load(created.documentId)
+    )._unsafeUnwrap();
+    expect(saved.title).toBe("Raced");
+    expect(JSON.stringify(saved.content)).toContain("Kept");
+  });
+
+  test("a read-only workspace does not overwrite the persisted tabs", async () => {
+    const storage = createMemoryStorage();
+    const tabStore = memoryKeyValue();
+    const writer = workspace({ storage, tabStore });
+    const a = (await writer.commands.createDocument())._unsafeUnwrap();
+    const b = (await writer.commands.createDocument())._unsafeUnwrap();
+    (await writer.commands.openDocument(a.documentId))._unsafeUnwrap();
+    const persisted = tabStore.data.get("worldcrafter:w1:tabs");
+
+    const reader = workspace({ storage, tabStore, readOnly: true });
+    (await reader.commands.closeTab(a.documentId))._unsafeUnwrap();
+    (await reader.commands.openDocument(b.documentId))._unsafeUnwrap();
+    expect(reader.tabs.get()).toEqual({
+      open: [b.documentId],
+      active: b.documentId,
+    });
+    expect(tabStore.data.get("worldcrafter:w1:tabs")).toBe(persisted);
+  });
+
   test("opening a document that no longer exists drops its tab", async () => {
     const tabStore = memoryKeyValue();
     tabStore.setItem(

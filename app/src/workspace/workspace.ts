@@ -104,7 +104,9 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
 
   const setTabs = (next: TabsState) => {
     tabs.set(next);
-    saveTabs(tabStore, worldId, next);
+    // The tab list in storage is the writer tab's; a read-only tab keeps its
+    // own in memory only.
+    if (!readOnly) saveTabs(tabStore, worldId, next);
   };
 
   const upsertSummary = (document: StoredDocument) => {
@@ -141,6 +143,47 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
     return load;
   };
 
+  /**
+   * How many holders keep each document's session alive: its tab, plus any
+   * command using it. Counted from the moment of asking, before the load
+   * finishes, so a session is never disposed while someone is acquiring it.
+   * At zero the session is disposed.
+   */
+  const holds = new Map<string, number>();
+  /** Documents whose tab holds a reference. */
+  const tabHeld = new Set<string>();
+
+  const acquire = (documentId: string) => {
+    holds.set(documentId, (holds.get(documentId) ?? 0) + 1);
+    return loadSession(documentId).mapErr((error) => {
+      release(documentId);
+      return error;
+    });
+  };
+
+  const release = (documentId: string) => {
+    const count = (holds.get(documentId) ?? 1) - 1;
+    if (count > 0) {
+      holds.set(documentId, count);
+      return;
+    }
+    holds.delete(documentId);
+    sessions.get(documentId)?.dispose();
+    sessions.delete(documentId);
+  };
+
+  /** Saves now; fails with `unsaved` if changes remain. */
+  const flushed = (session: DocumentSession): ResultAsync<void, CommandError> =>
+    ResultAsync.fromSafePromise(session.flush()).andThen(() =>
+      session.hasUnsavedChanges()
+        ? errAsync({
+            kind: "unsaved" as const,
+            documentId: session.documentId,
+            status: session.status.get(),
+          })
+        : okAsync(undefined),
+    );
+
   const commands: WorkspaceCommands = {
     createDocument(input = {}) {
       if (readOnly) return errAsync({ kind: "read_only" as const });
@@ -159,12 +202,15 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
     },
 
     openDocument(documentId) {
-      return loadSession(documentId)
+      const held = tabHeld.has(documentId);
+      tabHeld.add(documentId);
+      return (held ? loadSession(documentId) : acquire(documentId))
         .map((session) => {
           setTabs(openTab(tabs.get(), documentId));
           return session;
         })
         .mapErr((error) => {
+          if (!held) tabHeld.delete(documentId);
           // A tab whose document is gone is dropped rather than kept broken.
           if (error.kind === "not_found") {
             setTabs(closeTab(tabs.get(), documentId));
@@ -175,20 +221,8 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
 
     closeTab(documentId) {
       const session = sessions.get(documentId);
-      const flushed: ResultAsync<void, CommandError> = session
-        ? ResultAsync.fromSafePromise(session.flush()).andThen(() =>
-            session.hasUnsavedChanges()
-              ? errAsync({
-                  kind: "unsaved" as const,
-                  documentId,
-                  status: session.status.get(),
-                })
-              : okAsync(undefined),
-          )
-        : okAsync(undefined);
-      return flushed.map(() => {
-        session?.dispose();
-        sessions.delete(documentId);
+      return (session ? flushed(session) : okAsync(undefined)).map(() => {
+        if (tabHeld.delete(documentId)) release(documentId);
         const next = closeTab(tabs.get(), documentId);
         setTabs(next);
         return next;
@@ -197,23 +231,12 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
 
     renameDocument(documentId, title) {
       if (readOnly) return errAsync({ kind: "read_only" as const });
-      const inTab = sessions.has(documentId);
-      return loadSession(documentId).andThen((session) => {
+      return acquire(documentId).andThen((session) => {
         session.setTitle(title.trim() || UNTITLED);
-        if (inTab) return okAsync(undefined);
-        // Not open as a tab: save now and let the session go.
-        return ResultAsync.fromSafePromise(session.flush()).andThen(() => {
-          if (session.hasUnsavedChanges()) {
-            return errAsync({
-              kind: "unsaved" as const,
-              documentId,
-              status: session.status.get(),
-            });
-          }
-          session.dispose();
-          sessions.delete(documentId);
-          return okAsync(undefined);
-        });
+        // If the save fails the hold is kept, so the session stays alive
+        // (retrying, and counted by hasUnsavedChanges) instead of dropping
+        // the new title.
+        return flushed(session).map(() => release(documentId));
       });
     },
   };

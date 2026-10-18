@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { errAsync } from "neverthrow";
+import { errAsync, okAsync } from "neverthrow";
 import { createMemoryStorage } from "~/storage/memory";
 import type { StorageAdapter } from "~/storage/types";
 import { createStorageConnection } from "./connection";
@@ -218,6 +218,111 @@ describe("workspace commands", () => {
     )._unsafeUnwrap();
     expect(saved.title).toBe("Raced");
     expect(JSON.stringify(saved.content)).toContain("Kept");
+  });
+
+  test("reopening a tab while it is closing keeps the tab and its session", async () => {
+    const storage = createMemoryStorage();
+    const ws = workspace({ storage });
+    const session = (await ws.commands.createDocument())._unsafeUnwrap();
+    const id = session.documentId;
+    session.editor.tf.insertText("one", { at: { path: [0, 0], offset: 0 } });
+    await tick();
+
+    // The close is saving when the open arrives.
+    const [closed, opened] = await Promise.all([
+      ws.commands.closeTab(id),
+      ws.commands.openDocument(id),
+    ]);
+    expect(closed._unsafeUnwrap().open).toEqual([id]);
+    expect(opened._unsafeUnwrap()).toBe(session);
+    expect(ws.session(id)).toBe(session);
+
+    session.editor.tf.insertText("two ", { at: { path: [0, 0], offset: 0 } });
+    await tick();
+    expect(ws.hasUnsavedChanges()).toBe(true);
+    await ws.flushAll();
+    const saved = (await storage.documents.load(id))._unsafeUnwrap();
+    expect(JSON.stringify(saved.content)).toContain("two one");
+
+    // The tab still holds exactly one reference: one close disposes it.
+    (await ws.commands.closeTab(id))._unsafeUnwrap();
+    expect(ws.session(id)).toBeUndefined();
+    expect(ws.tabs.get().open).toEqual([]);
+  });
+
+  test("closing a tab while it is loading leaves no tab and no session", async () => {
+    const storage = createMemoryStorage();
+    const writer = workspace({ storage });
+    const created = (await writer.commands.createDocument())._unsafeUnwrap();
+    const ws = workspace({ storage });
+
+    const [opened, closed] = await Promise.all([
+      ws.commands.openDocument(created.documentId),
+      ws.commands.closeTab(created.documentId),
+    ]);
+    expect(opened._unsafeUnwrapErr()).toEqual({
+      kind: "closed",
+      documentId: created.documentId,
+    });
+    expect(closed._unsafeUnwrap()).toEqual(NO_TABS);
+    expect(ws.session(created.documentId)).toBeUndefined();
+
+    // Opening again works, and one close releases it.
+    (await ws.commands.openDocument(created.documentId))._unsafeUnwrap();
+    (await ws.commands.closeTab(created.documentId))._unsafeUnwrap();
+    expect(ws.session(created.documentId)).toBeUndefined();
+  });
+
+  test("a rename whose save failed releases its session once a retry saves", async () => {
+    const storage = createMemoryStorage();
+    const writer = workspace({ storage });
+    const created = (await writer.commands.createDocument())._unsafeUnwrap();
+    (await writer.commands.closeTab(created.documentId))._unsafeUnwrap();
+
+    // Document saves fail until `failing` is cleared; reopening "works".
+    let failing = true;
+    const flaky: StorageAdapter = {
+      ...storage,
+      // The connection closes a failing adapter before reopening.
+      close: () => undefined,
+      documents: {
+        ...storage.documents,
+        save: (record) =>
+          failing
+            ? errAsync({
+                kind: "failure",
+                operation: "save",
+                collection: "documents",
+                id: record.id,
+                message: "Storage save failed: disk full",
+                cause: null,
+              })
+            : storage.documents.save(record),
+      },
+    };
+    const ws = createWorkspace({
+      worldId: "w1",
+      connection: createStorageConnection(flaky, () => okAsync(flaky)),
+      tabStore: memoryKeyValue(),
+      readOnly: false,
+      saveDelayMs: 60_000,
+      retryDelayMs: 60_000,
+    });
+    const renamed = await ws.commands.renameDocument(
+      created.documentId,
+      "Later",
+    );
+    expect(renamed._unsafeUnwrapErr()).toMatchObject({ kind: "unsaved" });
+    const session = ws.session(created.documentId);
+    expect(session).toBeDefined();
+    expect(ws.hasUnsavedChanges()).toBe(true);
+
+    failing = false;
+    expect(await session?.flush()).toEqual({ kind: "saved" });
+    expect(ws.session(created.documentId)).toBeUndefined();
+    expect(
+      (await storage.documents.load(created.documentId))._unsafeUnwrap().title,
+    ).toBe("Later");
   });
 
   test("a read-only workspace does not overwrite the persisted tabs", async () => {

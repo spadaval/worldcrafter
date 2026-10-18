@@ -32,7 +32,9 @@ export type CommandError =
       readonly status: SaveStatus;
     }
   /** This tab is read-only (another tab holds the world). */
-  | { readonly kind: "read_only" };
+  | { readonly kind: "read_only" }
+  /** The tab was closed while the document was still opening. */
+  | { readonly kind: "closed"; readonly documentId: string };
 
 /**
  * The typed commands the shell calls. They know nothing about routes or
@@ -144,14 +146,18 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
   };
 
   /**
-   * How many holders keep each document's session alive: its tab, plus any
-   * command using it. Counted from the moment of asking, before the load
-   * finishes, so a session is never disposed while someone is acquiring it.
-   * At zero the session is disposed.
+   * How many holders keep each document's session alive: its tab (one
+   * reference, identified by a token), plus each command using it. A
+   * reference is counted when it is asked for, before the load finishes. At
+   * zero the session is disposed.
    */
   const holds = new Map<string, number>();
-  /** Documents whose tab holds a reference. */
-  const tabHeld = new Set<string>();
+  /**
+   * The open tab's token per document. Closing removes it before saving, so
+   * an open during the close's save takes its own reference (and a new
+   * token) and the close then leaves the tab alone.
+   */
+  const tabTokens = new Map<string, symbol>();
 
   const acquire = (documentId: string) => {
     holds.set(documentId, (holds.get(documentId) ?? 0) + 1);
@@ -202,41 +208,75 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
     },
 
     openDocument(documentId) {
-      const held = tabHeld.has(documentId);
-      tabHeld.add(documentId);
-      return (held ? loadSession(documentId) : acquire(documentId))
-        .map((session) => {
-          setTabs(openTab(tabs.get(), documentId));
-          return session;
-        })
-        .mapErr((error) => {
-          if (!held) tabHeld.delete(documentId);
+      const existing = tabTokens.get(documentId);
+      const token = existing ?? Symbol(documentId);
+      if (!existing) tabTokens.set(documentId, token);
+      const current = () => tabTokens.get(documentId) === token;
+      return (existing ? loadSession(documentId) : acquire(documentId))
+        .mapErr((error): CommandError => {
+          if (!existing && current()) tabTokens.delete(documentId);
           // A tab whose document is gone is dropped rather than kept broken.
           if (error.kind === "not_found") {
             setTabs(closeTab(tabs.get(), documentId));
           }
           return error;
+        })
+        .andThen((session) => {
+          // Closed while loading: the close releases the reference.
+          if (!current()) {
+            return errAsync({ kind: "closed" as const, documentId });
+          }
+          setTabs(openTab(tabs.get(), documentId));
+          return okAsync(session);
         });
     },
 
     closeTab(documentId) {
-      const session = sessions.get(documentId);
-      return (session ? flushed(session) : okAsync(undefined)).map(() => {
-        if (tabHeld.delete(documentId)) release(documentId);
-        const next = closeTab(tabs.get(), documentId);
-        setTabs(next);
-        return next;
-      });
+      const token = tabTokens.get(documentId);
+      tabTokens.delete(documentId);
+      // Let a load in progress finish first, so its session is released too.
+      const loaded = (loading.get(documentId) ?? okAsync(undefined))
+        .map(() => undefined)
+        .orElse(() => okAsync(undefined));
+      return loaded
+        .andThen(() => {
+          const session = sessions.get(documentId);
+          return session ? flushed(session) : okAsync(undefined);
+        })
+        .map(() => {
+          if (token) release(documentId);
+          if (!tabTokens.has(documentId)) {
+            setTabs(closeTab(tabs.get(), documentId));
+          }
+          return tabs.get();
+        })
+        .mapErr((error) => {
+          // Not closed: give the tab its reference back, unless it was
+          // reopened meanwhile with a reference of its own.
+          if (token) {
+            if (tabTokens.has(documentId)) release(documentId);
+            else tabTokens.set(documentId, token);
+          }
+          return error;
+        });
     },
 
     renameDocument(documentId, title) {
       if (readOnly) return errAsync({ kind: "read_only" as const });
       return acquire(documentId).andThen((session) => {
         session.setTitle(title.trim() || UNTITLED);
-        // If the save fails the hold is kept, so the session stays alive
-        // (retrying, and counted by hasUnsavedChanges) instead of dropping
-        // the new title.
-        return flushed(session).map(() => release(documentId));
+        return flushed(session)
+          .map(() => release(documentId))
+          .mapErr((error) => {
+            // Keep the session alive (retrying, and counted by
+            // hasUnsavedChanges) until a retry saves the new title.
+            const stop = session.status.subscribe(() => {
+              if (session.hasUnsavedChanges()) return;
+              stop();
+              release(documentId);
+            });
+            return error;
+          });
       });
     },
   };

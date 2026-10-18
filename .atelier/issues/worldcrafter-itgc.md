@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Story time: let frame rates order events, and check durations"
-updated_at: "2026-10-18T01:06:39.182277238+00:00"
+updated_at: "2026-10-18T02:04:48.470076441+00:00"
 ---
 
 ## Goal
@@ -30,3 +30,7 @@ Tests: a scene under a rate-0.5 frame gets holds results (not uncertain) for wor
 ## Context
 
 Review of worldcrafter-2ony (2026-10-17), findings R2 and R9; app/src/time/chronology.ts and frames.ts. Also deferred from that review: (R5) each comparison caches a full graph walk and every sceneContext recompiles from storage (5k events and 10k changes: ~0.6 s and ~185 MB for the first holdsAt); measure and cache per timeline version if it matters.
+
+## Notes
+
+- 2026-10-17 [note] From the 2ony build (2026-10-17): a position says where an event lies, not how long it lasts. 'War [1200, 1210)' means the war happened somewhere in that range, not that it spans the decade, so a scene positioned at 1205 is unordered with the war rather than during it. Expressing an event's extent in a frame needs a separate field on positions; until then 'during' must be stated as a constraint.

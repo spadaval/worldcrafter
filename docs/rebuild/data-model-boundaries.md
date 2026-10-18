@@ -76,7 +76,7 @@ Plate stores some derived or invisible state that the schema doesn't allow (`lis
 
 ## Boundary 4: stable block IDs are mandatory
 
-Every block gets a persistent ID, assigned by `BlockIdPlugin` (`app/src/editor/block-id-plugin.ts`, an extension of Plate's `NodeIdPlugin`). IDs are kept on reload, stay with a block's leading content on split, and are restored exactly by undo and redo. On a merge the upper block keeps its ID. Pasted blocks always get fresh IDs, including after a cut. The per-case rules are recorded on worldcrafter-wtj4. Annotations, AI edit operations, entity anchors and "mentions" views all depend on it. This is the prerequisite for everything above, and it should be in place before any AI feature is rebuilt.
+Every block gets a persistent ID, assigned by `BlockIdPlugin` (`app/src/editor/block-id-plugin.ts`, an extension of Plate's `NodeIdPlugin`). IDs are kept on reload, stay with a block's leading content on split, and are restored exactly by undo and redo. On a merge the upper block keeps its ID. Pasted blocks always get fresh IDs, including after a cut; annotations anchored to a cut block re-attach to the pasted block by matching their quoted text (decided by Sumeet, 2026-10-17). Dragging a block by its handle is a move and keeps its ID. Repeated IDs found on load are repaired, after the stored original is kept as a snapshot. The per-case rules are recorded on worldcrafter-wtj4. Annotations, AI edit operations, entity anchors and "mentions" views all depend on it. This is the prerequisite for everything above, and it should be in place before any AI feature is rebuilt.
 
 ## Boundary 5: world context is assembled, not serialized
 

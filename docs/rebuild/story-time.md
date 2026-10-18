@@ -29,16 +29,23 @@ Status: proposal (2026-10-17). Settles the story-position decision (`worldcrafte
 - An **entity can follow a frame.** Ages and elapsed time are computed in the entity's own time, so a character in stasis doesn't age while the world goes on without them.
 - A **calendar** is a display format over a frame (eras, months, moons). It isn't a separate model. Converting between calendars and frames is bookkeeping, done by code where a rule exists and by the AI where it doesn't, and the result is stored with its derivation so it can be inspected.
 
+- **Positions** (decided 2026-10-17, from the build): a position is an interval `[start, end)` in one frame, with `end = start` for an exact moment, and an optional precision label used only for display. Positions are turned into ordering constraints against their frame's clock, so positions and constraints form one order, and a conflict between them is a contradiction. An event with a position in two frames is a sync point. "Sometime before the war" stays a constraint, not a position.
+
 ### Two orders
 
 - **Chronology:** happens-before, plus positions in frames.
 - **Narrative order:** the manuscript outline (book > chapter > scene). The outline is required, because narrative order comes from it.
-- By default a scene is placed **right after the previous scene in narrative order**, so a linear story costs nothing. Flashbacks, time skips and parallel POVs override that default, and the AI proposes the override from cues in the prose ("years earlier…").
+- By default a scene is placed **after the main line**, so a linear story costs nothing. The main line is the latest scene that continues the story: an unplaced scene follows it and becomes the new main line. Flashbacks, time skips and parallel POVs override the default, and the AI proposes the override from cues in the prose ("years earlier…"). Decided by Sumeet (2026-10-17):
+  - A placed scene (a flashback, a parallel scene) doesn't move the main line, so the scene after a flashback returns to the present.
+  - A placed scene that is known to come after the main line (a time skip) becomes the new main line. So can any placed scene marked as *continuing* the main line, which covers a flashback that runs over several scenes.
+  - A placed first scene, such as a flash-forward prologue, doesn't start the main line.
+  - Where the default is a guess (the scene right after a placed scene that doesn't continue), it stands but is surfaced as a hint for the bookkeeping pass to confirm. A scene with nothing to follow is unordered, and its facts are reported as uncertain.
 
 ### Facts change at events
 
 - A **fact change** is anchored to an event: "from the coronation, Aldric is king." The anchor is an event ID, never a stored number.
 - **Holds at scene S:** a fact holds at a scene if its change happens before that scene, and no later change to the same fact also happens before it. When the ordering is unknown, the fact is passed to the model as uncertain, not guessed.
+- **Changes during a long event** (decided by Sumeet, 2026-10-17): when a change is anchored to an event that lasts a while ("the border moved during the war"), the fact doesn't hold before the event starts, holds after it ends, and is uncertain during it. A scene's own changes don't hold at that scene; facts are read as the scene opens.
 - **Revealed at:** the first scene in narrative order that shows the fact. Discovery records this from the source paragraph.
 - **Arc:** an entity's sequence of fact changes ("Ardelia's arc"). It's a view, not a separate thing that's stored.
 
@@ -79,7 +86,6 @@ This splits the old rule that nothing is written until accepted. **Bookkeeping**
 
 ## Open questions
 
-- How fuzzy positions should be represented: an interval with precision, or a set of constraints only?
 - How eagerly bookkeeping should run on slow local models. Probably once per scene when the writer leaves it, cached by content hash.
 - Whether the writer marks a scene "not happening in story time" (dreams, visions) or the AI infers it.
 

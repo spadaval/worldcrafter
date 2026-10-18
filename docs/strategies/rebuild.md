@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-10-17: story time is world-first; AI does bookkeeping, canon stays proposed (Sumeet)"
+last_changed: "2026-10-17: Legend State dropped from the keep list; the storage adapter, typed commands and document sessions replace it (Sumeet)"
 ---
 
 # Why
@@ -103,7 +103,6 @@ generate with world context you can inspect and edit, then accept or regenerate.
   - AI segments and placeholders
   - the document-model V2 entry model
   - `relation-model.ts`
-  - Legend State with IndexedDB
   - `entity-suppression.ts`
   - sampler control
 - **When qualities conflict:**

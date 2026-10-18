@@ -46,8 +46,9 @@ const SCENES = scenesOf(["s1", "s2", "s3", "s4"]);
 function build(
   commands: TimelineCommand[],
   scenes: readonly SceneRef[] = SCENES,
+  from: Timeline = emptyTimeline,
 ): Timeline {
-  let timeline = emptyTimeline;
+  let timeline = from;
   for (const command of commands) {
     timeline = applyTimelineCommand(timeline, command, scenes)._unsafeUnwrap();
   }
@@ -1028,6 +1029,63 @@ describe("frames that pause", () => {
     const dream = chronology.interval("dream", "world");
     expect(dream?.start).toBeCloseTo(1000);
     expect(dream?.end).toBeCloseTo(1100);
+  });
+
+  test("a frame referencing a paused frame pauses with it", () => {
+    const timeline = build([
+      ...events("sleep", "wake", "x", "y"),
+      { type: "addFrame", id: "S", label: "S", unit: "year" },
+      { type: "addFrame", id: "D", label: "D", unit: "year", reference: "S" },
+      {
+        type: "addCorrespondence",
+        id: "stasis",
+        frame: "S",
+        from: "sleep",
+        to: "wake",
+        rate: 0,
+      },
+      ...(
+        [
+          ["sleep", "world", 1000],
+          ["sleep", "S", 30],
+          ["wake", "world", 1100],
+          ["wake", "S", 30],
+          ["x", "D", 5],
+          ["x", "S", 30],
+          ["y", "D", 5],
+          ["y", "S", 30],
+        ] as const
+      ).map(
+        ([event, frame, start]): TimelineCommand => ({
+          type: "setPosition",
+          event,
+          frame,
+          position: { start, end: start },
+        }),
+      ),
+    ]);
+    const chronology = compileChronology(timeline, SCENES);
+    // Up to a hundred world years apart, in either order.
+    expect(compareEvents(chronology, "x", "y")).toBe("unordered");
+    const placed = build(
+      [
+        {
+          type: "setPosition",
+          event: "x",
+          frame: "world",
+          position: { start: 1000, end: 1000 },
+        },
+        {
+          type: "setPosition",
+          event: "y",
+          frame: "world",
+          position: { start: 1100, end: 1100 },
+        },
+      ],
+      SCENES,
+      timeline,
+    );
+    expect(timelineProblems(compileChronology(placed, SCENES))).toEqual([]);
   });
 
   test("derived intervals and holds stay true under random pauses", () => {

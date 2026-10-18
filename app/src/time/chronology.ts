@@ -12,7 +12,8 @@
  *   `T(start) <= e.start` and `e.end < T(end)` (`<=` for an exact position),
  *   so positions in one frame order events without any pairwise edges, and an
  *   event positioned in two frames (a sync point) links their clocks. A frame
- *   that may pause (rate 0 or unknown, or a rate-0 correspondence) holds a
+ *   that may pause (rate 0 or unknown, or a rate-0 correspondence, on it or
+ *   on any frame up its reference chain) holds a
  *   reading for a while, so each reading v is two points lo(v) <= hi(v): a
  *   start bounds against lo, an exact end against hi, and an end before v
  *   against lo. Two events at one reading of such a frame are then not
@@ -389,15 +390,24 @@ export function compileChronology(
   // when it leaves), with hi(v) < lo(v') for v < v'. An event starts no
   // earlier than lo of its start; an exact event ends by hi of its reading,
   // and an event within [s, e) ends before lo(e).
+  // A frame pauses in world time whenever any frame up its reference chain
+  // does. A missing frame or a cycle of references may pause.
   const mayPause = (frame: FrameId) => {
-    const found = findFrame(timeline, frame);
-    return (
-      frame !== WORLD_FRAME &&
-      (found === undefined ||
+    const seen = new Set<FrameId>();
+    for (let id = frame; id !== WORLD_FRAME; ) {
+      const found = findFrame(timeline, id);
+      if (found === undefined || seen.has(id)) return true;
+      seen.add(id);
+      if (
         found.rate === null ||
         found.rate === 0 ||
-        timeline.correspondences.some((c) => c.frame === frame && c.rate === 0))
-    );
+        timeline.correspondences.some((c) => c.frame === id && c.rate === 0)
+      ) {
+        return true;
+      }
+      id = found.reference;
+    }
+    return false;
   };
   for (const [frame, bounds] of byFrame) {
     const values = [...new Set(bounds.map(({ value }) => value))].sort(

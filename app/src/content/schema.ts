@@ -34,6 +34,8 @@ export type Link = { type: "a"; url: string; children: Text[] };
 export type Inline = Text | Link;
 
 export const LIST_STYLES = ["disc", "decimal"] as const;
+/** Deepest list indent; keeps `indent=N` a plain integer in the export. */
+export const MAX_LIST_INDENT = 32;
 export type ListStyle = (typeof LIST_STYLES)[number];
 
 /**
@@ -315,10 +317,14 @@ class Validator {
           const { indent } = value;
           if (
             typeof indent !== "number" ||
-            !Number.isInteger(indent) ||
-            indent < 1
+            !Number.isSafeInteger(indent) ||
+            indent < 1 ||
+            indent > MAX_LIST_INDENT
           ) {
-            return fail(path, "list indent must be an integer >= 1");
+            return fail(
+              path,
+              `list indent must be an integer from 1 to ${MAX_LIST_INDENT}`,
+            );
           }
         }
         break;

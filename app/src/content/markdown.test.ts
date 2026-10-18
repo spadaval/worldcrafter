@@ -397,6 +397,20 @@ describe("round trip", () => {
     );
   });
 
+  test("the deepest allowed indent round-trips", () => {
+    expect(
+      roundTrip([
+        {
+          type: "p",
+          id: "a",
+          listStyleType: "disc",
+          indent: 32,
+          children: [{ text: "x" }],
+        },
+      ]),
+    ).toBe("- x {#a indent=32}\n");
+  });
+
   test("text with \\r, \\t and Unicode line separators in every block", () => {
     const children: Inline[] = [{ text: "\r# a\u2028b\u2029\tc\r" }];
     roundTrip([
@@ -510,6 +524,20 @@ describe("rejection", () => {
       ],
       /listStyleType/,
     );
+    for (const indent of [0, 1.5, 33, 1e21, Number.NaN]) {
+      rejectsExport(
+        [
+          {
+            type: "p",
+            id: "a",
+            listStyleType: "disc",
+            indent,
+            children: [{ text: "x" }],
+          },
+        ],
+        /list indent must be an integer from 1 to 32/,
+      );
+    }
     rejectsExport(
       [
         {
@@ -577,6 +605,10 @@ describe("rejection", () => {
     rejectsParse("\\a {#a}\n", /backslash/);
     rejectsParse("  - x {#a}\n", /indentation/);
     rejectsParse("x {#a indent=2}\n", /list items only/);
+    rejectsParse(
+      "- x {#a indent=33}\n",
+      /list indent must be an integer from 1 to 32/,
+    );
     rejectsParse(
       "- x {#a indent=2}\n  - y {#b indent=2}\n",
       /deeper than the parent/,

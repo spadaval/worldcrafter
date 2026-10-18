@@ -14,9 +14,10 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-18T02:19:00.978518930+00:00"
+status: "done"
 title: "World store: follow storage reconnects and respect read-only tabs"
-updated_at: "2026-10-18T02:12:02.331060238+00:00"
+updated_at: "2026-10-18T02:19:00.978518930+00:00"
 ---
 
 ## Goal
@@ -34,3 +35,7 @@ app/src/app/world.ts, main.tsx, and a small adapter wrapper that routes each cal
 ## Context
 
 Found in the review of worldcrafter-2hcn (2026-10-17). See app/src/workspace/ for the connection and Web Lock read-only mode.
+
+## Close Reason
+
+World store now runs through the workspace's reconnecting connection via a connected StorageAdapter wrapper (one object across reconnects, so one command queue) and refuses writes in read-only tabs with a typed read_only error; tests cover reconnect, failure-triggered reopen and read-only; reviewed independently.

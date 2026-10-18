@@ -28,6 +28,7 @@ import {
   LinkElement,
   PlaceholderElement,
 } from "./elements";
+import { LayerParagraphPlugin, LayerPlugin } from "./layer-plugin";
 import { linkAttributes } from "./links";
 import { ContentSchemaPlugin } from "./schema-plugin";
 
@@ -160,6 +161,7 @@ const AUTOFORMAT_RULES: AutoformatRule[] = [
  */
 export const documentPlugins = [
   BlockIdPlugin,
+  LayerParagraphPlugin,
   H1Plugin,
   H2Plugin,
   H3Plugin,
@@ -187,6 +189,8 @@ export const documentPlugins = [
   AutoformatPlugin.configure({ options: { rules: AUTOFORMAT_RULES } }),
   AiSegmentPlugin,
   PlaceholderPlugin,
+  // Layer marks are decorations: they never touch the content.
+  LayerPlugin,
   ContentSchemaPlugin,
 ];
 

@@ -1,6 +1,9 @@
 import { errAsync } from "neverthrow";
+import type { EntryName } from "~/layers/model";
 import { createConnectedStorage } from "~/workspace/connected-storage";
+import { createStore, type Store } from "~/workspace/store";
 import type { CommandError, Workspace } from "~/workspace/workspace";
+import type { Kind } from "~/world/kinds";
 import {
   createWorldStore,
   type WorldError,
@@ -60,4 +63,52 @@ function toWorldError(documentId: string, error: CommandError): WorldError {
         reason: describeCommandError(error),
       };
   }
+}
+
+/** What the workspace shows of an entry. */
+export interface EntrySummary {
+  readonly documentId: string;
+  readonly kind: Kind;
+  readonly aliases: readonly string[];
+}
+
+export interface WorldIndex {
+  readonly entries: Store<ReadonlyMap<string, EntrySummary>>;
+  /** Re-reads the world's facts. Unreadable records are skipped, as in `facts`. */
+  refresh(): Promise<void>;
+}
+
+export function createWorldIndex(world: WorldStore): WorldIndex {
+  const entries = createStore<ReadonlyMap<string, EntrySummary>>(new Map());
+  return {
+    entries,
+    async refresh() {
+      const facts = await world.facts();
+      if (facts.isErr()) return;
+      entries.set(
+        new Map(
+          facts.value.map(({ documentId, facts }) => [
+            documentId,
+            { documentId, kind: facts.kind, aliases: facts.aliases },
+          ]),
+        ),
+      );
+    },
+  };
+}
+
+/** Names the prose may use for entries: titles and aliases, scenes excluded. */
+export function entryNames(
+  entries: ReadonlyMap<string, EntrySummary>,
+  titleOf: (documentId: string) => string | undefined,
+): EntryName[] {
+  return [...entries.values()]
+    .filter((entry) => entry.kind !== "scene")
+    .flatMap((entry) => {
+      const title = titleOf(entry.documentId);
+      return [...(title ? [title] : []), ...entry.aliases].map((name) => ({
+        entryId: entry.documentId,
+        name,
+      }));
+    });
 }

@@ -3,14 +3,18 @@ import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { errAsync } from "neverthrow";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { createLayerStore } from "~/layers/state";
 import { createMemoryStorage } from "~/storage/memory";
 import type { JsonValue } from "~/storage/types";
 import { createStorageConnection } from "~/workspace/connection";
 import type { KeyValueStore } from "~/workspace/tabs";
 import { createWorkspace, type Workspace } from "~/workspace/workspace";
 import type { Environment } from "./environment";
-import { EnvironmentContext, WorkspaceContext } from "./hooks";
+import { AppProviders, type AppServices } from "./hooks";
+import { createLayerSource, type LayerSource } from "./layers";
+import { createAppManuscript } from "./manuscript";
 import { createAppRouter } from "./router";
+import { createAppWorldStore, createWorldIndex } from "./world";
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean;
@@ -56,11 +60,39 @@ const tabStore = (): KeyValueStore => {
   };
 };
 
+const WRITER: Environment = {
+  role: "writer",
+  persistence: "granted",
+  storage: "indexeddb",
+  worldName: null,
+};
+
+export async function services(
+  workspace: Workspace,
+  environment: Environment = WRITER,
+  layerSource: LayerSource = createLayerSource(),
+): Promise<AppServices> {
+  const world = createAppWorldStore(workspace);
+  const worldIndex = createWorldIndex(world);
+  const manuscript = createAppManuscript(workspace, world);
+  await Promise.all([worldIndex.refresh(), manuscript.refresh()]);
+  return {
+    workspace,
+    world,
+    worldIndex,
+    manuscript,
+    layers: createLayerStore(tabStore(), workspace.worldId),
+    layerSource,
+    environment,
+  };
+}
+
 async function render(
   workspace: Workspace,
   path: string,
-  environment: Environment = { role: "writer", persistence: "granted" },
+  environment: Environment = WRITER,
 ) {
+  const app = await services(workspace, environment);
   const router = createAppRouter(
     workspace,
     createMemoryHistory({ initialEntries: [path] }),
@@ -71,11 +103,9 @@ async function render(
   root = target;
   await act(async () => {
     target.render(
-      <WorkspaceContext value={workspace}>
-        <EnvironmentContext value={environment}>
-          <RouterProvider router={router} />
-        </EnvironmentContext>
-      </WorkspaceContext>,
+      <AppProviders services={app}>
+        <RouterProvider router={router} />
+      </AppProviders>,
     );
   });
   // Let the route load and the document open.
@@ -122,8 +152,8 @@ test("the shell lays out rail, tab strip, prose and gloss columns", async () => 
   expect(view.querySelector(".masthead .tab-strip")?.textContent).toContain(
     "The Mill",
   );
-  expect(view.querySelector(".document .prose-column .prose")).not.toBeNull();
-  expect(view.querySelector(".document .gloss-column")).not.toBeNull();
+  expect(view.querySelector(".sheet .prose")).not.toBeNull();
+  expect(view.querySelector(".sheet .gloss-column")).not.toBeNull();
   expect(workspace.tabs.get()).toEqual({ open: ["doc1"], active: "doc1" });
 });
 
@@ -157,6 +187,7 @@ test("AI segments, placeholders and rules render", async () => {
 test("the save status follows edits, and storage problems are shown", async () => {
   const workspace = await setup();
   const view = await render(workspace, "/doc/doc1", {
+    ...WRITER,
     role: "reader",
     persistence: "refused",
   });

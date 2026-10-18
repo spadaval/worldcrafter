@@ -47,6 +47,18 @@ describe("IndexedDB persistence", () => {
         createdAt: 1,
       })
     )._unsafeUnwrap();
+    const outline = {
+      id: "manuscript",
+      books: [
+        {
+          id: "b1",
+          title: "Book One",
+          chapters: [{ id: "c1", title: "Arrival", scenes: ["doc1"] }],
+        },
+      ],
+      updatedAt: 1,
+    };
+    (await first.outlines.save(outline))._unsafeUnwrap();
     const before = (
       await first.snapshots.save({
         documentId: "doc1",
@@ -70,6 +82,9 @@ describe("IndexedDB persistence", () => {
     expect((await second.snapshots.list("doc1"))._unsafeUnwrap()).toEqual([
       before,
     ]);
+    expect((await second.outlines.load("manuscript"))._unsafeUnwrap()).toEqual(
+      outline,
+    );
 
     // Snapshot IDs keep increasing across a reopen, so ordering still holds.
     const after = (

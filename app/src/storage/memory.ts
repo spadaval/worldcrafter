@@ -125,6 +125,7 @@ export function createMemoryStorage(): StorageAdapter {
     annotations,
     requests: keyed("requests", (record) => record.id),
     snapshots,
+    outlines: keyed("outlines", (record) => record.id),
     close: () => {
       closed = true;
     },

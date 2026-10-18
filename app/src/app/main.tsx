@@ -36,9 +36,7 @@ async function start(root: HTMLElement) {
     readOnly: role === "reader",
   });
   await workspace.refreshDocuments();
-  // TODO: the world store holds the adapter it was given; it should go
-  // through the reconnecting storage connection like the workspace does.
-  const world = createAppWorldStore(storage.value, workspace);
+  const world = createAppWorldStore(workspace);
 
   // Save what can be saved before the tab goes away, and ask the browser to
   // warn the writer if something is still unsaved.

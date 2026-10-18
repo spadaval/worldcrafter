@@ -43,7 +43,19 @@ export interface StorageFailure {
   readonly cause: unknown;
 }
 
-export type StorageError = NotFoundError | StorageFailure;
+/**
+ * A write refused because this tab is read-only (another tab is the world's
+ * writer). Nothing was written. Expected, not exceptional: never retried.
+ */
+export interface ReadOnlyError {
+  readonly kind: "read_only";
+  readonly operation: "save" | "delete";
+  readonly collection: CollectionName;
+  /** The record's key; absent for a snapshot, whose ID the store assigns. */
+  readonly id?: string;
+}
+
+export type StorageError = NotFoundError | StorageFailure | ReadOnlyError;
 
 export interface StoredDocument {
   readonly id: string;

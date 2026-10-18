@@ -50,7 +50,7 @@ The full spec is the comment at the top of `app/src/content/markdown.ts`. In sho
 - Every block ends with its ID as a trailing `{#id}` (alone when the block is empty): `Some _text_. {#b_2}`, `--- {#r_1}`.
 - Headings use `#`/`##`/`###`, quotes `> `, bullets `- `, numbered items `N. `. Nested items are indented to the parent's content column. An indent that can't be derived from nesting (a skipped level, or a list that starts indented) is written explicitly: `{#b_10 indent=4}`, with values from 1 to 32.
 - AI segments and placeholders are container directives: `:::ai{#seg_1 status=ready}` … `:::` and `:::placeholder{#b_9}` … `:::`.
-- Inline marks are `**bold**`, `_italic_`, `~~strike~~` and `` `code` ``; links are `[label](canonical-name)` or `[label](https://…)`. A line break inside a block is a backslash at the end of the line.
+- Inline marks are `**bold**`, `_italic_`, `~~strike~~` and `` `code` ``; links are `[label](canonical-name)` or `[label](https://…)`. A canonical name is lowercase letters, marks and digits from any script joined by single hyphens, in NFC (`old-mill`, `café`); `app/src/world/names.ts` defines it. A line break inside a block is a backslash at the end of the line.
 - Text is escaped so it can never be read as syntax. The parser is strict to this format; it is not a general markdown importer.
 
 Plate stores some derived or invisible state that the schema doesn't allow (`listStart` on list items, marks on empty text). The save path runs `canonicalize()` before validating, which removes exactly those and changes nothing else. Numbering restarts, to-do items, and list styles on headings or quotes are rejected, so the editor must be configured not to produce them.

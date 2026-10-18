@@ -7,7 +7,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["src/**/*", "*.json"]
+    "includes": ["src/**/*", "scripts/**/*", "*.json", "*.ts"]
   },
   "formatter": {
     "enabled": true,
@@ -19,6 +19,17 @@
       "recommended": true,
       "suspicious": {
         "noExplicitAny": "error"
+      },
+      "style": {
+        "noRestrictedGlobals": {
+          "level": "error",
+          "options": {
+            "deniedGlobals": {
+              "indexedDB": "Only src/storage may use IndexedDB; go through the StorageAdapter.",
+              "IDBFactory": "Only src/storage may use IndexedDB; go through the StorageAdapter."
+            }
+          }
+        }
       }
     }
   },
@@ -34,5 +45,17 @@
         "organizeImports": "on"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["src/storage/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": "off"
+          }
+        }
+      }
+    }
+  ]
 }

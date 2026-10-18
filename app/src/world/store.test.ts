@@ -7,6 +7,7 @@ import type { EntryFacts } from "./facts";
 import {
   type AttachEntry,
   createWorldStore,
+  directRenameDocument,
   type WorldCommand,
   type WorldStore,
 } from "./store";
@@ -16,7 +17,10 @@ let world: WorldStore;
 
 beforeEach(() => {
   storage = createMemoryStorage();
-  world = createWorldStore(storage, { now: () => 1000 });
+  world = createWorldStore(storage, {
+    now: () => 1000,
+    renameDocument: directRenameDocument(storage, () => 1000),
+  });
 });
 
 const run = async (command: WorldCommand) =>
@@ -156,7 +160,9 @@ describe("concurrent commands", () => {
   test("concurrent edits to one entry all land", async () => {
     await create({ documentId: "d1", title: "Ardelia", kind: "person" });
     // A second store over the same adapter shares its queue.
-    const other = createWorldStore(storage);
+    const other = createWorldStore(storage, {
+      renameDocument: directRenameDocument(storage),
+    });
     const results = await Promise.all([
       world.execute({
         name: "addAlias",
@@ -679,7 +685,9 @@ describe("persistence", () => {
     });
     const before = (await world.entry("ardelia"))._unsafeUnwrap();
 
-    const reopened = createWorldStore(storage);
+    const reopened = createWorldStore(storage, {
+      renameDocument: directRenameDocument(storage),
+    });
     expect((await reopened.entry("ardelia"))._unsafeUnwrap()).toEqual(before);
     expect((await reopened.resolveName("ardelia"))._unsafeUnwrap()).toBe(
       "ardelia",
@@ -749,7 +757,9 @@ describe("persistence", () => {
 
     const second = await open();
     const entry = (
-      await createWorldStore(second).entry("aldric")
+      await createWorldStore(second, {
+        renameDocument: directRenameDocument(second),
+      }).entry("aldric")
     )._unsafeUnwrap();
     expect(entry).toEqual({ ...facts, documentId: "aldric", title: "Aldric" });
     second.close();
@@ -868,7 +878,9 @@ describe("setField names", () => {
       payload: { documentId: "d1", field: "valueOf", value: null },
     });
     const reopened = (
-      await createWorldStore(storage).entry("d1")
+      await createWorldStore(storage, {
+        renameDocument: directRenameDocument(storage),
+      }).entry("d1")
     )._unsafeUnwrap();
     expect(Object.keys(reopened.fields)).toEqual([
       "constructor",

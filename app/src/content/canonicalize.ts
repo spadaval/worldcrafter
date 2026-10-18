@@ -10,6 +10,8 @@ import { MARKS } from "./schema";
  * - Marks on empty text leaves are dropped: Plate leaves them behind after
  *   Enter at the end of bold text, deleting a whole bold paragraph, or next to
  *   a link. An empty leaf shows nothing, so its marks are not content.
+ * - Link URLs are NFC-normalised, so a name pasted in decomposed form (as
+ *   macOS produces) compares equal to the same name typed.
  *
  * Everything else is copied unchanged, including anything the schema rejects.
  * Idempotent; the input is not mutated.
@@ -24,6 +26,10 @@ export function canonicalize(value: unknown): unknown {
   for (const [key, child] of Object.entries(record)) {
     if (key === "listStart" && "type" in record) continue;
     if (emptyText && MARKS.some((mark) => mark === key)) continue;
+    if (key === "url" && record.type === "a" && typeof child === "string") {
+      copy[key] = child.normalize("NFC");
+      continue;
+    }
     copy[key] = key === "children" ? canonicalize(child) : child;
   }
   return copy;

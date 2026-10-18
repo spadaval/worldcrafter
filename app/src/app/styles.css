@@ -1,0 +1,299 @@
+/*
+ * Shell styling: plain and quiet, on the Night Edition tokens from
+ * .impeccable/surfaces/writing-workspace.md. The workspace design
+ * (worldcrafter-9get) replaces this; keep it to tokens and layout.
+ * Fonts are named, not loaded; the design task decides how to ship them.
+ */
+:root {
+  --ground: #14120f;
+  --ink: #e6dfcf;
+  --ink-2: #b3ac9d;
+  --ink-3: #7d776b;
+  --rule: #2f2a23;
+  --ai: #e34b2f; /* vermilion: reserved for AI-made text */
+  --time: #8da2f0;
+  --subtext: #e8b923;
+  --font-prose: "Old Standard TT", "Iowan Old Style", Georgia, serif;
+  --font-apparatus: "Source Sans 3", "Source Sans Pro", system-ui, sans-serif;
+  --rail-width: 300px;
+  --header-height: 56px;
+  --prose-width: 620px;
+  --gloss-width: 340px;
+
+  color-scheme: dark;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-apparatus);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 1px solid var(--ink-2);
+  outline-offset: 2px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: var(--rail-width) 1fr;
+  grid-template-rows: var(--header-height) auto 1fr;
+  grid-template-areas:
+    "rail masthead"
+    "rail notices"
+    "rail page";
+  min-height: 100vh;
+}
+
+/* Left rail */
+.rail {
+  grid-area: rail;
+  border-right: 1px solid var(--rule);
+  padding: 0 16px 16px;
+  overflow-y: auto;
+}
+
+.rail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--header-height);
+}
+
+.wordmark {
+  font-family: var(--font-prose);
+  font-size: 18px;
+}
+
+.quiet-button {
+  background: none;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: 4px 10px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.quiet-button:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.rail-empty {
+  color: var(--ink-3);
+}
+
+.document-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.document-list a {
+  display: block;
+  padding: 5px 0;
+  color: var(--ink-2);
+  text-decoration: none;
+}
+
+.document-list a[aria-current="page"] {
+  color: var(--ink);
+}
+
+/* Header with the tab strip */
+.masthead {
+  grid-area: masthead;
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--rule);
+  padding: 0 16px;
+}
+
+.tab-strip {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  color: var(--ink-3);
+  border-bottom: 1px solid transparent;
+}
+
+.tab[data-active="true"] {
+  color: var(--ink);
+  border-bottom-color: var(--ink-2);
+}
+
+.tab a {
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tab-close {
+  background: none;
+  border: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+/* Notices that affect whether work is kept */
+.notices {
+  grid-area: notices;
+}
+
+.notice {
+  margin: 0;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.notice-error,
+.save-status-problem {
+  color: var(--ink);
+  border-left: 2px solid var(--ai);
+}
+
+/* Page: prose column with the gloss column to its right */
+.page {
+  grid-area: page;
+  overflow-y: auto;
+}
+
+.page-empty {
+  padding: 48px;
+  color: var(--ink-3);
+}
+
+.document {
+  display: grid;
+  grid-template-columns: minmax(0, var(--prose-width)) var(--gloss-width);
+  gap: 48px;
+  padding: 48px 48px 120px 96px;
+}
+
+.document-head {
+  margin-bottom: 24px;
+}
+
+.title-field {
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--ink);
+  font-family: var(--font-prose);
+  font-size: 30px;
+  padding: 0;
+}
+
+.save-status {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.save-status-problem {
+  padding-left: 8px;
+}
+
+.gloss-column {
+  border-left: 1px solid var(--rule);
+}
+
+/* Prose */
+.prose {
+  font-family: var(--font-prose);
+  font-size: 19px;
+  line-height: 1.62;
+  outline: none;
+  white-space: pre-wrap;
+}
+
+.prose p,
+.prose blockquote {
+  margin: 0 0 0.8em;
+}
+
+.prose h1,
+.prose h2,
+.prose h3 {
+  font-weight: normal;
+  line-height: 1.25;
+  margin: 1.2em 0 0.5em;
+}
+
+.prose blockquote {
+  padding-left: 1em;
+  border-left: 1px solid var(--rule);
+  color: var(--ink-2);
+}
+
+.prose ul,
+.prose ol {
+  margin: 0 0 0.4em;
+}
+
+.prose .inline-link {
+  text-decoration: underline;
+  text-decoration-color: var(--ink-3);
+  text-underline-offset: 3px;
+}
+
+.prose .inline-link[data-unsafe-link] {
+  text-decoration-style: dotted;
+}
+
+.prose .block-hr hr {
+  border: none;
+  border-top: 1px solid var(--rule);
+  margin: 1.4em 0;
+}
+
+.prose code {
+  font-size: 0.85em;
+}
+
+/* AI segment: the double-ruled plate */
+.prose .ai-segment {
+  position: relative;
+  margin: 0 0 0.8em;
+  padding-left: 1em;
+  border-left: 3px double var(--ai);
+}
+
+.prose .ai-segment-label {
+  position: absolute;
+  left: -4.5em;
+  width: 3.5em;
+  text-align: right;
+  font-family: var(--font-apparatus);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ai);
+  user-select: none;
+}
+
+.prose .placeholder {
+  color: var(--ink-3);
+  font-style: italic;
+}

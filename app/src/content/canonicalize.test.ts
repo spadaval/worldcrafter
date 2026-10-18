@@ -208,4 +208,28 @@ describe("canonicalize", () => {
       reason: expect.stringMatching(/listRestart/),
     });
   });
+
+  test("NFC-normalises link URLs and nothing else", () => {
+    const decomposed = "cafe\u0301";
+    const value = [
+      {
+        type: "p",
+        id: "a",
+        children: [
+          { text: decomposed },
+          {
+            type: "a",
+            url: `https://example.com/${decomposed}`,
+            children: [{ text: decomposed }],
+          },
+          { text: "" },
+        ],
+      },
+    ];
+    const link = (canonicalize(value) as typeof value)[0]?.children[1];
+    expect(link).toMatchObject({
+      url: "https://example.com/caf\u00e9",
+      children: [{ text: decomposed }],
+    });
+  });
 });

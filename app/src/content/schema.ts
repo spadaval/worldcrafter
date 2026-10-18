@@ -102,7 +102,8 @@ export function isInternalLinkTarget(url: string): boolean {
   return isCanonicalName(url);
 }
 
-function isLinkTarget(url: string): boolean {
+/** True when `url` is a link target the schema accepts. */
+export function isLinkTarget(url: string): boolean {
   return (
     isInternalLinkTarget(url) ||
     // Control characters would not survive the markdown line structure.

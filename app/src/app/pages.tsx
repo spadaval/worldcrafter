@@ -1,10 +1,11 @@
 import { useParams } from "@tanstack/react-router";
-import { Plate, PlateContent } from "platejs/react";
+import { Plate } from "platejs/react";
 import { useEffect, useState } from "react";
-import type { DocumentSession } from "~/workspace/document-session";
+import type { DocumentSession, SaveStatus } from "~/workspace/document-session";
 import type { CommandError } from "~/workspace/workspace";
 import { describeCommandError, describeSaveStatus } from "./environment";
-import { useStore, useWorkspace } from "./hooks";
+import { Sheet } from "./gloss";
+import { useServices, useStore, useWorkspace } from "./hooks";
 
 export function HomePage() {
   const workspace = useWorkspace();
@@ -12,8 +13,8 @@ export function HomePage() {
     <div className="page-empty">
       <p>
         {workspace.readOnly
-          ? "Pick a document from the list to read it."
-          : "Pick a document from the list, or create a new one."}
+          ? "Pick a scene or document from the rail to read it."
+          : "Pick a scene or document from the rail, or start a new document."}
       </p>
     </div>
   );
@@ -58,25 +59,32 @@ export function DocumentPage() {
 }
 
 function DocumentView({ session }: { session: DocumentSession }) {
+  const { manuscript } = useServices();
+  const state = useStore(manuscript.state);
+  const scene =
+    state.kind === "ready"
+      ? state.view.scenes.get(session.documentId)
+      : undefined;
   return (
-    <div className="document">
-      <div className="prose-column">
-        <div className="document-head">
-          <TitleField session={session} />
-          <SaveStatusLine session={session} />
-        </div>
-        <Plate editor={session.editor} readOnly={session.readOnly}>
-          <PlateContent
-            className="prose"
-            aria-label="Document text"
-            readOnly={session.readOnly}
-            placeholder="Begin…"
-          />
-        </Plate>
-      </div>
-      {/* Gloss notes, context and AI review arrive in later increments. */}
-      <aside className="gloss-column" aria-label="Notes" />
-    </div>
+    <Plate editor={session.editor} readOnly={session.readOnly}>
+      <Sheet
+        session={session}
+        head={
+          <div className="document-head">
+            <div className="head-margin">
+              {scene && (
+                <span className="scene-number" aria-hidden="true">
+                  {scene.position}
+                </span>
+              )}
+              <SaveStatusLine session={session} />
+            </div>
+            <TitleField session={session} />
+            <SaveProblem session={session} />
+          </div>
+        }
+      />
+    </Plate>
   );
 }
 
@@ -106,14 +114,29 @@ function TitleField({ session }: { session: DocumentSession }) {
   );
 }
 
+const isProblem = (status: SaveStatus) =>
+  status.kind === "invalid" || status.kind === "failed";
+
+/** The short status, in the margin beside the title. */
 function SaveStatusLine({ session }: { session: DocumentSession }) {
   const status = useStore(session.status);
-  const problem = status.kind === "invalid" || status.kind === "failed";
   return (
-    <p
-      className={problem ? "save-status save-status-problem" : "save-status"}
-      role={problem ? "alert" : "status"}
+    <output
+      className={
+        isProblem(status) ? "save-status save-status-problem" : "save-status"
+      }
     >
+      {isProblem(status) ? "Not saved" : describeSaveStatus(status)}
+    </output>
+  );
+}
+
+/** What went wrong and what happens next, under the title, when a save fails. */
+function SaveProblem({ session }: { session: DocumentSession }) {
+  const status = useStore(session.status);
+  if (!isProblem(status)) return null;
+  return (
+    <p className="save-problem" role="alert">
       {describeSaveStatus(status)}
     </p>
   );

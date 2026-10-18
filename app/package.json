@@ -8,9 +8,12 @@
     "format": "biome format --write",
     "test": "bun test",
     "build": "tsc --noEmit && vite build",
-    "bench:block-ids": "bun scripts/bench-block-ids.ts"
+    "bench:block-ids": "bun scripts/bench-block-ids.ts",
+    "measure:layers": "bun scripts/measure-layers.ts"
   },
   "dependencies": {
+    "@fontsource/old-standard-tt": "^5.3.0",
+    "@fontsource/source-sans-3": "^5.3.1",
     "@platejs/autoformat": "^52",
     "@platejs/basic-nodes": "^52",
     "@platejs/link": "^52",

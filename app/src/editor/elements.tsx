@@ -1,4 +1,10 @@
 import { PlateElement, type PlateElementProps } from "platejs/react";
+import { createContext, useContext } from "react";
+
+/** The model that wrote each AI segment, by segment ID (from its provenance). */
+export const SegmentModelsContext = createContext<ReadonlyMap<string, string>>(
+  new Map(),
+);
 
 /**
  * Element renderers for the restricted schema. Styling lives in the app's
@@ -27,11 +33,15 @@ export function LinkElement(props: PlateElementProps) {
 }
 
 /**
- * AI-made text: the "double-ruled plate". The label says what made it and
+ * AI-made text: the "double-ruled plate". The caption says what made it and
  * whether it is still arriving; provenance lives in the sidecar, not here.
+ * Accept and regenerate arrive with generation, so they show but are off.
  */
 export function AiSegmentElement(props: PlateElementProps) {
   const generating = props.element.status === "generating";
+  const id = String(props.element.id ?? "");
+  const model = useContext(SegmentModelsContext).get(id);
+  const unavailable = "Accept and regenerate aren't in this build yet.";
   return (
     <PlateElement
       {...props}
@@ -39,14 +49,26 @@ export function AiSegmentElement(props: PlateElementProps) {
       className="ai-segment"
       attributes={{
         ...props.attributes,
-        "data-ai-segment": String(props.element.id ?? ""),
+        "data-ai-segment": id,
         "data-status": String(props.element.status ?? "ready"),
         "aria-busy": generating,
         "aria-label": generating ? "AI text, generating" : "AI text",
       }}
     >
       <span className="ai-segment-label" contentEditable={false}>
-        {generating ? "AI · generating" : "AI"}
+        <span className="ai-segment-source">
+          {generating ? "AI · generating" : "AI segment"}
+          {model && <span className="ai-segment-model"> · {model}</span>}
+        </span>
+        <span className="ai-segment-actions">
+          <span className="ai-segment-pending">Not connected yet</span>
+          <button type="button" disabled title={unavailable}>
+            Regenerate
+          </button>
+          <button type="button" disabled title={unavailable}>
+            Accept
+          </button>
+        </span>
       </span>
       {props.children}
     </PlateElement>

@@ -21,9 +21,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Story-time core: events, frames, fact changes, holds/revealed queries"
-updated_at: "2026-10-18T00:32:27.061717800+00:00"
+updated_at: "2026-10-18T00:39:07.158938927+00:00"
 ---
 
 ## Goal

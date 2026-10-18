@@ -43,6 +43,18 @@ Tables, columns, media, equations, callouts, toggles and the rest are out until 
 
 What this buys us: with every content node projecting losslessly, **markdown with a few directives becomes a valid storage format**, not just an export. That matters for the browser-vs-desktop decision (plain files on disk, git-friendly, readable by other tools and agents). We don't have to switch to markdown storage now. The restricted schema keeps the option open.
 
+### Export syntax (as built, `app/src/content/`)
+
+The full spec is the comment at the top of `app/src/content/markdown.ts`. In short:
+
+- Every block ends with its ID as a trailing `{#id}` (alone when the block is empty): `Some _text_. {#b_2}`, `--- {#r_1}`.
+- Headings use `#`/`##`/`###`, quotes `> `, bullets `- `, numbered items `N. `. Nested items are indented to the parent's content column. An indent that can't be derived from nesting (a skipped level, or a list that starts indented) is written explicitly: `{#b_10 indent=4}`, with values from 1 to 32.
+- AI segments and placeholders are container directives: `:::ai{#seg_1 status=ready}` … `:::` and `:::placeholder{#b_9}` … `:::`.
+- Inline marks are `**bold**`, `_italic_`, `~~strike~~` and `` `code` ``; links are `[label](canonical-name)` or `[label](https://…)`. A line break inside a block is a backslash at the end of the line.
+- Text is escaped so it can never be read as syntax. The parser is strict to this format; it is not a general markdown importer.
+
+Plate stores some derived or invisible state that the schema doesn't allow (`listStart` on list items, marks on empty text). The save path runs `canonicalize()` before validating, which removes exactly those and changes nothing else. Numbering restarts, to-do items, and list styles on headings or quotes are rejected, so the editor must be configured not to produce them.
+
 ## Boundary 3: conversions are asymmetric
 
 **Tree → text is a *projection*.** It is deterministic, may be lossy, and is specific to its purpose. Each projection returns text **plus a source map** (text range → `blockId` + offset), so results computed on the text can be mapped back.
@@ -64,7 +76,7 @@ What this buys us: with every content node projecting losslessly, **markdown wit
 
 ## Boundary 4: stable block IDs are mandatory
 
-Every block gets a persistent ID (Plate's `NodeIdPlugin`, with IDs preserved through copy and split). Annotations, AI edit operations, entity anchors and "mentions" views all depend on it. This is the prerequisite for everything above, and it should be in place before any AI feature is rebuilt.
+Every block gets a persistent ID, assigned by `BlockIdPlugin` (`app/src/editor/block-id-plugin.ts`, an extension of Plate's `NodeIdPlugin`). IDs are kept on reload, stay with a block's leading content on split, and are restored exactly by undo and redo. On a merge the upper block keeps its ID. Pasted blocks always get fresh IDs, including after a cut. The per-case rules are recorded on worldcrafter-wtj4. Annotations, AI edit operations, entity anchors and "mentions" views all depend on it. This is the prerequisite for everything above, and it should be in place before any AI feature is rebuilt.
 
 ## Boundary 5: world context is assembled, not serialized
 

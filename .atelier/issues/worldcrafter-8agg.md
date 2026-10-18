@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Discovery and bookkeeping: suggestions, scene breakdowns, time placement"
-updated_at: "2026-10-18T01:06:39.191560280+00:00"
+updated_at: "2026-10-18T06:12:25.441773247+00:00"
 ---
 
 ## Goal
@@ -55,3 +55,4 @@ backends (probably once per scene when the writer leaves it, cached by content h
 ## Notes
 
 - 2026-10-17 [note] From the 2ony story-time review (2026-10-17): (R8) the timeline commands removeConstraint, removeReveal, followFrame and addFrame take no authority, so an inferred (AI bookkeeping) caller could delete or replace asserted data. Add authority to them before the bookkeeping pass writes timelines. (R7) the AI's time placement must use placeScene; constrain cannot override a default placement.
+- 2026-10-18 [note] From itgc (2026-10-18): building a timeline one command at a time costs ~12 ms per command at 2,000 events (each command parses, compiles twice and rewrites the whole record; 2,000 events ≈ 25 s). Add a batch timeline command before the bookkeeping pass writes timelines.

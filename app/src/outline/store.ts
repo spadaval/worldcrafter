@@ -2,8 +2,20 @@
  * Persists the world's outline through the storage adapter, checking it
  * against the documents that exist.
  */
-import { errAsync, okAsync, ResultAsync } from "neverthrow";
-import type { StorageAdapter, StorageError } from "../storage/types";
+import {
+  err,
+  errAsync,
+  ok,
+  okAsync,
+  type Result,
+  ResultAsync,
+} from "neverthrow";
+import { failure } from "../storage/internal";
+import type {
+  StorageAdapter,
+  StorageError,
+  StorageFailure,
+} from "../storage/types";
 import {
   applyOutlineCommand,
   danglingScenes,
@@ -12,7 +24,7 @@ import {
   type Outline,
   type OutlineCommand,
   type OutlineError,
-  validateOutline,
+  outlineProblems,
 } from "./outline";
 
 /** The key of the world's one outline record. */
@@ -27,9 +39,15 @@ export interface LoadedOutline {
    * The outline still contains them; `removeScene` takes each one out.
    */
   readonly dangling: readonly string[];
+  /**
+   * Broken invariants in the stored record (a scene or ID used twice). Only a
+   * record not written by `runOutlineCommand` can have these; commands such
+   * as `removeScene` and `removeChapter` repair them.
+   */
+  readonly problems: readonly OutlineError[];
 }
 
-/** The saved outline (empty if none has been saved) and its dangling scenes. */
+/** The saved outline (empty if none has been saved), with what is wrong with it. */
 export function loadOutline(
   storage: StorageAdapter,
 ): ResultAsync<LoadedOutline, StorageError> {
@@ -37,6 +55,7 @@ export function loadOutline(
     storage.documents.list().map((documents) => ({
       outline,
       dangling: danglingScenes(outline, new Set(documents.map(({ id }) => id))),
+      problems: outlineProblems(outline),
     })),
   );
 }
@@ -44,8 +63,8 @@ export function loadOutline(
 /**
  * Applies `command` to the saved outline and saves the result. Rejects only
  * problems the command introduces: a broken invariant, or an `addScene` of a
- * document that does not exist. Scenes left dangling by deleted documents do
- * not block other edits.
+ * document that does not exist. Problems already in the stored record (see
+ * `LoadedOutline`) do not block edits, so they can be repaired one at a time.
  *
  * Commands on one adapter run one at a time, so concurrent commands each see
  * the previous one's result. Other tabs are not coordinated: last write wins.
@@ -55,11 +74,14 @@ export function runOutlineCommand(
   command: OutlineCommand,
   now: number = Date.now(),
 ): ResultAsync<Outline, OutlineStoreError> {
-  return serialised(storage, () =>
+  return serialised(storage, command, () =>
     requireDocument(storage, command)
       .andThen(() => loadSaved(storage))
-      .andThen((outline) => applyOutlineCommand(outline, command))
-      .andThen(validateOutline)
+      .andThen((saved) =>
+        applyOutlineCommand(saved, command).andThen((outline) =>
+          noNewProblems(saved, outline),
+        ),
+      )
       .andThen((outline) =>
         storage.outlines
           .save({ id: OUTLINE_ID, books: outline.books, updatedAt: now })
@@ -68,18 +90,50 @@ export function runOutlineCommand(
   );
 }
 
-/** The tail of each adapter's command queue. */
-const queues = new WeakMap<StorageAdapter, Promise<unknown>>();
+function noNewProblems(
+  before: Outline,
+  after: Outline,
+): Result<Outline, OutlineError> {
+  // Messages are built from the kind and ID alone, so they identify a problem.
+  const known = new Set(outlineProblems(before).map(({ message }) => message));
+  const added = outlineProblems(after).find(
+    ({ message }) => !known.has(message),
+  );
+  return added === undefined ? ok(after) : err(added);
+}
+
+/** The tail of each adapter's command queue. It never rejects. */
+const queues = new WeakMap<StorageAdapter, Promise<void>>();
 
 function serialised<T, E>(
   storage: StorageAdapter,
+  command: OutlineCommand,
   work: () => ResultAsync<T, E>,
-): ResultAsync<T, E> {
+): ResultAsync<T, E | StorageFailure> {
   const previous = queues.get(storage) ?? Promise.resolve();
-  // A ResultAsync resolves to a Result rather than rejecting, so one failed
-  // command never stalls the queue.
-  const next = previous.then(() => work());
-  queues.set(storage, next);
+  // A throw or rejected promise inside `work` (a bug, or a malformed stored
+  // record) becomes this command's Err, so later commands still run.
+  const next = previous
+    .then(() => work())
+    .then(
+      (result): Result<T, E | StorageFailure> => result,
+      (cause) =>
+        err(
+          failure(
+            { operation: "save", collection: "outlines", id: OUTLINE_ID },
+            new Error(
+              `outline command ${command.type} failed: ${String(cause)}`,
+              {
+                cause,
+              },
+            ),
+          ),
+        ),
+    );
+  queues.set(
+    storage,
+    next.then(() => undefined),
+  );
   return new ResultAsync(next);
 }
 

@@ -165,29 +165,28 @@ export function formatScenePosition(position: ScenePosition): string {
 }
 
 /**
- * Checks the outline's own invariants: book and chapter IDs are unique and no
- * document is referenced twice. Whether the documents exist is a separate
- * question (see `danglingScenes`), because deleting a document must not make
- * the outline unreadable.
+ * Every broken invariant, in outline order: book and chapter IDs must be
+ * unique and no document may be referenced twice. One error for each repeat.
+ * Whether the documents exist is a separate question (see `danglingScenes`),
+ * because deleting a document must not make the outline unreadable.
  */
-export function validateOutline(
-  outline: Outline,
-): Result<Outline, OutlineError> {
+export function outlineProblems(outline: Outline): OutlineError[] {
+  const problems: OutlineError[] = [];
   const containerIds = new Set<string>();
   const sceneIds = new Set<string>();
   for (const book of outline.books) {
     for (const id of [book.id, ...book.chapters.map((chapter) => chapter.id)]) {
-      if (containerIds.has(id)) return err(duplicateId(id));
+      if (containerIds.has(id)) problems.push(duplicateId(id));
       containerIds.add(id);
     }
     for (const chapter of book.chapters) {
       for (const documentId of chapter.scenes) {
-        if (sceneIds.has(documentId)) return err(duplicateScene(documentId));
+        if (sceneIds.has(documentId)) problems.push(duplicateScene(documentId));
         sceneIds.add(documentId);
       }
     }
   }
-  return ok(outline);
+  return problems;
 }
 
 /** Document IDs of every scene whose document is not in `documentIds`, in reading order. */

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { IDBFactory } from "fake-indexeddb";
+import { ResultAsync } from "neverthrow";
 import { openIndexedDbStorage } from "../storage/indexeddb";
 import { createMemoryStorage } from "../storage/memory";
 import type { StorageAdapter } from "../storage/types";
@@ -56,6 +57,7 @@ for (const [name, open] of [
       expect((await loadOutline(storage))._unsafeUnwrap()).toEqual({
         outline: emptyOutline,
         dangling: [],
+        problems: [],
       });
     });
 
@@ -154,6 +156,76 @@ for (const [name, open] of [
         { id: "c1", title: "Landfall", scenes: ["s1"] },
         { id: "c2", title: "The Flats", scenes: ["s3", "draft"] },
       ]);
+    });
+
+    test("a stored record that breaks the outline's rules is reported and repairable", async () => {
+      (
+        await storage.outlines.save({
+          id: OUTLINE_ID,
+          books: [
+            {
+              id: "b1",
+              title: "t",
+              chapters: [
+                { id: "c1", title: "t", scenes: ["s1", "s2"] },
+                { id: "c2", title: "t", scenes: ["s1"] },
+                { id: "c2", title: "t", scenes: [] },
+              ],
+            },
+          ],
+          updatedAt: 1,
+        })
+      )._unsafeUnwrap();
+      const loaded = (await loadOutline(storage))._unsafeUnwrap();
+      expect(loaded.problems).toMatchObject([
+        { kind: "duplicate_id", id: "c2" },
+        { kind: "duplicate_scene", documentId: "s1" },
+      ]);
+      expect(loaded.dangling).toEqual([]);
+
+      // Edits that add no problem still work, and repairs go one at a time.
+      await runAll(storage, [
+        { type: "renameChapter", chapterId: "c1", title: "Arrival" },
+        { type: "removeScene", documentId: "s1" },
+      ]);
+      expect(
+        (await loadOutline(storage))._unsafeUnwrap().problems,
+      ).toMatchObject([{ kind: "duplicate_id", id: "c2" }]);
+      await runAll(storage, [{ type: "removeChapter", chapterId: "c2" }]);
+      expect((await loadOutline(storage))._unsafeUnwrap().problems).toEqual([]);
+      expect(await sceneOrder(storage)).toEqual(["s2"]);
+    });
+
+    test("a command that throws is an Err and later commands still run", async () => {
+      await runAll(storage, build);
+      let failOnce = true;
+      const flaky: StorageAdapter = {
+        ...storage,
+        outlines: {
+          ...storage.outlines,
+          load: (key) => {
+            if (!failOnce) return storage.outlines.load(key);
+            failOnce = false;
+            return new ResultAsync(Promise.reject(new Error("disk on fire")));
+          },
+        },
+      };
+      const broken = await runOutlineCommand(flaky, {
+        type: "renameChapter",
+        chapterId: "c1",
+        title: "x",
+      });
+      expect(broken._unsafeUnwrapErr()).toMatchObject({
+        kind: "failure",
+        collection: "outlines",
+        message: expect.stringContaining("disk on fire"),
+      });
+      const next = await runOutlineCommand(flaky, {
+        type: "renameChapter",
+        chapterId: "c1",
+        title: "Landfall",
+      });
+      expect(next.isOk()).toBe(true);
     });
 
     test("storage failures come back as Results", async () => {

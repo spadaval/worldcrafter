@@ -9,8 +9,8 @@ import {
   type Outline,
   type OutlineCommand,
   type OutlineError,
+  outlineProblems,
   readingOrder,
-  validateOutline,
 } from "./outline";
 
 function run(outline: Outline, ...commands: OutlineCommand[]): Outline {
@@ -317,9 +317,9 @@ describe("danglingScenes", () => {
   });
 });
 
-describe("validateOutline", () => {
-  test("accepts an outline with unique IDs and each scene once", () => {
-    expect(validateOutline(built)._unsafeUnwrap()).toBe(built);
+describe("outlineProblems", () => {
+  test("an outline built by commands has none", () => {
+    expect(outlineProblems(built)).toEqual([]);
   });
 
   test("a document referenced twice is a duplicate_scene error", () => {
@@ -335,10 +335,9 @@ describe("validateOutline", () => {
         },
       ],
     };
-    expect(failure(validateOutline(twice))).toMatchObject({
-      kind: "duplicate_scene",
-      documentId: "s1",
-    });
+    expect(outlineProblems(twice)).toMatchObject([
+      { kind: "duplicate_scene", documentId: "s1" },
+    ]);
   });
 
   test("two chapters with one ID is a duplicate_id error", () => {
@@ -356,9 +355,8 @@ describe("validateOutline", () => {
         },
       ],
     };
-    expect(failure(validateOutline(shared))).toMatchObject({
-      kind: "duplicate_id",
-      id: "c1",
-    });
+    expect(outlineProblems(shared)).toMatchObject([
+      { kind: "duplicate_id", id: "c1" },
+    ]);
   });
 });

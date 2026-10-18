@@ -2,11 +2,13 @@
  * Persists the world's outline through the storage adapter, checking it
  * against the documents that exist.
  */
-import { errAsync, okAsync, type ResultAsync } from "neverthrow";
+import { errAsync, okAsync, ResultAsync } from "neverthrow";
 import type { StorageAdapter, StorageError } from "../storage/types";
 import {
   applyOutlineCommand,
+  danglingScenes,
   emptyOutline,
+  missingDocument,
   type Outline,
   type OutlineCommand,
   type OutlineError,
@@ -18,38 +20,87 @@ export const OUTLINE_ID = "manuscript";
 
 export type OutlineStoreError = OutlineError | StorageError;
 
-/**
- * The saved outline, or an empty one if none has been saved. Fails with
- * `missing_document` if a scene's document has since been deleted; a
- * `removeScene` command repairs that.
- */
+export interface LoadedOutline {
+  readonly outline: Outline;
+  /**
+   * Document IDs of scenes whose document has been deleted, in reading order.
+   * The outline still contains them; `removeScene` takes each one out.
+   */
+  readonly dangling: readonly string[];
+}
+
+/** The saved outline (empty if none has been saved) and its dangling scenes. */
 export function loadOutline(
   storage: StorageAdapter,
-): ResultAsync<Outline, OutlineStoreError> {
-  return loadUnchecked(storage).andThen((outline) => checked(storage, outline));
+): ResultAsync<LoadedOutline, StorageError> {
+  return loadSaved(storage).andThen((outline) =>
+    storage.documents.list().map((documents) => ({
+      outline,
+      dangling: danglingScenes(outline, new Set(documents.map(({ id }) => id))),
+    })),
+  );
 }
 
 /**
- * Applies `command` to the saved outline and saves the result if it is valid.
- * The saved outline is not validated first, so a command can repair it.
- * Load and save are separate steps: concurrent commands are last write wins.
+ * Applies `command` to the saved outline and saves the result. Rejects only
+ * problems the command introduces: a broken invariant, or an `addScene` of a
+ * document that does not exist. Scenes left dangling by deleted documents do
+ * not block other edits.
+ *
+ * Commands on one adapter run one at a time, so concurrent commands each see
+ * the previous one's result. Other tabs are not coordinated: last write wins.
  */
 export function runOutlineCommand(
   storage: StorageAdapter,
   command: OutlineCommand,
   now: number = Date.now(),
 ): ResultAsync<Outline, OutlineStoreError> {
-  return loadUnchecked(storage)
-    .andThen((outline) => applyOutlineCommand(outline, command))
-    .andThen((outline) => checked(storage, outline))
-    .andThen((outline) =>
-      storage.outlines
-        .save({ id: OUTLINE_ID, books: outline.books, updatedAt: now })
-        .map(() => outline),
+  return serialised(storage, () =>
+    requireDocument(storage, command)
+      .andThen(() => loadSaved(storage))
+      .andThen((outline) => applyOutlineCommand(outline, command))
+      .andThen(validateOutline)
+      .andThen((outline) =>
+        storage.outlines
+          .save({ id: OUTLINE_ID, books: outline.books, updatedAt: now })
+          .map(() => outline),
+      ),
+  );
+}
+
+/** The tail of each adapter's command queue. */
+const queues = new WeakMap<StorageAdapter, Promise<unknown>>();
+
+function serialised<T, E>(
+  storage: StorageAdapter,
+  work: () => ResultAsync<T, E>,
+): ResultAsync<T, E> {
+  const previous = queues.get(storage) ?? Promise.resolve();
+  // A ResultAsync resolves to a Result rather than rejecting, so one failed
+  // command never stalls the queue.
+  const next = previous.then(() => work());
+  queues.set(storage, next);
+  return new ResultAsync(next);
+}
+
+function requireDocument(
+  storage: StorageAdapter,
+  command: OutlineCommand,
+): ResultAsync<void, OutlineStoreError> {
+  if (command.type !== "addScene") return okAsync(undefined);
+  return storage.documents
+    .load(command.documentId)
+    .map(() => undefined)
+    .orElse((error) =>
+      errAsync<void, OutlineStoreError>(
+        error.kind === "not_found"
+          ? missingDocument(command.documentId)
+          : error,
+      ),
     );
 }
 
-function loadUnchecked(
+function loadSaved(
   storage: StorageAdapter,
 ): ResultAsync<Outline, StorageError> {
   return storage.outlines
@@ -57,18 +108,5 @@ function loadUnchecked(
     .map((record): Outline => ({ books: record.books }))
     .orElse((error) =>
       error.kind === "not_found" ? okAsync(emptyOutline) : errAsync(error),
-    );
-}
-
-function checked(
-  storage: StorageAdapter,
-  outline: Outline,
-): ResultAsync<Outline, OutlineStoreError> {
-  // Reads every document's content just for its ID. Fine at today's sizes;
-  // add an ID-only listing to the adapter if it shows up.
-  return storage.documents
-    .list()
-    .andThen((documents) =>
-      validateOutline(outline, new Set(documents.map(({ id }) => id))),
     );
 }

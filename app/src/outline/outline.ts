@@ -104,14 +104,22 @@ export type OutlineError =
       readonly message: string;
     };
 
-/** 1-based, within the enclosing level: chapter 4, scene 2 of book 1. */
+/**
+ * 1-based, within the enclosing level: chapter 4, scene 2 of book 1. For
+ * display only; it changes whenever the outline is edited.
+ */
 export interface ScenePosition {
   readonly book: number;
   readonly chapter: number;
   readonly scene: number;
 }
 
-/** A scene's place in narrative order. */
+/**
+ * A scene's place in narrative order, derived from the current outline.
+ * Anything stored that refers to a scene (events, reveals, fact changes) must
+ * anchor to `documentId`. `position` and `order` are for display and for
+ * comparing scenes now; they change on every edit, so never persist them.
+ */
 export interface SceneRef {
   readonly documentId: string;
   readonly bookId: string;
@@ -148,18 +156,22 @@ export function findScene(
   return readingOrder(outline).find((ref) => ref.documentId === documentId);
 }
 
-/** "4.2": chapter 4, scene 2. The book is left to the surrounding context. */
+/**
+ * "4.2": chapter 4, scene 2. The book is omitted, so the label is ambiguous
+ * across books; show the book alongside it when there is more than one.
+ */
 export function formatScenePosition(position: ScenePosition): string {
   return `${position.chapter}.${position.scene}`;
 }
 
 /**
- * Checks the outline's invariants: book and chapter IDs are unique, no
- * document is referenced twice, and every referenced document exists.
+ * Checks the outline's own invariants: book and chapter IDs are unique and no
+ * document is referenced twice. Whether the documents exist is a separate
+ * question (see `danglingScenes`), because deleting a document must not make
+ * the outline unreadable.
  */
 export function validateOutline(
   outline: Outline,
-  documentIds: ReadonlySet<string>,
 ): Result<Outline, OutlineError> {
   const containerIds = new Set<string>();
   const sceneIds = new Set<string>();
@@ -171,13 +183,6 @@ export function validateOutline(
     for (const chapter of book.chapters) {
       for (const documentId of chapter.scenes) {
         if (sceneIds.has(documentId)) return err(duplicateScene(documentId));
-        if (!documentIds.has(documentId)) {
-          return err({
-            kind: "missing_document",
-            documentId,
-            message: `Scene ${documentId} in chapter ${chapter.id} references a document that does not exist`,
-          });
-        }
         sceneIds.add(documentId);
       }
     }
@@ -185,10 +190,28 @@ export function validateOutline(
   return ok(outline);
 }
 
+/** Document IDs of every scene whose document is not in `documentIds`, in reading order. */
+export function danglingScenes(
+  outline: Outline,
+  documentIds: ReadonlySet<string>,
+): string[] {
+  return readingOrder(outline)
+    .map((ref) => ref.documentId)
+    .filter((documentId) => !documentIds.has(documentId));
+}
+
+export function missingDocument(documentId: string): OutlineError {
+  return {
+    kind: "missing_document",
+    documentId,
+    message: `Document ${documentId} does not exist, so it cannot be a scene`,
+  };
+}
+
 /**
  * Applies one edit. Rejects references to unknown books, chapters and scenes,
  * reused IDs, and adding a document that is already in the outline. Whether a
- * document exists is not known here; `validateOutline` checks that.
+ * document exists is not known here; the caller checks that for `addScene`.
  */
 export function applyOutlineCommand(
   outline: Outline,

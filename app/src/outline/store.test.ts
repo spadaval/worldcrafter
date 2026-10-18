@@ -36,9 +36,8 @@ async function runAll(storage: StorageAdapter, commands: OutlineCommand[]) {
 }
 
 async function sceneOrder(storage: StorageAdapter): Promise<string[]> {
-  return readingOrder((await loadOutline(storage))._unsafeUnwrap()).map(
-    (ref) => ref.documentId,
-  );
+  const { outline } = (await loadOutline(storage))._unsafeUnwrap();
+  return readingOrder(outline).map((ref) => ref.documentId);
 }
 
 for (const [name, open] of [
@@ -54,9 +53,10 @@ for (const [name, open] of [
     afterEach(() => storage.close());
 
     test("a world with no saved outline has an empty one", async () => {
-      expect((await loadOutline(storage))._unsafeUnwrap()).toEqual(
-        emptyOutline,
-      );
+      expect((await loadOutline(storage))._unsafeUnwrap()).toEqual({
+        outline: emptyOutline,
+        dangling: [],
+      });
     });
 
     test("commands are saved and the outline loads back", async () => {
@@ -98,15 +98,62 @@ for (const [name, open] of [
       });
     });
 
-    test("a deleted scene document fails the load until its scene is removed", async () => {
+    test("deleted scene documents are reported, not fatal, and can be removed one at a time", async () => {
       await runAll(storage, build);
+      (await storage.documents.delete("s1"))._unsafeUnwrap();
       (await storage.documents.delete("s2"))._unsafeUnwrap();
-      expect((await loadOutline(storage))._unsafeUnwrapErr()).toMatchObject({
-        kind: "missing_document",
-        documentId: "s2",
-      });
+      const loaded = (await loadOutline(storage))._unsafeUnwrap();
+      expect(loaded.dangling).toEqual(["s1", "s2"]);
+      expect(readingOrder(loaded.outline).map((ref) => ref.documentId)).toEqual(
+        ["s1", "s2", "s3"],
+      );
+
+      // Unrelated edits still work while scenes dangle.
+      await runAll(storage, [
+        { type: "renameChapter", chapterId: "c2", title: "Flats" },
+        { type: "removeScene", documentId: "s1" },
+      ]);
+      expect((await loadOutline(storage))._unsafeUnwrap().dangling).toEqual([
+        "s2",
+      ]);
       await runAll(storage, [{ type: "removeScene", documentId: "s2" }]);
-      expect(await sceneOrder(storage)).toEqual(["s1", "s3"]);
+      expect((await loadOutline(storage))._unsafeUnwrap()).toMatchObject({
+        dangling: [],
+      });
+      expect(await sceneOrder(storage)).toEqual(["s3"]);
+    });
+
+    test("concurrent commands each apply to the previous one's result", async () => {
+      await runAll(storage, build);
+      const results = await Promise.all([
+        runOutlineCommand(storage, { type: "removeScene", documentId: "s2" }),
+        runOutlineCommand(storage, {
+          type: "renameChapter",
+          chapterId: "c1",
+          title: "Landfall",
+        }),
+        runOutlineCommand(storage, {
+          type: "addScene",
+          chapterId: "c1",
+          documentId: "ghost",
+        }),
+        runOutlineCommand(storage, {
+          type: "addScene",
+          chapterId: "c2",
+          documentId: "draft",
+        }),
+      ]);
+      expect(results.map((result) => result.isOk())).toEqual([
+        true,
+        true,
+        false,
+        true,
+      ]);
+      const { outline } = (await loadOutline(storage))._unsafeUnwrap();
+      expect(outline.books[0]?.chapters).toEqual([
+        { id: "c1", title: "Landfall", scenes: ["s1"] },
+        { id: "c2", title: "The Flats", scenes: ["s3", "draft"] },
+      ]);
     });
 
     test("storage failures come back as Results", async () => {

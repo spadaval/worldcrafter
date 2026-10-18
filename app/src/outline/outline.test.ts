@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { Result } from "neverthrow";
 import {
   applyOutlineCommand,
+  danglingScenes,
   emptyOutline,
   findScene,
   formatScenePosition,
@@ -307,17 +308,18 @@ describe("rejected edits", () => {
   });
 });
 
-describe("validateOutline", () => {
-  const documents = new Set(["s1", "s2", "s3", "s4"]);
-
-  test("accepts an outline whose scenes all exist, once each", () => {
-    expect(validateOutline(built, documents)._unsafeUnwrap()).toBe(built);
+describe("danglingScenes", () => {
+  test("lists every scene whose document is gone, in reading order", () => {
+    expect(danglingScenes(built, new Set(["s2", "s4"]))).toEqual(["s1", "s3"]);
+    expect(danglingScenes(built, new Set(["s1", "s2", "s3", "s4"]))).toEqual(
+      [],
+    );
   });
+});
 
-  test("a scene whose document does not exist is a missing_document error", () => {
-    const error = failure(validateOutline(built, new Set(["s1", "s2", "s4"])));
-    expect(error).toMatchObject({ kind: "missing_document", documentId: "s3" });
-    expect(error.message).toContain("s3");
+describe("validateOutline", () => {
+  test("accepts an outline with unique IDs and each scene once", () => {
+    expect(validateOutline(built)._unsafeUnwrap()).toBe(built);
   });
 
   test("a document referenced twice is a duplicate_scene error", () => {
@@ -333,7 +335,7 @@ describe("validateOutline", () => {
         },
       ],
     };
-    expect(failure(validateOutline(twice, documents))).toMatchObject({
+    expect(failure(validateOutline(twice))).toMatchObject({
       kind: "duplicate_scene",
       documentId: "s1",
     });
@@ -354,7 +356,7 @@ describe("validateOutline", () => {
         },
       ],
     };
-    expect(failure(validateOutline(shared, documents))).toMatchObject({
+    expect(failure(validateOutline(shared))).toMatchObject({
       kind: "duplicate_id",
       id: "c1",
     });

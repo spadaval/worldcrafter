@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "AI edit proposals by block ID"
-updated_at: "2026-10-18T03:52:16.868798912+00:00"
+updated_at: "2026-10-18T03:59:36.412859343+00:00"
 ---
 
 ## Goal
@@ -46,3 +46,4 @@ Suggestion rendering in Plate (the suggestion plugin, or a custom one).
 - 2026-10-17 [note] From the wtj4 block-ID review (2026-10-17): (R3) set_node is not guarded, so setNodes({id}) can duplicate an ID and unsetNodes('id') can remove one. AI edit operations must edit blocks in place without touching id, or BlockIdPlugin must dedupe/refill on set_node; decide when building edit proposals.
 - 2026-10-17 [note] From the efkh generate review (2026-10-17): (R5) undoing an accept brings the segment back as ready while its provenance stays archived as accepted (re-accepting writes no record; regenerating doesn't mark it replaced), and undoing a saved generation leaves an active record for a segment that no longer exists. Text is never lost, but 'archived' can't be trusted; reconcile provenance with the document on undo/redo (or on save) when building edit proposals, which add the same problem. (R8) commands that change node properties (setNodes/toggleBlock from a future toolbar) bypass the generating-segment guard.
 - 2026-10-17 [note] From the efkh re-review (2026-10-17): if a regeneration's new segment is deleted mid-stream and reading the old provenance record fails with a storage error, the replaced blocks are written to no record (they survive only in undo history and the open-time snapshot). A blind archive would overwrite the existing record, so don't; instead request a snapshot when that read fails. Also: undoing a generation mid-stream then redoing brings back an empty ready segment with no provenance (harmless; writer can delete it).
+- 2026-10-17 [note] From the efkh third review (2026-10-17): (R2) undoing a cross-boundary delete after a generation finished can leave a duplicated paragraph in the segment; a delete starting before a segment merges segment text into the writer's paragraph without marking it as AI (the same happens with ready segments by design). (R5) if a generating segment is deleted and the delete is undone before the stream ends, the segment returns as ready AI text with no provenance. Visible and editable, but provenance tracking of AI text across merges needs a rule when edit proposals land.

@@ -1,0 +1,481 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-17T00:00:00Z",
+  "title": "Design System: WorldCrafter",
+  "extensions": {
+    "colorMeta": {
+      "ground": {
+        "role": "neutral",
+        "displayName": "Lamp-Black Ground",
+        "canonical": "#14120f",
+        "tonalRamp": [
+          "#0d0b08",
+          "#272521",
+          "#44423e",
+          "#63615d",
+          "#85827e",
+          "#a7a5a0",
+          "#ccc9c4",
+          "#f1eee9"
+        ]
+      },
+      "rail": {
+        "role": "neutral",
+        "displayName": "Rail Black",
+        "canonical": "#110f0d",
+        "tonalRamp": [
+          "#0d0b09",
+          "#272522",
+          "#44413f",
+          "#63615e",
+          "#84827f",
+          "#a7a4a2",
+          "#cbc8c5",
+          "#f1eeeb"
+        ]
+      },
+      "raised": {
+        "role": "neutral",
+        "displayName": "Raised Umber",
+        "canonical": "#221e18",
+        "tonalRamp": [
+          "#0e0b06",
+          "#28241e",
+          "#46413b",
+          "#656059",
+          "#87827a",
+          "#a9a49c",
+          "#cec8c0",
+          "#f3eee5"
+        ]
+      },
+      "ink": {
+        "role": "primary",
+        "displayName": "Bone Ink",
+        "canonical": "#e6dfcf",
+        "tonalRamp": [
+          "#0f0a02",
+          "#2a2418",
+          "#474134",
+          "#676153",
+          "#888273",
+          "#aba495",
+          "#cfc9b9",
+          "#f5eede"
+        ]
+      },
+      "ink-2": {
+        "role": "neutral",
+        "displayName": "Second Ink",
+        "canonical": "#b3aa98",
+        "tonalRamp": [
+          "#100a01",
+          "#2b2415",
+          "#494131",
+          "#686050",
+          "#8a8170",
+          "#ada492",
+          "#d1c8b6",
+          "#f7edda"
+        ]
+      },
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Third Ink",
+        "canonical": "#9a917f",
+        "tonalRamp": [
+          "#110a01",
+          "#2b2415",
+          "#494131",
+          "#69604f",
+          "#8a8170",
+          "#ada492",
+          "#d2c8b5",
+          "#f7edda"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#2f2a23",
+        "tonalRamp": [
+          "#0f0a05",
+          "#29241d",
+          "#46413a",
+          "#666058",
+          "#878179",
+          "#aaa49b",
+          "#cfc8bf",
+          "#f4ede4"
+        ]
+      },
+      "rule-strong": {
+        "role": "neutral",
+        "displayName": "Strong Hairline",
+        "canonical": "#4a4237",
+        "tonalRamp": [
+          "#100a03",
+          "#2b241a",
+          "#494136",
+          "#686054",
+          "#8a8175",
+          "#ada497",
+          "#d1c8ba",
+          "#f7eddf"
+        ]
+      },
+      "ai": {
+        "role": "secondary",
+        "displayName": "Night-Edition Vermilion",
+        "canonical": "#e34b2f",
+        "tonalRamp": [
+          "#2d0000",
+          "#510000",
+          "#8d0000",
+          "#b51600",
+          "#de462a",
+          "#ff6d4f",
+          "#ff9373",
+          "#ffb998"
+        ]
+      },
+      "time": {
+        "role": "tertiary",
+        "displayName": "Almanac Blue",
+        "canonical": "#8da2f0",
+        "tonalRamp": [
+          "#05003b",
+          "#141a5c",
+          "#2d3a7f",
+          "#4a5ba3",
+          "#6a7dc8",
+          "#8ba0ee",
+          "#aec5ff",
+          "#d3eaff"
+        ]
+      },
+      "subtext": {
+        "role": "tertiary",
+        "displayName": "Subtext Gold",
+        "canonical": "#e8b923",
+        "tonalRamp": [
+          "#1e0200",
+          "#3c1d00",
+          "#633800",
+          "#855800",
+          "#a87b00",
+          "#cc9e00",
+          "#f2c333",
+          "#ffe962"
+        ]
+      },
+      "say-0": {
+        "role": "tertiary",
+        "displayName": "Sea Glass (speaker tint 0)",
+        "canonical": "#7cc4b5",
+        "tonalRamp": [
+          "#00140c",
+          "#003026",
+          "#004f43",
+          "#246f62",
+          "#4a9184",
+          "#6db5a6",
+          "#91daca",
+          "#b6fff0"
+        ]
+      },
+      "say-1": {
+        "role": "tertiary",
+        "displayName": "Rose Clay (speaker tint 1)",
+        "canonical": "#e7a59b",
+        "tonalRamp": [
+          "#240000",
+          "#44110c",
+          "#662f29",
+          "#894f47",
+          "#ad7067",
+          "#d39288",
+          "#f9b6ac",
+          "#ffdbd0"
+        ]
+      },
+      "say-2": {
+        "role": "tertiary",
+        "displayName": "Lilac Ash (speaker tint 2)",
+        "canonical": "#c4a8e0",
+        "tonalRamp": [
+          "#150025",
+          "#301744",
+          "#4e3564",
+          "#6e5486",
+          "#9075aa",
+          "#b397ce",
+          "#d8bbf4",
+          "#fde0ff"
+        ]
+      },
+      "say-3": {
+        "role": "tertiary",
+        "displayName": "Lichen (speaker tint 3)",
+        "canonical": "#b4c98c",
+        "tonalRamp": [
+          "#050f00",
+          "#1d2b00",
+          "#39490c",
+          "#576930",
+          "#788b51",
+          "#9aae73",
+          "#bed396",
+          "#e3f9ba"
+        ]
+      },
+      "say-4": {
+        "role": "tertiary",
+        "displayName": "Tawny (speaker tint 4, and fallback)",
+        "canonical": "#d9a67e",
+        "tonalRamp": [
+          "#210000",
+          "#401800",
+          "#61360c",
+          "#83552f",
+          "#a77650",
+          "#cb9971",
+          "#f1bd94",
+          "#ffe2b9"
+        ]
+      },
+      "time-band": {
+        "role": "tertiary",
+        "displayName": "Almanac Blue Wash",
+        "canonical": "rgb(141 162 240 / 0.28)",
+        "tonalRamp": [
+          "#05003b",
+          "#141a5c",
+          "#2d3a7f",
+          "#4a5ba3",
+          "#6a7dc8",
+          "#8ba0ee",
+          "#aec5ff",
+          "#d3eaff"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Document title field at the head of the sheet; 27px at 860px and below."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Prose h1 at 30px; h2 25px and h3 21px share the setting. Regular weight."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Prose h3 (21px), the smallest heading."
+      },
+      "body": {
+        "displayName": "Prose",
+        "purpose": "Manuscript prose on a 620px measure, 20px paragraph space; 18px at 860px and below."
+      },
+      "stamp": {
+        "displayName": "Stamp",
+        "purpose": "Story-time stamp in the masthead, uppercase serif."
+      },
+      "apparatus": {
+        "displayName": "Apparatus",
+        "purpose": "Rail rows, tabs, controls and notices (Source Sans 3 400-500)."
+      },
+      "gloss": {
+        "displayName": "Gloss",
+        "purpose": "Gloss note bodies; emphasis lifts to ink, not bold."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase tracked labels (0.1-0.12em): rail sections, margin cues, note heads, AI caption."
+      },
+      "key": {
+        "displayName": "Key",
+        "purpose": "Raised note key letter after a noted phrase, out of flow."
+      }
+    },
+    "shadows": [
+      {
+        "name": "drawer",
+        "value": "12px 0 32px rgb(0 0 0 / 0.45)",
+        "purpose": "The open rail drawer overlaying the page at 1180px and below. The only shadow."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "The one ease, for every fade and draw."
+      },
+      {
+        "name": "fade",
+        "value": "140ms",
+        "purpose": "Opacity: cues, keys, gloss notes, tab close, rail drawer. 0ms under reduced motion."
+      },
+      {
+        "name": "draw",
+        "value": "150ms",
+        "purpose": "Background size of layer marks and leader tick stroke, drawn left to right. 0ms under reduced motion."
+      },
+      {
+        "name": "arriving",
+        "value": "opacity 1 to 0.55, 1.6s ease-out infinite alternate",
+        "purpose": "AI caption while a segment is generating; disabled under reduced motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "wide-gloss",
+        "value": "1380px",
+        "purpose": "At and below: margin 80px, gutter 32px, gloss 220-300px."
+      },
+      {
+        "name": "rail-drawer",
+        "value": "1180px",
+        "purpose": "At and below: rail becomes a fading overlay drawer with a masthead toggle."
+      },
+      {
+        "name": "single-column",
+        "value": "860px",
+        "purpose": "At and below: one column, wrapped masthead, cues above paragraphs, gloss as a keyed list after the prose."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Secondary masthead action (Context): hairline outline, no fill.",
+      "html": "<button class=\"ds-btn\">Context · 3 cards</button>",
+      "css": ":host{--ground:#14120f;--ink:#e6dfcf;--ink-2:#b3aa98;--ink-3:#9a917f;--rule:#2f2a23;--rule-strong:#4a4237;--raised:#221e18;--ai:#e34b2f;--time:#8da2f0;--time-band:rgb(141 162 240 / 0.28);--subtext:#e8b923;--say-0:#7cc4b5;--say-1:#e7a59b;--font-prose:\"Old Standard TT\",\"Iowan Old Style\",Georgia,serif;--font-apparatus:\"Source Sans 3\",\"Source Sans Pro\",system-ui,sans-serif;--ease-out:cubic-bezier(0.16,1,0.3,1);--fade:140ms;--draw:150ms} .ds-btn{padding:7px 14px;border:1px solid var(--rule);border-radius:5px;background:none;font:500 13.5px var(--font-apparatus);color:var(--ink);cursor:pointer;white-space:nowrap}.ds-btn:hover{border-color:var(--rule-strong)}.ds-btn:focus-visible{outline:1px solid var(--ink-2);outline-offset:2px}"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one primary action (Generate next), bone fill at the masthead's right.",
+      "html": "<button class=\"ds-btn-primary\">Generate next</button>",
+      "css": ":host{--ground:#14120f;--ink:#e6dfcf;--ink-2:#b3aa98;--ink-3:#9a917f;--rule:#2f2a23;--rule-strong:#4a4237;--raised:#221e18;--ai:#e34b2f;--time:#8da2f0;--time-band:rgb(141 162 240 / 0.28);--subtext:#e8b923;--say-0:#7cc4b5;--say-1:#e7a59b;--font-prose:\"Old Standard TT\",\"Iowan Old Style\",Georgia,serif;--font-apparatus:\"Source Sans 3\",\"Source Sans Pro\",system-ui,sans-serif;--ease-out:cubic-bezier(0.16,1,0.3,1);--fade:140ms;--draw:150ms} .ds-btn-primary{padding:7px 14px;border:1px solid var(--ink);border-radius:5px;background:var(--ink);font:600 13.5px var(--font-apparatus);color:var(--ground);cursor:pointer;white-space:nowrap}.ds-btn-primary:hover{border-color:#f3eee2;background:#f3eee2}.ds-btn-primary:focus-visible{outline:1px solid var(--ink-2);outline-offset:2px}"
+    },
+    {
+      "name": "Layer Toggles",
+      "kind": "chip",
+      "refersTo": "layer-toggle",
+      "description": "Segmented layer strip; a pressed toggle gets an inset underline in its layer's hue. Default is Speakers only.",
+      "html": "<fieldset class=\"ds-layers\"><button aria-pressed=\"true\" data-l=\"speakers\">Speakers</button><button aria-pressed=\"false\">World</button><button aria-pressed=\"true\" data-l=\"subtext\">Subtext</button><button aria-pressed=\"true\" data-l=\"time\">Time</button><button aria-pressed=\"false\">Notes</button></fieldset>",
+      "css": ":host{--ground:#14120f;--ink:#e6dfcf;--ink-2:#b3aa98;--ink-3:#9a917f;--rule:#2f2a23;--rule-strong:#4a4237;--raised:#221e18;--ai:#e34b2f;--time:#8da2f0;--time-band:rgb(141 162 240 / 0.28);--subtext:#e8b923;--say-0:#7cc4b5;--say-1:#e7a59b;--font-prose:\"Old Standard TT\",\"Iowan Old Style\",Georgia,serif;--font-apparatus:\"Source Sans 3\",\"Source Sans Pro\",system-ui,sans-serif;--ease-out:cubic-bezier(0.16,1,0.3,1);--fade:140ms;--draw:150ms} .ds-layers{display:inline-flex;margin:0;padding:0;border:1px solid var(--rule);border-radius:5px;overflow:hidden;background:var(--ground)}.ds-layers button{padding:6px 10px;border:0;border-right:1px solid var(--rule);background:none;font:500 13px var(--font-apparatus);color:var(--ink-3);cursor:pointer}.ds-layers button:last-child{border-right:0}.ds-layers button:hover{color:var(--ink-2)}.ds-layers button[aria-pressed=true]{background:#2b261f;color:var(--ink);box-shadow:inset 0 -2px 0 var(--ink-3)}.ds-layers button[data-l=speakers][aria-pressed=true]{box-shadow:inset 0 -2px 0 var(--say-0)}.ds-layers button[data-l=time][aria-pressed=true]{box-shadow:inset 0 -2px 0 var(--time)}.ds-layers button[data-l=subtext][aria-pressed=true]{box-shadow:inset 0 -2px 0 var(--subtext)}.ds-layers button:focus-visible{outline:1px solid var(--ink-2);outline-offset:-3px}"
+    },
+    {
+      "name": "Rail Navigation",
+      "kind": "nav",
+      "refersTo": "scene-row",
+      "description": "Reading-order scene rows: tabular position, title, story-time year; current scene in ink with a 3px bar.",
+      "html": "<nav class=\"ds-rail\"><h2 class=\"ds-rail-label\">Book one · reading order</h2><a class=\"ds-row\" href=\"#\"><span class=\"ds-pos\">3.2</span>The Winter Seal <span class=\"ds-year\">902</span></a><a class=\"ds-row\" href=\"#\" aria-current=\"page\"><span class=\"ds-pos\">4.2</span>The Sealed Door</a><a class=\"ds-row\" href=\"#\"><span class=\"ds-pos\">4.3</span>Aldric's Answer</a></nav>",
+      "css": ":host{--ground:#14120f;--ink:#e6dfcf;--ink-2:#b3aa98;--ink-3:#9a917f;--rule:#2f2a23;--rule-strong:#4a4237;--raised:#221e18;--ai:#e34b2f;--time:#8da2f0;--time-band:rgb(141 162 240 / 0.28);--subtext:#e8b923;--say-0:#7cc4b5;--say-1:#e7a59b;--font-prose:\"Old Standard TT\",\"Iowan Old Style\",Georgia,serif;--font-apparatus:\"Source Sans 3\",\"Source Sans Pro\",system-ui,sans-serif;--ease-out:cubic-bezier(0.16,1,0.3,1);--fade:140ms;--draw:150ms} .ds-rail{width:300px;padding:18px 0;background:#110f0d;border-right:1px solid var(--rule);font-family:var(--font-apparatus)}.ds-rail-label{margin:0;padding:4px 20px 8px;font:600 12px var(--font-apparatus);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}.ds-row{position:relative;display:flex;align-items:center;gap:6px;height:32px;padding:0 20px;font-size:14px;color:var(--ink-2);text-decoration:none}.ds-row:hover{color:var(--ink)}.ds-row:focus-visible{outline:1px solid var(--ink-2);outline-offset:-3px}.ds-pos{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink-3)}.ds-year{font-size:12px;font-variant-numeric:tabular-nums;color:var(--time)}.ds-row[aria-current=page],.ds-row[aria-current=page] .ds-pos{color:var(--ink)}.ds-row[aria-current=page]::before{content:\"\";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--ink)}"
+    },
+    {
+      "name": "Prose with Layer Marks",
+      "kind": "custom",
+      "refersTo": "body",
+      "description": "Manuscript prose with margin cue and painted marks: entity hairline, time band, subtext dots, key letter. Hover the block to see marks draw left to right (in the app, data-layer-* on the sheet does this).",
+      "html": "<div class=\"ds-sheet\"><p class=\"ds-p\"><span class=\"ds-cue\">Kesh</span>&ldquo;<span class=\"ds-say ds-time\">Three hundred years</span><sup class=\"ds-key\">a</sup>,&rdquo; said Kesh. <span class=\"ds-ent\">Ardelia</span> said nothing; <span class=\"ds-sub\">the door remembered the hand that had sealed it</span><sup class=\"ds-key ds-key-sub\">b</sup>.</p></div>",
+      "css": ":host{--ground:#14120f;--ink:#e6dfcf;--ink-2:#b3aa98;--ink-3:#9a917f;--rule:#2f2a23;--rule-strong:#4a4237;--raised:#221e18;--ai:#e34b2f;--time:#8da2f0;--time-band:rgb(141 162 240 / 0.28);--subtext:#e8b923;--say-0:#7cc4b5;--say-1:#e7a59b;--font-prose:\"Old Standard TT\",\"Iowan Old Style\",Georgia,serif;--font-apparatus:\"Source Sans 3\",\"Source Sans Pro\",system-ui,sans-serif;--ease-out:cubic-bezier(0.16,1,0.3,1);--fade:140ms;--draw:150ms} .ds-sheet{padding:24px 24px 24px 120px;background:var(--ground)}.ds-p{position:relative;max-width:620px;margin:0;font:400 19px/1.62 var(--font-prose);color:var(--ink)}.ds-cue{position:absolute;top:7px;right:calc(100% + 22px);font:600 12px/1.4 var(--font-apparatus);letter-spacing:.1em;text-transform:uppercase;color:var(--say-0)}.ds-say{color:var(--say-0)}.ds-ent{font-weight:700;background:linear-gradient(var(--ink-3),var(--ink-3)) left bottom 1px/0% 1px no-repeat;transition:background-size var(--draw) var(--ease-out)}.ds-time{background:linear-gradient(transparent 58%,var(--time-band) 58%) left bottom/0% 100% no-repeat;transition:background-size var(--draw) var(--ease-out)}.ds-sub{background:repeating-linear-gradient(90deg,var(--subtext) 0 1.5px,transparent 1.5px 4.5px) left bottom/0% 2px no-repeat;transition:background-size var(--draw) var(--ease-out)}.ds-sheet:hover .ds-ent{background-size:100% 1px}.ds-sheet:hover .ds-time{background-size:100% 100%}.ds-sheet:hover .ds-sub{background-size:100% 2px}.ds-key{font:600 11px/1 var(--font-apparatus);color:var(--time);opacity:0;transition:opacity var(--fade) var(--ease-out)}.ds-key-sub{color:var(--subtext)}.ds-sheet:hover .ds-key{opacity:1}@media (prefers-reduced-motion:reduce){.ds-ent,.ds-time,.ds-sub,.ds-key{transition:none}}"
+    },
+    {
+      "name": "Gloss Note",
+      "kind": "custom",
+      "refersTo": "gloss-note",
+      "description": "Lettered key on a gutter tick, never a card: layer-hued head, authority, body, one-click text actions.",
+      "html": "<div class=\"ds-gloss\"><svg class=\"ds-tick\" width=\"40\" height=\"12\" aria-hidden=\"true\"><line x1=\"8\" x2=\"34\" y1=\"8\" y2=\"8\"/></svg><div class=\"ds-note\"><header class=\"ds-head\">A · Time<em class=\"ds-auth\">inferred</em></header><p class=\"ds-body\">Three hundred years from the seal (winter 902) is <b>301</b>.</p><div class=\"ds-acts\"><button>Keep as spoken</button><button aria-disabled=\"true\">Open topic</button></div></div></div>",
+      "css": ":host{--ground:#14120f;--ink:#e6dfcf;--ink-2:#b3aa98;--ink-3:#9a917f;--rule:#2f2a23;--rule-strong:#4a4237;--raised:#221e18;--ai:#e34b2f;--time:#8da2f0;--time-band:rgb(141 162 240 / 0.28);--subtext:#e8b923;--say-0:#7cc4b5;--say-1:#e7a59b;--font-prose:\"Old Standard TT\",\"Iowan Old Style\",Georgia,serif;--font-apparatus:\"Source Sans 3\",\"Source Sans Pro\",system-ui,sans-serif;--ease-out:cubic-bezier(0.16,1,0.3,1);--fade:140ms;--draw:150ms} .ds-gloss{position:relative;width:380px;padding:16px 0;background:var(--ground);font:400 13.5px/1.45 var(--font-apparatus);color:var(--ink-2)}.ds-tick{position:absolute;left:0;top:16px}.ds-tick line{stroke:var(--rule-strong);stroke-width:1}.ds-note{margin-left:40px}.ds-head{display:flex;align-items:baseline;margin-bottom:2px;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--time)}.ds-auth{margin-left:auto;padding-left:12px;font-style:normal;font-weight:500;letter-spacing:.04em;text-transform:none;color:var(--ink-3)}.ds-body{margin:0}.ds-body b{font-weight:400;color:var(--ink)}.ds-acts{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:4px}.ds-acts button{padding:0;border:0;background:none;font:13px var(--font-apparatus);color:var(--ink);cursor:pointer}.ds-acts button:hover:not([aria-disabled]){text-decoration:underline;text-decoration-color:var(--ink-3);text-underline-offset:3px}.ds-acts button:focus-visible{outline:1px solid var(--ink-2);outline-offset:2px}.ds-acts button[aria-disabled]{color:var(--ink-3);cursor:default}"
+    },
+    {
+      "name": "AI Segment Plate",
+      "kind": "card",
+      "refersTo": "ai-segment-plate",
+      "description": "AI-made prose in the double-ruled vermilion plate; the only use of vermilion.",
+      "html": "<section class=\"ds-plate\"><span class=\"ds-cap\">AI segment · llama-3.3-70b<span class=\"ds-cap-acts\"><span class=\"ds-pend\">Not connected yet</span><button disabled>Regenerate</button><button disabled>Accept</button></span></span><p>Somewhere below them, the tide turned. She felt it in the iron before she heard it.</p></section>",
+      "css": ":host{--ground:#14120f;--ink:#e6dfcf;--ink-2:#b3aa98;--ink-3:#9a917f;--rule:#2f2a23;--rule-strong:#4a4237;--raised:#221e18;--ai:#e34b2f;--time:#8da2f0;--time-band:rgb(141 162 240 / 0.28);--subtext:#e8b923;--say-0:#7cc4b5;--say-1:#e7a59b;--font-prose:\"Old Standard TT\",\"Iowan Old Style\",Georgia,serif;--font-apparatus:\"Source Sans 3\",\"Source Sans Pro\",system-ui,sans-serif;--ease-out:cubic-bezier(0.16,1,0.3,1);--fade:140ms;--draw:150ms} .ds-plate{max-width:620px;margin:12px;padding:12px 16px;border:1px solid var(--ai);outline:1px solid var(--ai);outline-offset:3px;background:var(--ground);font:400 19px/1.62 var(--font-prose);color:var(--ink)}.ds-plate p{margin:0}.ds-cap{display:flex;align-items:baseline;gap:14px;margin-bottom:4px;font:600 12px/1.5 var(--font-apparatus);letter-spacing:.12em;text-transform:uppercase;color:var(--ai)}.ds-cap-acts{display:flex;gap:14px;margin-left:auto}.ds-pend{font-weight:500;letter-spacing:0;text-transform:none;color:var(--ink-3)}.ds-cap button{padding:0;border:0;background:none;font:inherit;letter-spacing:.04em;text-transform:inherit;color:var(--ink-3);cursor:not-allowed}"
+    },
+    {
+      "name": "Document Title",
+      "kind": "input",
+      "refersTo": "title-field",
+      "description": "Borderless serif title field at the sheet head, scene number and save status in the margin.",
+      "html": "<div class=\"ds-head-wrap\"><span class=\"ds-margin\"><span class=\"ds-num\">4.2</span><span class=\"ds-save\">Saved</span></span><input class=\"ds-title\" value=\"The Sealed Door\" aria-label=\"Title\"></div>",
+      "css": ":host{--ground:#14120f;--ink:#e6dfcf;--ink-2:#b3aa98;--ink-3:#9a917f;--rule:#2f2a23;--rule-strong:#4a4237;--raised:#221e18;--ai:#e34b2f;--time:#8da2f0;--time-band:rgb(141 162 240 / 0.28);--subtext:#e8b923;--say-0:#7cc4b5;--say-1:#e7a59b;--font-prose:\"Old Standard TT\",\"Iowan Old Style\",Georgia,serif;--font-apparatus:\"Source Sans 3\",\"Source Sans Pro\",system-ui,sans-serif;--ease-out:cubic-bezier(0.16,1,0.3,1);--fade:140ms;--draw:150ms} .ds-head-wrap{position:relative;padding:24px 24px 24px 120px;background:var(--ground)}.ds-margin{position:absolute;left:0;top:39px;display:flex;flex-direction:column;align-items:flex-end;gap:9px;width:98px;font-family:var(--font-apparatus)}.ds-num{font-size:12px;font-weight:600;letter-spacing:.1em;font-variant-numeric:tabular-nums;color:var(--ink-3)}.ds-save{font-size:12px;color:var(--ink-3)}.ds-title{display:block;width:100%;max-width:620px;padding:0;border:0;background:none;font:400 32px/1.25 var(--font-prose);color:var(--ink)}.ds-title:focus-visible{outline:none}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Night Edition",
+    "overview": "A late-printed edition of the writer's own manuscript, read by lamplight. The page is a warm near-black ground with bone ink in three steps and hairline rules; the prose sits in a single serif column at book measure, and everything the world knows about it (who speaks, when it is, what is implied, which names are canon) is set around it as apparatus: margin cues to the left, a lettered gloss to the right, marks painted behind the words. The prose is the stage; the apparatus is quiet, small, sans-serif, and attached to the words it is about.\n\nDensity is that of an annotated edition, not a dashboard. Chrome is a rail, a masthead and hairlines; there are no panels, no cards around notes, and no chat surface. AI work is always visible and signed but never loud: the one saturated warm colour in the system belongs to AI-made text and nothing else.\n\nLayers are paint, not layout. Every mark is in the DOM all the time; turning a layer on changes only colour, background size and opacity, so the prose never moves (measured 0 px of movement, click to paint within 34 ms in the shipped build). Motion follows the same grammar: marks fade, underlines draw left to right, nothing slides or bounces.",
+    "keyCharacteristics": [
+      "Warm near-black ground, bone ink in three steps, 1px hairline rules for all structure.",
+      "Old Standard TT for the writer's words and the page's stamps; Source Sans 3 for every piece of apparatus.",
+      "Vermilion reserved for the double-ruled AI segment plate.",
+      "Each layer hue does one job: speaker tints, time blue, subtext gold.",
+      "Gloss notes are lettered keys on gutter ticks, never cards.",
+      "Paint-only layers: colour, background size and opacity; never box geometry.",
+      "Fade 140 ms, draw 150 ms, one expo-out ease; reduced motion zeroes both."
+    ],
+    "rules": [
+      {
+        "name": "The Vermilion Signature Rule",
+        "body": "Vermilion marks AI-made text and only AI-made text: the plate's two rules and its caption. If a surface is not an AI segment, it carries no vermilion, not even as an accent or an error.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Job Rule",
+        "body": "Each layer hue means one thing everywhere it appears. Blue is always story time, gold is always subtext, a speaker tint is always that speaker in that scene. A new feature that needs colour takes a neutral, not a layer hue.",
+        "section": "colors"
+      },
+      {
+        "name": "The Paired Tint Rule",
+        "body": "A speaker tint never appears alone: it is always paired with the speaker's name, in the margin cue or the rail swatch row, so colour is never the only carrier of who is speaking.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Voices Rule",
+        "body": "The writer's words and the edition's stamps are serif; everything the app says is sans. Never set apparatus in Old Standard or prose in Source Sans; the writer's inline `[[ notes ]]` are the deliberate crossover, always italic sans at 15px, because they are the writer talking to themselves.",
+        "section": "typography"
+      },
+      {
+        "name": "The Fixed Weight Rule",
+        "body": "Weight, size and style never depend on a layer. World entities are always 700 and notes always italic apparatus whether or not their layer is on, because changing them would reflow the line.",
+        "section": "typography"
+      },
+      {
+        "name": "The Paint-Only Rule",
+        "body": "A layer may change colour, background size and opacity. It may never change a box: no width, padding, margin, border, font weight, display or position. Any new layer rule is tested by toggling it and measuring zero prose movement.",
+        "section": "layout"
+      },
+      {
+        "name": "The Hairline Rule",
+        "body": "Structure is drawn, not lifted: borders are 1px in `rule`, strengthening to `rule-strong` on hover. The pressed-toggle underline is an inset 2px line, not elevation.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep every layer mark in the DOM and switch it with `data-layer-*` attributes on the sheet, changing only colour, background size and opacity.",
+      "Do reserve vermilion (#e34b2f) for the AI segment plate and its caption.",
+      "Do give each layer hue exactly one meaning, and pair every speaker tint with the speaker's name.",
+      "Do set the writer's prose in Old Standard TT at 19px / 1.62 on a 620px measure, and all apparatus in Source Sans 3.",
+      "Do attach notes to their words with a key letter and a gutter tick, and resolve them with one-click text actions.",
+      "Do fade opacity in 140 ms and draw underlines and ticks left to right in 150 ms on `cubic-bezier(0.16, 1, 0.3, 1)`, and zero both under reduced motion.",
+      "Do draw structure with 1px hairlines (`rule`, `rule-strong`) and tonal steps."
+    ],
+    "donts": [
+      "Don't let a layer change weight, size, padding, border, display or position; it reflows the prose.",
+      "Don't put gloss notes in cards, boxes or filled panels; they are keyed text in the margin.",
+      "Don't slide, bounce or translate anything, including the narrow-screen rail drawer.",
+      "Don't use vermilion for errors, emphasis or brand; errors use raised umber with bone ink.",
+      "Don't reuse a layer hue for an unrelated meaning.",
+      "Don't add shadows beyond the overlay rail drawer."
+    ]
+  }
+}

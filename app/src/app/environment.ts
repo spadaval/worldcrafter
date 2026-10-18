@@ -19,6 +19,8 @@ export function describeCommandError(error: CommandError): string {
       return "This tab is read-only because WorldCrafter is open in another tab.";
     case "closed":
       return "The tab was closed before the document finished opening.";
+    case "still_open":
+      return "The document was saved, but its tab stays open because it was opened again.";
     case "unsaved":
       return `Not closed: ${describeSaveStatus(error.status)}`;
   }

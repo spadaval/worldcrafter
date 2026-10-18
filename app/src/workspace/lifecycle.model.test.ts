@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { errAsync, ResultAsync } from "neverthrow";
+import { errAsync, type Result, ResultAsync } from "neverthrow";
 import { createMemoryStorage } from "~/storage/memory";
 import type {
   StorageAdapter,
@@ -7,7 +7,7 @@ import type {
   StoredDocument,
 } from "~/storage/types";
 import { createStorageConnection } from "./connection";
-import type { DocumentSession } from "./document-session";
+import type { DocumentSession, Scheduler } from "./document-session";
 import type { KeyValueStore } from "./tabs";
 import { createWorkspace, type Workspace } from "./workspace";
 
@@ -15,11 +15,18 @@ import { createWorkspace, type Workspace } from "./workspace";
  * Model-based test of the session lifecycle. Each seed drives a random
  * interleaving of open, close, rename and edit across two documents against
  * storage that is slow and unreliable, then checks the invariants that keep
- * writing from being lost. Deterministic per seed; a failure names its seed.
+ * writing from being lost. Deterministic per seed (every delay, including the
+ * save loop's timers, runs on setImmediate hops, and the clock is a counter);
+ * a failure names its seed, and a second pass over some seeds checks that
+ * each one reproduces exactly.
  */
 
 const SEEDS = Number(process.env.LIFECYCLE_SEEDS ?? 300);
 const STEPS = 24;
+const REPLAYED_SEEDS = Math.min(
+  SEEDS,
+  Number(process.env.LIFECYCLE_REPLAYED_SEEDS ?? 40),
+);
 const DOCUMENTS = ["d1", "d2"] as const;
 
 /** mulberry32: a small seeded PRNG. */
@@ -41,6 +48,12 @@ function random(seed: number) {
 }
 
 const macrotask = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+/** The save loop's timers, run on the next hop whatever their delay. */
+const hopScheduler: Scheduler = (callback) => {
+  const handle = setImmediate(callback);
+  return () => clearImmediate(handle);
+};
 
 /**
  * Storage with random delays (0–2 macrotasks) that fails a share of document
@@ -122,7 +135,8 @@ const text = (session: DocumentSession) => session.editor.api.string([]);
 const storedText = (document: StoredDocument | undefined) =>
   JSON.stringify(document?.content ?? "");
 
-async function run(seed: number) {
+/** Runs one seed; returns a fingerprint of everything it observed. */
+async function run(seed: number): Promise<string> {
   const rng = random(seed);
   const storage = unreliableStorage(rng, 0.15 + rng.next() * 0.35);
   for (const id of DOCUMENTS) {
@@ -135,6 +149,10 @@ async function run(seed: number) {
     (await storage.inner.documents.save(document))._unsafeUnwrap();
     storage.committed.set(id, document);
   }
+  /** Every session the workspace loaded, recorded as it loads. */
+  const sessions = new Set<DocumentSession>();
+  const log: string[] = [];
+  let clock = 0;
   const ws: Workspace = createWorkspace({
     worldId: "w",
     connection: createStorageConnection(storage.adapter, () =>
@@ -144,10 +162,12 @@ async function run(seed: number) {
     readOnly: false,
     saveDelayMs: 0,
     retryDelayMs: 0,
+    schedule: hopScheduler,
+    now: () => ++clock,
+    onSessionLoaded: (session) => sessions.add(session),
   });
 
   const edits: Edit[] = [];
-  const sessions = new Set<DocumentSession>();
   /** Renames whose title was applied (ok, or refused only as unsaved), in completion order. */
   const renames = new Map<string, string[]>();
   const pending: Promise<void>[] = [];
@@ -160,9 +180,10 @@ async function run(seed: number) {
       })(),
     );
   };
-  const seen = (session: DocumentSession | undefined) => {
-    if (session) sessions.add(session);
-  };
+  const outcome =
+    (step: number) => (result: Result<unknown, { kind: string }>) => {
+      log.push(`${step}:${result.isOk() ? "ok" : result.error.kind}`);
+    };
 
   /** (2): a session showing "Saved" has all its visible edits stored. */
   const checkSavedIsTrue = () => {
@@ -194,9 +215,7 @@ async function run(seed: number) {
     ]);
     switch (action) {
       case "open":
-        track(
-          ws.commands.openDocument(documentId).map((session) => seen(session)),
-        );
+        track(ws.commands.openDocument(documentId).then(outcome(step)));
         break;
       case "open-retry":
         // As a UI might: open, and on failure open again at once.
@@ -204,17 +223,17 @@ async function run(seed: number) {
           ws.commands
             .openDocument(documentId)
             .orElse(() => ws.commands.openDocument(documentId))
-            .map((session) => seen(session)),
+            .then(outcome(step)),
         );
         break;
       case "close":
-        track(ws.commands.closeTab(documentId));
+        track(ws.commands.closeTab(documentId).then(outcome(step)));
         break;
       case "rename": {
         const title = `Title ${seed}-${step}`;
         track(
           ws.commands.renameDocument(documentId, title).then((result) => {
-            seen(ws.session(documentId));
+            outcome(step)(result);
             if (result.isOk() || result.error.kind === "unsaved") {
               renames.set(documentId, [
                 ...(renames.get(documentId) ?? []),
@@ -228,7 +247,6 @@ async function run(seed: number) {
       case "edit": {
         const session = ws.session(documentId);
         if (!session || !ws.tabs.get().open.includes(documentId)) break;
-        seen(session);
         const marker = `[${seed}.${step}]`;
         session.editor.tf.insertText(marker, {
           at: { path: [0, 0], offset: 0 },
@@ -309,15 +327,30 @@ async function run(seed: number) {
     tabs: ws.tabs.get().open,
     sessions: DOCUMENTS.filter((id) => ws.session(id) !== undefined),
   }).toEqual({ seed, tabs: [], sessions: [] });
+
+  return JSON.stringify({
+    log,
+    edits: edits.map((edit) => edit.marker),
+    stored: DOCUMENTS.map((id) => storage.committed.get(id)),
+    sessions: sessions.size,
+  });
 }
 
 test(`session lifecycle holds its invariants over ${SEEDS} random runs`, async () => {
+  const fingerprints = new Map<number, string>();
   for (let seed = 1; seed <= SEEDS; seed++) {
     try {
-      await run(seed);
+      fingerprints.set(seed, await run(seed));
     } catch (error) {
       console.error(`session lifecycle model failed for seed ${seed}`);
       throw error;
     }
+  }
+  // Each seed reproduces exactly: a failing seed can be replayed.
+  for (let seed = 1; seed <= REPLAYED_SEEDS; seed++) {
+    expect({ seed, fingerprint: await run(seed) }).toEqual({
+      seed,
+      fingerprint: fingerprints.get(seed) ?? "",
+    });
   }
 }, 20_000);

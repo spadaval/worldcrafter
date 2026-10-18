@@ -233,7 +233,11 @@ describe("workspace commands", () => {
       ws.commands.closeTab(id),
       ws.commands.openDocument(id),
     ]);
-    expect(closed._unsafeUnwrap().open).toEqual([id]);
+    expect(closed._unsafeUnwrapErr()).toEqual({
+      kind: "still_open",
+      documentId: id,
+    });
+    expect(ws.tabs.get().open).toEqual([id]);
     expect(opened._unsafeUnwrap()).toBe(session);
     expect(ws.session(id)).toBe(session);
 
@@ -435,6 +439,53 @@ describe("workspace commands", () => {
           "Later",
         );
       }
+  });
+
+  test("a close behind a failed close reports that the tab stays open", async () => {
+    const storage = createMemoryStorage();
+    // The first save and the connection's retry of it fail; later saves work.
+    let failSaves = 2;
+    const flaky: StorageAdapter = {
+      ...storage,
+      close: () => undefined,
+      documents: {
+        ...storage.documents,
+        save: (record) =>
+          record.title === "Doomed" && failSaves-- > 0
+            ? errAsync({
+                kind: "failure",
+                operation: "save",
+                message: "Storage save failed: busy",
+                cause: null,
+              })
+            : storage.documents.save(record),
+      },
+    };
+    const ws = createWorkspace({
+      worldId: "w1",
+      connection: createStorageConnection(flaky, () => okAsync(flaky)),
+      tabStore: memoryKeyValue(),
+      readOnly: false,
+      saveDelayMs: 60_000,
+      retryDelayMs: 60_000,
+    });
+    const session = (await ws.commands.createDocument())._unsafeUnwrap();
+    const id = session.documentId;
+    session.setTitle("Doomed");
+    const [first, second] = await Promise.all([
+      ws.commands.closeTab(id),
+      ws.commands.closeTab(id),
+    ]);
+    expect(first._unsafeUnwrapErr()).toMatchObject({ kind: "unsaved" });
+    expect(second._unsafeUnwrapErr()).toEqual({
+      kind: "still_open",
+      documentId: id,
+    });
+    expect(ws.tabs.get().open).toEqual([id]);
+    expect(ws.session(id)).toBe(session);
+    // The tab still holds exactly one lease.
+    (await ws.commands.closeTab(id))._unsafeUnwrap();
+    expect(ws.session(id)).toBeUndefined();
   });
 
   test("a read-only workspace does not overwrite the persisted tabs", async () => {

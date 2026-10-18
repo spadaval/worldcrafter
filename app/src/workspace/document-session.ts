@@ -32,12 +32,22 @@ export interface SessionOptions {
   readonly saveDelayMs: number;
   /** Wait before retrying a failed save. */
   readonly retryDelayMs: number;
+  /** Schedules the save loop's delayed saves. Defaults to `setTimeout`. */
+  readonly schedule?: Scheduler;
   /** Least time between periodic snapshots. Defaults to five minutes. */
   readonly snapshotIntervalMs?: number;
   readonly onSaved?: (document: StoredDocument) => void;
 }
 
 export const SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000;
+
+/** Runs `callback` after `delayMs`; returns a function that cancels it. */
+export type Scheduler = (callback: () => void, delayMs: number) => () => void;
+
+export const timeoutScheduler: Scheduler = (callback, delayMs) => {
+  const handle = setTimeout(callback, delayMs);
+  return () => clearTimeout(handle);
+};
 
 /**
  * One open document: its editor and the loop that saves it. The session is
@@ -156,16 +166,17 @@ function createSession(
   /** What the newest snapshot holds (as JSON), and when this session knew it. */
   let lastSnapshot = { content: JSON.stringify(original), at: options.now() };
   const snapshotInterval = options.snapshotIntervalMs ?? SNAPSHOT_INTERVAL_MS;
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  const scheduleTimer = options.schedule ?? timeoutScheduler;
+  let cancelTimer = () => {};
   let inFlight: Promise<SaveStatus> | null = null;
   let disposed = false;
 
   const hasUnsavedChanges = () => !readOnly && version !== savedVersion;
 
   const schedule = (delay: number) => {
-    clearTimeout(timer);
+    cancelTimer();
     if (disposed || readOnly) return;
-    timer = setTimeout(() => void flush(), delay);
+    cancelTimer = scheduleTimer(() => void flush(), delay);
   };
 
   const changed = () => {
@@ -228,7 +239,7 @@ function createSession(
   };
 
   const flush = async (): Promise<SaveStatus> => {
-    clearTimeout(timer);
+    cancelTimer();
     while (inFlight) await inFlight;
     if (!hasUnsavedChanges() || disposed) return status.get();
     inFlight = saveOnce();
@@ -261,7 +272,7 @@ function createSession(
     hasUnsavedChanges,
     dispose() {
       disposed = true;
-      clearTimeout(timer);
+      cancelTimer();
     },
   };
 }

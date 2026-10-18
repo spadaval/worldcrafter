@@ -96,6 +96,8 @@ function TabStrip({ onError }: { onError: (error: CommandError) => void }) {
 
   const close = async (id: string) => {
     const closed = await workspace.commands.closeTab(id);
+    // Saved, but reopened meanwhile: nothing to tell the writer.
+    if (closed.isErr() && closed.error.kind === "still_open") return;
     if (closed.isErr()) return onError(closed.error);
     if (id !== active) return;
     const next = closed.value.active;

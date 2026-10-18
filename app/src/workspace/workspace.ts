@@ -6,6 +6,7 @@ import {
   type DocumentSession,
   openDocumentSession,
   type SaveStatus,
+  type Scheduler,
 } from "./document-session";
 import { createStore, type Store } from "./store";
 import {
@@ -34,7 +35,12 @@ export type CommandError =
   /** This tab is read-only (another tab holds the world). */
   | { readonly kind: "read_only" }
   /** The tab was closed while the document was still opening. */
-  | { readonly kind: "closed"; readonly documentId: string };
+  | { readonly kind: "closed"; readonly documentId: string }
+  /**
+   * The close saved the document but the tab stays open: it was reopened
+   * meanwhile, or an earlier close that failed gave it back its lease.
+   */
+  | { readonly kind: "still_open"; readonly documentId: string };
 
 /**
  * The typed commands the shell calls. They know nothing about routes or
@@ -49,7 +55,9 @@ export interface WorkspaceCommands {
   openDocument(documentId: string): ResultAsync<DocumentSession, CommandError>;
   /**
    * Saves and closes a tab. Refuses with `unsaved` if the save fails, so
-   * closing never discards writing. Returns the tabs after closing.
+   * closing never discards writing, and reports `still_open` if the tab was
+   * reopened (or kept by an earlier failed close) meanwhile. Returns the tabs
+   * after closing.
    */
   closeTab(documentId: string): ResultAsync<TabsState, CommandError>;
   renameDocument(
@@ -83,6 +91,10 @@ export interface WorkspaceOptions {
   readonly now?: () => number;
   readonly saveDelayMs?: number;
   readonly retryDelayMs?: number;
+  /** Timer source for the save loops (tests drive it). */
+  readonly schedule?: Scheduler;
+  /** Called with every session as it finishes loading (for tests). */
+  readonly onSessionLoaded?: (session: DocumentSession) => void;
 }
 
 export const UNTITLED = "Untitled";
@@ -126,6 +138,7 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
     now,
     saveDelayMs: options.saveDelayMs ?? 600,
     retryDelayMs: options.retryDelayMs ?? 3000,
+    ...(options.schedule ? { schedule: options.schedule } : {}),
     onSaved: upsertSummary,
   };
 
@@ -137,6 +150,7 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
     const load = openDocumentSession(documentId, sessionOptions).map(
       (session) => {
         sessions.set(documentId, session);
+        options.onSessionLoaded?.(session);
         return session;
       },
     );
@@ -262,14 +276,16 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
           const session = sessions.get(documentId);
           return session ? flushed(session) : okAsync(undefined);
         })
-        .map(() => {
+        .andThen(() => {
           lease?.release();
-          if (!tabLeases.has(documentId)) {
-            setTabs(closeTab(tabs.get(), documentId));
+          if (tabLeases.has(documentId)) {
+            return errAsync({ kind: "still_open" as const, documentId });
           }
-          return tabs.get();
+          setTabs(closeTab(tabs.get(), documentId));
+          return okAsync(tabs.get());
         })
         .mapErr((error) => {
+          if (error.kind === "still_open") return error;
           // Not closed: give the tab its lease back, unless it was reopened
           // meanwhile with a lease of its own.
           if (lease) {

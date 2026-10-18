@@ -14,9 +14,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Story time: let frame rates order events, and check durations"
-updated_at: "2026-10-18T05:58:04.688943566+00:00"
+updated_at: "2026-10-18T05:58:15.438087509+00:00"
 ---
 
 ## Goal

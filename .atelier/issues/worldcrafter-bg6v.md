@@ -18,9 +18,10 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-18T06:43:04.728517477+00:00"
+status: "done"
 title: "Validate core loop against S1, S2, S4, S9, S10"
-updated_at: "2026-10-18T05:43:40.629365013+00:00"
+updated_at: "2026-10-18T06:43:04.728517477+00:00"
 ---
 
 ## Goal
@@ -41,3 +42,7 @@ paused frame), and do one manual pass in the browser.
 ## Notes
 
 - 2026-10-17 [note] From integration (2026-10-17): the LLM client calls endpoints straight from the browser, so CORS applies. The unit tests use Bun's fetch, which ignores CORS; check against real llama.cpp and OpenRouter from the browser during validation, and make the client's network error say 'blocked by CORS?' when that's the likely cause.
+
+## Close Reason
+
+Independent validation: S1, S2, S4, S9 pass (receipts 6uqy, s30i, sx94, 2qxt); S10 failed on time dilation (4ep5), fixed in itgc and re-validated as pass (wu90); full check fresh (537e). Blocked: CORS against real llama.cpp and OpenRouter (no server or key here; 9dao). Limits: no pin UI yet (S4 at command level), a few exact-boundary results stay cautiously uncertain from the rounding margin.

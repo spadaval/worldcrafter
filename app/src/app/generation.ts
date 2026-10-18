@@ -55,6 +55,11 @@ export interface Slip {
    * null for a segment's past request.
    */
   readonly assembledOver: unknown;
+  /**
+   * The request was made for a server the profile has since left, and is
+   * shown (and sent) addressed to the profile as it is now.
+   */
+  readonly retargeted: boolean;
 }
 
 /**
@@ -171,6 +176,32 @@ export function createGeneration(options: GenerationOptions): Generation {
       : null;
   };
 
+  /**
+   * After sending from slip `shown`: when no segment came of it, the slip
+   * stays (or comes back, if it closed when the segment was placed and the
+   * request then failed), showing the request as stored, edits included,
+   * to fix and send again. Not after the writer stopped a placed one.
+   */
+  const keepSlip = async (
+    shown: Slip,
+    result: Awaited<ReturnType<Generator["send"]>>,
+  ) => {
+    const open = slip.get() === shown;
+    const kept = result.isOk() && result.value.segmentId !== null;
+    const stopped = result.isOk() && result.value.outcome === "cancelled";
+    // Failing after placing it (an unexpected error) keeps what it showed.
+    const placed = !open && result.isErr();
+    if (kept || placed || (!open && (stopped || slip.get() !== null))) return;
+    let { record } = shown;
+    if (result.isOk() && result.value.requestId !== record.id) {
+      // The edit was stored as a revision: show that.
+      const revision = await requests.load(result.value.requestId);
+      if (revision.isOk()) record = revision.value;
+    }
+    if (slip.get() !== (open ? shown : null)) return;
+    slip.set({ ...shown, record, sending: false });
+  };
+
   /** Runs a send or regenerate, closing `shown` once its segment is placed. */
   const run = (
     documentId: string,
@@ -188,11 +219,7 @@ export function createGeneration(options: GenerationOptions): Generation {
     const finished = (async () => {
       const result = await start();
       placed();
-      const current = slip.get();
-      if (shown && current?.record.id === shown.record.id) {
-        // Not placed: the slip stays, to edit and send again.
-        slip.set({ ...current, sending: false });
-      }
+      if (shown) await keepSlip(shown, result);
       result.match(report, fail);
     })();
     running.set(documentId, finished);
@@ -238,6 +265,7 @@ export function createGeneration(options: GenerationOptions): Generation {
             replaces: null,
             sending: false,
             assembledOver,
+            retargeted: false,
           }),
         fail,
       );
@@ -248,7 +276,7 @@ export function createGeneration(options: GenerationOptions): Generation {
       if (!generator) return;
       const found = await generator.segmentRequest(segmentId);
       if (found.isErr()) return fail(found.error);
-      const record = found.value;
+      const { record, retargeted } = found.value;
       slip.set({
         documentId,
         record,
@@ -256,6 +284,7 @@ export function createGeneration(options: GenerationOptions): Generation {
         replaces: segmentId,
         sending: false,
         assembledOver: null,
+        retargeted,
       });
     },
 
@@ -266,26 +295,24 @@ export function createGeneration(options: GenerationOptions): Generation {
       if (!shown || shown.sending) return;
       const generator = generatorOf(shown.documentId);
       if (!generator) return;
-      let sending: Slip = { ...shown, sending: true };
+      const sending: Slip = { ...shown, sending: true };
       slip.set(sending);
-      if (edited) {
-        const revised = await generator.revise(shown.record.id, edited);
-        if (revised.isErr()) {
-          if (slip.get() === sending) slip.set(shown);
-          return fail(revised.error);
-        }
-        // From now on the slip shows what is sent: the revision.
-        sending = { ...sending, record: revised.value };
-        if (slip.get()?.record.id !== shown.record.id) return;
-        slip.set(sending);
-      }
-      const id = sending.record.id;
-      const { replaces } = sending;
+      const { replaces } = shown;
+      const id = shown.record.id;
+      const target = replaces
+        ? { kind: "replace" as const, segmentId: replaces }
+        : undefined;
+      // One call, so the generator is busy (and Stop works) from here on,
+      // storing the edit included.
       await run(
         shown.documentId,
         generator,
         () =>
-          replaces ? generator.regenerate(replaces, id) : generator.send(id),
+          edited
+            ? generator.sendEdited(id, edited, target)
+            : replaces
+              ? generator.regenerate(replaces, id)
+              : generator.send(id),
         sending,
       );
     },
@@ -293,6 +320,8 @@ export function createGeneration(options: GenerationOptions): Generation {
     async accept(documentId, segmentId) {
       const generator = generatorOf(documentId);
       if (!generator) return;
+      // A slip showing this segment's request would now be stale.
+      if (slip.get()?.replaces === segmentId) slip.set(null);
       const accepted = await generator.accept(segmentId);
       if (accepted.isErr()) fail(accepted.error);
     },

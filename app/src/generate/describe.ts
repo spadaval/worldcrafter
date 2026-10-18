@@ -1,3 +1,4 @@
+import type { LlmError } from "~/llm/types";
 import type { GenerateError, GenerationResult } from "./generator";
 
 /** A sentence for the writer about why a generate command failed. */
@@ -60,10 +61,19 @@ export function describeGenerationResult(
     case "stopped":
       return "Stopped because you edited the AI text. What it showed is kept.";
     case "failed": {
-      const reason = result.error?.message ?? "the request failed";
+      const reason = result.error
+        ? llmReason(result.error)
+        : "the request failed";
       return nothing
         ? `Generation failed: ${reason}`
         : `Generation failed part-way (${reason}). The text so far is kept.`;
     }
   }
+}
+
+/** Why an LLM request failed, with what to check when it never got an answer. */
+function llmReason(error: LlmError): string {
+  return error.kind === "network"
+    ? `${error.message}. Is the server running, and does it accept requests from this page (CORS)?`
+    : error.message;
 }

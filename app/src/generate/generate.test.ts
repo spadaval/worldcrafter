@@ -118,6 +118,9 @@ const profile: BackendProfile = {
   sampler: { temperature: 0.8, n_probs: 1 },
 };
 
+/** The profile as the generators see it now (a test may move it). */
+let current: BackendProfile = profile;
+
 const ORIGINAL: ContentDocument = [
   { type: "h1", id: "h", children: [{ text: "The Salt Road" }] },
   { type: "p", id: "p1", children: [{ text: "Mara crossed the flats." }] },
@@ -185,6 +188,7 @@ for (const [name, open] of [
     beforeEach(async () => {
       scripts.length = 0;
       received.length = 0;
+      current = profile;
       storage = await open();
       const now = () => clock++;
       const save = async (id: string, title: string, docContent: JsonValue) =>
@@ -236,7 +240,7 @@ for (const [name, open] of [
             requests: createRequestStore(storage, { now }),
             gather: () => gatherWorldContext(world, time, documentId),
             profile: (profileName) =>
-              profileName === profile.name ? profile : undefined,
+              profileName === current.name ? current : undefined,
             now,
           }),
         };
@@ -827,6 +831,83 @@ for (const [name, open] of [
       expect((await generator.send(assembled.id))._unsafeUnwrap().outcome).toBe(
         "complete",
       );
+    });
+
+    test("regenerating after the profile moved server sends to where it is now", async () => {
+      const assembled = await prepare();
+      scripts.push(streamText("First."));
+      const first = (await generator.send(assembled.id))._unsafeUnwrap();
+      // The same server under another address, and another model.
+      current = {
+        ...profile,
+        baseUrl: `http://127.0.0.1:${server.port}/v1`,
+        model: "other-model",
+      };
+      const shown = (
+        await generator.segmentRequest(first.segmentId as string)
+      )._unsafeUnwrap();
+      expect(shown.retargeted).toBe(true);
+      expect(shown.record).toMatchObject({
+        origin: "revision",
+        parentId: assembled.id,
+        request: {
+          url: `${current.baseUrl}/chat/completions`,
+          body: { model: "other-model" },
+        },
+      });
+      scripts.push(streamText("Second."));
+      const second = (
+        await generator.regenerate(first.segmentId as string)
+      )._unsafeUnwrap();
+      expect(second.outcome).toBe("complete");
+      expect(received).toHaveLength(2);
+      const { model: _a, ...firstBody } = received[0]?.body as Record<
+        string,
+        unknown
+      >;
+      const { model, ...secondBody } = received[1]?.body as Record<
+        string,
+        unknown
+      >;
+      expect(model).toBe("other-model");
+      expect(secondBody).toEqual(firstBody);
+      // What was sent is stored: the retargeted revision.
+      const sent = (
+        await createRequestStore(storage).load(second.requestId)
+      )._unsafeUnwrap();
+      expect(sent.request.url).toBe(`${current.baseUrl}/chat/completions`);
+      // Unmoved, nothing is retargeted.
+      const again = (
+        await generator.segmentRequest(second.segmentId as string)
+      )._unsafeUnwrap();
+      expect(again.retargeted).toBe(false);
+    });
+
+    test("Stop while regenerate or an edited send is still finding its request sends nothing", async () => {
+      const assembled = await prepare();
+      scripts.push(streamText("Kept."));
+      const kept = (await generator.send(assembled.id))._unsafeUnwrap();
+      const before = content(session);
+      received.length = 0;
+      scripts.push(streamText("Never."), streamText("Never."));
+
+      const regenerating = generator.regenerate(kept.segmentId as string);
+      expect(generator.active.get()).toMatchObject({ segmentId: null });
+      generator.cancel();
+      expect((await regenerating)._unsafeUnwrap()).toMatchObject({
+        outcome: "cancelled",
+        segmentId: null,
+      });
+
+      const editing = generator.sendEdited(assembled.id, assembled.request);
+      generator.cancel();
+      const edited = (await editing)._unsafeUnwrap();
+      expect(edited).toMatchObject({ outcome: "cancelled", segmentId: null });
+      // The edit is still stored, unsent.
+      expect(edited.requestId).not.toBe(assembled.id);
+      expect(received).toHaveLength(0);
+      expect(content(session)).toEqual(before);
+      expect(generator.active.get()).toBeNull();
     });
 
     test("a request that can't be loaded leaves the generator free", async () => {

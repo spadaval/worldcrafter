@@ -28,6 +28,8 @@ export interface ContextViewerProps {
    */
   readonly sending?: boolean;
   readonly onStop?: () => void;
+  /** What the writer calls the request's profile; its identifier otherwise. */
+  readonly profileLabel?: string;
 }
 
 /**
@@ -43,6 +45,7 @@ export function ContextViewer({
   disabled = false,
   sending = false,
   onStop,
+  profileLabel,
 }: ContextViewerProps) {
   const [draft, setDraft] = useState<RequestDraft>(() =>
     draftOf(record.request),
@@ -74,7 +77,8 @@ export function ContextViewer({
     <section className="context-viewer" aria-label="Request to the model">
       <header className="context-viewer-header">
         <p className="context-viewer-target">
-          {request.profile} · {request.endpoint} · <code>{request.url}</code>
+          {profileLabel ?? request.profile} · {request.endpoint} ·{" "}
+          <code>{request.url}</code>
         </p>
         {record.origin === "revision" ? (
           <p className="context-viewer-origin">

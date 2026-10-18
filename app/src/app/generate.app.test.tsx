@@ -450,7 +450,8 @@ test("with no model set up, Generate next leads to the model settings, which sto
   expect(
     JSON.parse(keyValue.data.get("worldcrafter:w1:backend-profile") ?? ""),
   ).toEqual({
-    name: "Stub",
+    name: expect.stringMatching(/^profile-/),
+    label: "Stub",
     kind: "llamacpp",
     baseUrl: PROFILE.baseUrl,
     apiKey: KEY,
@@ -459,17 +460,107 @@ test("with no model set up, Generate next leads to the model settings, which sto
   });
   expect(query(".rail-model")?.textContent).toContain("Stub");
 
-  // A rename is explained before it is made: earlier AI text keeps the old name.
+  // Renaming keeps the profile's identifier.
+  const { name } = JSON.parse(
+    keyValue.data.get("worldcrafter:w1:backend-profile") ?? "",
+  );
   await type(field("Name") as HTMLInputElement, "Renamed");
   await click(button("Save", ".settings"));
-  expect(query(".settings [role=alert]")?.textContent).toContain(
-    "Save again to rename it anyway",
-  );
-  expect(query(".rail-model")?.textContent).toContain("Stub");
-  await click(button("Save", ".settings"));
   expect(query(".rail-model")?.textContent).toContain("Renamed");
+  expect(
+    JSON.parse(keyValue.data.get("worldcrafter:w1:backend-profile") ?? ""),
+  ).toMatchObject({ name, label: "Renamed" });
   // Nothing about the model went into the world's storage.
   expect(
     JSON.stringify((await storage.documents.list())._unsafeUnwrap()),
   ).not.toContain(KEY);
+});
+
+test("a request that fails with nothing received brings its slip back, edits included", async () => {
+  await render(withProfile());
+  await generateNext();
+  const user = query<HTMLTextAreaElement>(
+    ".request-slip [data-role=user] textarea",
+  ) as HTMLTextAreaElement;
+  await type(user, `${user.value}\n\nMy edit.`);
+  scripts.push(() => new Response("busy", { status: 503 }));
+  await click(button("Send edited request", ".request-slip"));
+  await until(
+    () => (query(".notices")?.textContent ?? "").includes("Generation failed"),
+    "the failure",
+  );
+  expect(plates()).toHaveLength(0);
+  await until(() => query(".request-slip") !== null, "the slip to come back");
+  // It shows the stored edit, ready to send again.
+  expect(
+    query<HTMLTextAreaElement>(".request-slip [data-role=user] textarea")
+      ?.value,
+  ).toBe(user.value);
+  expect(button("Send", ".request-slip")).not.toBeNull();
+  expect(
+    (received[0]?.body as { messages: { content: string }[] }).messages[1]
+      ?.content,
+  ).toBe(user.value);
+});
+
+test("accepting a segment puts away the slip showing its request", async () => {
+  await render(withProfile());
+  await generateNext();
+  scripts.push(stream("Made."));
+  await click(button("Send", ".request-slip"));
+  await until(() => plates()[0]?.dataset.status === "ready", "the output");
+  await click(button("Request", "section[data-ai-segment]"));
+  await until(() => query(".request-slip") !== null, "the segment's request");
+  await click(button("Accept", "section[data-ai-segment]"));
+  await until(() => plates().length === 0, "the plate to go");
+  expect(query(".request-slip")).toBeNull();
+});
+
+test("after the model is renamed and moved, earlier AI text still regenerates there", async () => {
+  await render(withProfile());
+  await generateNext();
+  scripts.push(stream("First."));
+  await click(button("Send", ".request-slip"));
+  await until(() => plates()[0]?.dataset.status === "ready", "the output");
+
+  // Rename it and move it: the same stub under another address.
+  await click(
+    [
+      ...(container?.querySelectorAll<HTMLAnchorElement>(".rail-model a") ??
+        []),
+    ][0] ?? null,
+  );
+  await until(() => query(".settings") !== null, "the model settings");
+  const input = (id: string) =>
+    query<HTMLInputElement>(`#${id}`) as HTMLInputElement;
+  await type(input("model-name"), "Moved");
+  const moved = `http://127.0.0.1:${server.port}/v1`;
+  await type(input("model-base-url"), moved);
+  await click(button("Save", ".settings"));
+  expect(query(".settings-outcome")?.textContent).toBe("Saved for this world.");
+  await click(query(".tab a"));
+  await until(() => plates().length === 1, "the document again");
+
+  await click(button("Request", "section[data-ai-segment]"));
+  await until(() => query(".request-slip") !== null, "the segment's request");
+  const slip = query(".request-slip")?.textContent ?? "";
+  expect(slip).toContain("The model settings have changed");
+  expect(slip).toContain(`Moved · chat · ${moved}/chat/completions`);
+  await click(button("Close", ".request-slip"));
+
+  scripts.push(stream("Second."));
+  await click(button("Regenerate", "section[data-ai-segment]"));
+  await until(
+    () =>
+      plateText(plates()[0]) === "Second." &&
+      plates()[0]?.dataset.status === "ready",
+    "the regenerated output",
+  );
+  expect(received).toHaveLength(2);
+  expect(received[1]?.auth).toBe(`Bearer ${KEY}`);
+  // The stored request that was sent goes to the profile's own URL.
+  const urls = (await storage.requests.list())
+    ._unsafeUnwrap()
+    .map((r) => (r.request as { request: { url: string } }).request.url);
+  expect(urls).toContain(`${moved}/chat/completions`);
 });

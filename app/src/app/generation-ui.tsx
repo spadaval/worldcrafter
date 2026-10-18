@@ -3,6 +3,7 @@ import { useEditorSelector } from "platejs/react";
 import type { CSSProperties, Ref } from "react";
 import type { AiSegmentStatus } from "~/content/schema";
 import { ContextViewer } from "~/generate/context-viewer";
+import { labelOf } from "~/generate/profile";
 import { SegmentControls } from "~/generate/segment-controls";
 import type { Slip } from "./generation";
 import { useServices, useStore } from "./hooks";
@@ -55,6 +56,7 @@ export function RequestSlip({
 }) {
   const { generation } = useServices();
   const active = useStore(generation.active(slip.documentId));
+  const profile = useStore(generation.profile);
   const after = useEditorSelector(
     (editor) => {
       const id = slip.record.after;
@@ -107,6 +109,12 @@ export function RequestSlip({
             ? `Sending it continues the text after “${excerpt(after)}”.`
             : "Sending it continues the text at the end."}
       </p>
+      {slip.retargeted && (
+        <p className="request-slip-stale">
+          The model settings have changed since this request was made, so it now
+          goes to the server set there.
+        </p>
+      )}
       {stale && !slip.sending && (
         <p className="request-slip-stale">
           The text has changed since this request was put together; it is sent
@@ -128,6 +136,9 @@ export function RequestSlip({
         disabled={active !== null && !slip.sending}
         sending={slip.sending}
         onStop={() => void generation.stop(slip.documentId)}
+        {...(profile?.name === slip.record.request.profile
+          ? { profileLabel: labelOf(profile) }
+          : {})}
       />
     </section>
   );

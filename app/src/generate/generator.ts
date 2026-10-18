@@ -96,7 +96,12 @@ import {
   startGeneration,
   unwrapSegment,
 } from "~/editor/ai-segment";
-import { checkRequest, send as sendRequest } from "~/llm/client";
+import {
+  addressedTo,
+  checkRequest,
+  retarget,
+  send as sendRequest,
+} from "~/llm/client";
 import type {
   BackendProfile,
   Fetch,
@@ -186,11 +191,22 @@ export type AcceptResult = {
   save: SaveStatus;
 };
 
+/** A stored request as it would be sent now. */
+export type CurrentRequest = {
+  record: ContextRequest;
+  /**
+   * True when the request was made for a server the profile has since left:
+   * `record` is then a new revision addressed to the profile as it is.
+   */
+  retargeted: boolean;
+};
+
 /** The generation in progress, for the segment controls. */
 export type ActiveGeneration = {
   /** Null while the request is loading, before the segment is placed. */
   segmentId: string | null;
-  requestId: string;
+  /** Null while it is being found (loaded, stored or retargeted). */
+  requestId: string | null;
   /** The raw text so far. */
   text: string;
 };
@@ -221,8 +237,20 @@ export interface Generator {
     segmentId: string,
     requestId?: string,
   ): ResultAsync<GenerationResult, GenerateError>;
-  /** The stored request that made a segment's output. */
-  segmentRequest(segmentId: string): ResultAsync<ContextRequest, GenerateError>;
+  /**
+   * Stores the writer's edit of request `parentId` as a revision and sends
+   * it, as `send` does; busy (and stoppable) from the call on.
+   */
+  sendEdited(
+    parentId: string,
+    request: LlmRequest,
+    target?: GenerationTarget,
+  ): ResultAsync<GenerationResult, GenerateError>;
+  /**
+   * The stored request that made a segment's output, as it would be sent
+   * again (retargeted if the profile has moved since).
+   */
+  segmentRequest(segmentId: string): ResultAsync<CurrentRequest, GenerateError>;
   /** Stops the running generation, keeping what arrived; before sending, it isn't sent. */
   cancel(): void;
   accept(segmentId: string): ResultAsync<AcceptResult, GenerateError>;
@@ -315,6 +343,27 @@ export function createGenerator(options: GeneratorOptions): Generator {
     });
   };
 
+  const load = (id: string): ResultAsync<ContextRequest, GenerateError> =>
+    requests.load(id).mapErr((e): GenerateError => e);
+
+  /**
+   * `record` as it can be sent now: as stored, or, when its profile has
+   * since moved to another server, a revision of it addressed to the
+   * profile as it is (`retarget`), so regenerating still works.
+   */
+  const current = (
+    record: ContextRequest,
+  ): ResultAsync<CurrentRequest, GenerateError> => {
+    const profile = options.profile(record.request.profile);
+    if (!profile || addressedTo(profile, record.request)) {
+      return okAsync({ record, retargeted: false });
+    }
+    return requests
+      .revise(record.id, retarget(profile, record.request))
+      .mapErr((e): GenerateError => e)
+      .map((revision) => ({ record: revision, retargeted: true }));
+  };
+
   const requestIdOf = (segmentId: string): ResultAsync<string, GenerateError> =>
     loadProvenance(segmentId).andThen((stored) =>
       stored?.requestId
@@ -371,17 +420,22 @@ export function createGenerator(options: GeneratorOptions): Generator {
       });
   }
 
-  function send(
-    requestId: string,
-    target?: GenerationTarget,
+  /**
+   * Sends the request `resolve` finds (loads, revises or retargets). The
+   * generator is busy from the call on, so Stop (and closing the document)
+   * is honoured while it resolves: the request is then not sent.
+   */
+  function sendWith(
+    resolve: () => ResultAsync<ContextRequest, GenerateError>,
+    target: GenerationTarget | undefined,
+    /** The request's ID, when it is known before resolving. */
+    known: string | null = null,
   ): ResultAsync<GenerationResult, GenerateError> {
     const refused = refuse();
     if (refused) return errAsync(refused);
-    // Busy from now on, so Stop works (and a second send is refused) while
-    // the request loads.
     const abort = new AbortController();
     controller = abort;
-    active.set({ segmentId: null, requestId, text: "" });
+    active.set({ segmentId: null, requestId: known, text: "" });
     const release = () => {
       if (controller === abort) controller = null;
       active.set(null);
@@ -390,10 +444,10 @@ export function createGenerator(options: GeneratorOptions): Generator {
       release();
       return errAsync<T, GenerateError>(error);
     };
-    return requests
-      .load(requestId)
+    return resolve()
       .orElse((error) => refuseWith<ContextRequest>(error))
       .andThen((record) => {
+        const requestId = record.id;
         if (abort.signal.aborted) {
           release();
           return okAsync<GenerationResult, GenerateError>({
@@ -403,6 +457,7 @@ export function createGenerator(options: GeneratorOptions): Generator {
             save: session.status.get(),
           });
         }
+        active.set({ segmentId: null, requestId, text: "" });
         const { request } = record;
         const profile = options.profile(request.profile);
         if (!profile) {
@@ -696,21 +751,32 @@ export function createGenerator(options: GeneratorOptions): Generator {
     prepare,
     revise: (requestId, request) =>
       requests.revise(requestId, request).mapErr((e): GenerateError => e),
-    send,
+    send: (requestId, target) =>
+      sendWith(() => load(requestId), target, requestId),
+    sendEdited: (parentId, request, target) =>
+      sendWith(
+        () =>
+          requests.revise(parentId, request).mapErr((e): GenerateError => e),
+        target,
+      ),
     regenerate(segmentId, requestId) {
       const refused = refuse();
       if (refused) return errAsync(refused);
       const ready = readySegment(segmentId);
       if (ready.isErr()) return errAsync(ready.error);
-      const request: ResultAsync<string, GenerateError> = requestId
-        ? okAsync(requestId)
-        : requestIdOf(segmentId);
-      return request.andThen((id) => send(id, { kind: "replace", segmentId }));
+      return sendWith(
+        () =>
+          requestId
+            ? load(requestId)
+            : requestIdOf(segmentId)
+                .andThen(load)
+                .andThen(current)
+                .map(({ record }) => record),
+        { kind: "replace", segmentId },
+      );
     },
     segmentRequest: (segmentId) =>
-      requestIdOf(segmentId).andThen((id) =>
-        requests.load(id).mapErr((e): GenerateError => e),
-      ),
+      requestIdOf(segmentId).andThen(load).andThen(current),
     cancel() {
       controller?.abort();
     },

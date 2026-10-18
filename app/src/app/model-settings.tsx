@@ -22,8 +22,6 @@ export function ModelSettingsPage() {
   const saved = useStore(generation.profile);
   const [form, setForm] = useState<ProfileForm>(() => formOf(saved));
   const [showKey, setShowKey] = useState(false);
-  /** A rename was explained once; the next Save does it. */
-  const [renaming, setRenaming] = useState(false);
   const [outcome, setOutcome] = useState<
     { kind: "saved" } | { kind: "problem"; text: string } | null
   >(null);
@@ -40,20 +38,11 @@ export function ModelSettingsPage() {
         aria-labelledby="model-settings-title"
         onSubmit={(event) => {
           event.preventDefault();
-          const profile = profileFromForm(form);
+          const profile = profileFromForm(form, saved);
           if (profile.isErr()) {
             setOutcome({ kind: "problem", text: profile.error });
             return;
           }
-          if (saved && saved.name !== profile.value.name && !renaming) {
-            setRenaming(true);
-            setOutcome({
-              kind: "problem",
-              text: `AI text made under “${saved.name}” can’t be regenerated once the model is called “${profile.value.name}”. Save again to rename it anyway.`,
-            });
-            return;
-          }
-          setRenaming(false);
           const stored = generation.profile.save(profile.value);
           setOutcome(
             stored.isOk()
@@ -76,14 +65,11 @@ export function ModelSettingsPage() {
           <Field
             id="model-name"
             label="Name"
-            hint="Requests and AI text record it. AI text made under one name can’t be regenerated under another."
+            hint="What you call it here. Renaming it, or moving it to another server, still lets earlier AI text be regenerated: its request is sent to the server set here."
           >
             <input
               value={form.name}
-              onChange={(event) => {
-                set({ name: event.target.value });
-                setRenaming(false);
-              }}
+              onChange={(event) => set({ name: event.target.value })}
               autoComplete="off"
             />
           </Field>

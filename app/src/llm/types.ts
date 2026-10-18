@@ -50,7 +50,10 @@ export type Sampler = {
 export type BackendKind = "llamacpp" | "openrouter" | "generic";
 
 export type BackendProfile = {
+  /** Identifies the profile in the requests made with it; never changes. */
   name: string;
+  /** What the writer calls it; `name` when absent. */
+  label?: string;
   kind: BackendKind;
   /** Base URL including the version segment, e.g. `http://localhost:8080/v1`. */
   baseUrl: string;

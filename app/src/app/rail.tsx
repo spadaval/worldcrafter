@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { labelOf } from "~/generate/profile";
 import { speakerTints } from "~/layers/model";
 import type { CommandError } from "~/workspace/workspace";
 import { KIND_DEFINITIONS } from "~/world/kinds";
@@ -80,7 +81,7 @@ export function Rail({
           <span>
             {profile ? (
               <>
-                Model · <b>{profile.name}</b>
+                Model · <b>{labelOf(profile)}</b>
               </>
             ) : (
               "No model set up"

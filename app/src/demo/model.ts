@@ -8,7 +8,8 @@
 import type { BackendProfile, Fetch } from "~/llm/types";
 
 export const DEMO_PROFILE: BackendProfile = {
-  name: "Demo model",
+  name: "demo",
+  label: "Demo model",
   kind: "generic",
   // Never fetched: .invalid can't resolve.
   baseUrl: "https://demo-model.invalid/v1",

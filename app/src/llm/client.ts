@@ -63,6 +63,30 @@ function endpointUrl(
   return base + (endpoint === "chat" ? "/chat/completions" : "/completions");
 }
 
+/**
+ * `request` addressed to `profile` as it is now: its endpoint URL, and its
+ * model (or none). Everything else is kept. For a stored request whose
+ * profile has since moved to another server, so it can be sent again;
+ * `checkRequest` still sends a profile's key only to that profile's URL.
+ */
+export function retarget(
+  profile: BackendProfile,
+  request: LlmRequest,
+): LlmRequest {
+  const { model: _model, ...body } = request.body;
+  return {
+    ...request,
+    profile: profile.name,
+    url: endpointUrl(profile, request.endpoint),
+    body:
+      profile.model === undefined ? body : { ...body, model: profile.model },
+  };
+}
+
+/** Whether `request` goes to `profile`'s endpoint. */
+export const addressedTo = (profile: BackendProfile, request: LlmRequest) =>
+  request.url === endpointUrl(profile, request.endpoint);
+
 const ROLES = new Set(["system", "user", "assistant"]);
 
 /**

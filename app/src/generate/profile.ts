@@ -6,9 +6,12 @@
  * the world store. The API key is kept only here; the LLM client keeps it
  * out of stored requests, and so out of provenance.
  *
- * One profile per world for now. Requests name their profile, so renaming
- * it (or changing its URL) leaves earlier requests unsendable, by design:
- * `checkRequest` won't send a request to a server it wasn't made for.
+ * One profile per world for now. Requests carry the profile's `name`, a
+ * stable identifier minted when it is first saved; what the writer calls it
+ * is its `label`, which they can change freely. A request made before the
+ * profile moved to another server is retargeted when it is sent again
+ * (`Generator.regenerate`), since `checkRequest` sends a profile's key only
+ * to that profile's own URL.
  */
 
 import { err, ok, type Result } from "neverthrow";
@@ -43,9 +46,10 @@ const isKind = (value: unknown): value is BackendKind =>
 /** A stored profile, or null if it isn't one. */
 export function parseProfile(value: unknown): BackendProfile | null {
   if (!isRecord(value)) return null;
-  const { name, kind, baseUrl, apiKey, model, sampler } = value;
+  const { name, label, kind, baseUrl, apiKey, model, sampler } = value;
   if (
     typeof name !== "string" ||
+    (label !== undefined && typeof label !== "string") ||
     !isKind(kind) ||
     typeof baseUrl !== "string" ||
     (apiKey !== undefined && typeof apiKey !== "string") ||
@@ -56,6 +60,7 @@ export function parseProfile(value: unknown): BackendProfile | null {
   }
   return {
     name,
+    ...(label ? { label } : {}),
     kind,
     baseUrl,
     ...(apiKey ? { apiKey } : {}),
@@ -95,6 +100,7 @@ export function createProfileStore(
 
 /** The profile form's fields, as typed. */
 export interface ProfileForm {
+  /** The profile's label. */
   readonly name: string;
   readonly kind: BackendKind;
   readonly baseUrl: string;
@@ -108,7 +114,7 @@ export const DEFAULT_SAMPLER: Sampler = { temperature: 0.8, max_tokens: 400 };
 
 export function formOf(profile: BackendProfile | null): ProfileForm {
   return {
-    name: profile?.name ?? "Local model",
+    name: profile ? labelOf(profile) : "Local model",
     kind: profile?.kind ?? "llamacpp",
     baseUrl: profile?.baseUrl ?? "http://localhost:8080/v1",
     apiKey: profile?.apiKey ?? "",
@@ -117,12 +123,20 @@ export function formOf(profile: BackendProfile | null): ProfileForm {
   };
 }
 
-/** The profile a form describes, or the first problem with it, for the writer. */
+export const labelOf = (profile: BackendProfile): string =>
+  profile.label ?? profile.name;
+
+/**
+ * The profile a form describes, or the first problem with it, for the
+ * writer. It keeps `existing`'s identifier, or mints one.
+ */
 export function profileFromForm(
   form: ProfileForm,
+  existing: BackendProfile | null,
+  newId: () => string = () => `profile-${crypto.randomUUID()}`,
 ): Result<BackendProfile, string> {
-  const name = form.name.trim();
-  if (!name) return err("Give the model a name.");
+  const label = form.name.trim();
+  if (!label) return err("Give the model a name.");
   const baseUrl = form.baseUrl.trim().replace(/\/+$/, "");
   let url: URL;
   try {
@@ -151,7 +165,8 @@ export function profileFromForm(
   const apiKey = form.apiKey.trim();
   const model = form.model.trim();
   return ok({
-    name,
+    name: existing?.name ?? newId(),
+    label,
     kind: form.kind,
     baseUrl,
     ...(apiKey ? { apiKey } : {}),

@@ -669,14 +669,20 @@ for (const [name, open] of [
             block.type === "ai_segment" && block.status === "generating",
         ),
       ).toBe(false);
-      const id = result._unsafeUnwrap().segmentId;
-      if (id) {
+      const { outcome, segmentId: id } = result._unsafeUnwrap();
+      if (outcome === "complete") {
         const index = document.findIndex((block) => block.id === id);
         expect(textOf(segmentAt(document, index))).toEqual([
           "First line.",
           "Second line.",
           "Third line.",
         ]);
+      } else {
+        // The delete reached into the segment: it stopped and kept its text.
+        expect(outcome).toBe("stopped");
+        expect(
+          (await storage.annotations.load(id as string))._unsafeUnwrap().data,
+        ).toMatchObject({ outcome: "stopped" });
       }
       // Not left busy: another generation can start.
       scripts.push(streamText("Again."));
@@ -685,6 +691,109 @@ for (const [name, open] of [
           await generator.send(assembled.id, { kind: "after", blockId: null })
         )._unsafeUnwrap().outcome,
       ).toBe("complete");
+    });
+
+    test("an edit reaching into the segment stops it, keeps the writer's text and records it", async () => {
+      const assembled = await prepare();
+      scripts.push(
+        stream(
+          [...pieces("Hello\nworld and the rest of it.", 3).map(chunk), finish],
+          15,
+        ),
+      );
+      const sending = generator.send(assembled.id, {
+        kind: "after",
+        blockId: "p2",
+      });
+      await until(() =>
+        (content(session)[3] as AiSegment | undefined)?.children[1]
+          ? textOf(segmentAt(content(session), 3))[1]?.startsWith("wor") ===
+            true
+          : false,
+      );
+      // ORIGINAL has no block after the segment: add one to reach into.
+      const editor = session.editor;
+      editor.tf.insertNodes(
+        { type: "p", id: "p3", children: [{ text: "After." }] },
+        { at: [4] },
+      );
+      await Bun.sleep(0);
+      editor.tf.select({
+        anchor: { path: [3, 1, 0], offset: 2 },
+        focus: { path: [4, 0], offset: 3 },
+      });
+      editor.tf.insertText("MINE");
+      const shownWhenStopped = textOf(segmentAt(content(session), 3));
+      const result = (await sending)._unsafeUnwrap();
+      expect(result.outcome).toBe("stopped");
+      expect(generator.active.get()).toBeNull();
+      const segment = segmentAt(content(session), 3);
+      expect(segment.status).toBe("ready");
+      expect(textOf(segment)).toEqual(shownWhenStopped);
+      expect(textOf(segment)[1]).toMatch(/^woMINEer\.$/);
+      const record = (
+        await storage.annotations.load(result.segmentId as string)
+      )._unsafeUnwrap();
+      expect(record.data).toMatchObject({ outcome: "stopped" });
+      expect(
+        "Hello\nworld and the rest of it.".startsWith(
+          (record.data as { text: string }).text,
+        ),
+      ).toBe(true);
+      expect(await stored()).toEqual(content(session));
+    });
+
+    test("a render that throws mid-stream ends the generation as failed, with provenance", async () => {
+      const assembled = await prepare();
+      scripts.push(
+        stream(
+          [
+            ...pieces("Line one.\nLine two.\nLine three.", 3).map(chunk),
+            finish,
+          ],
+          10,
+        ),
+      );
+      const sending = generator.send(assembled.id, {
+        kind: "after",
+        blockId: "p2",
+      });
+      await until(() => (generator.active.get()?.text.length ?? 0) > 6);
+      const tf = session.editor.tf;
+      const original = {
+        insertText: tf.insertText,
+        insertNodes: tf.insertNodes,
+        replaceNodes: tf.replaceNodes,
+      };
+      const boom = () => {
+        throw new Error("boom");
+      };
+      Object.assign(tf, {
+        insertText: boom,
+        insertNodes: boom,
+        replaceNodes: boom,
+      });
+      const result = await sending;
+      Object.assign(tf, original);
+      expect(result.isOk()).toBe(true);
+      const { outcome, segmentId } = result._unsafeUnwrap();
+      expect(outcome).toBe("failed");
+      expect(generator.active.get()).toBeNull();
+      const segment = segmentAt(content(session), 3);
+      expect(segment.status).toBe("ready");
+      const kept = content(session);
+      expect(
+        (await storage.annotations.load(segmentId as string))._unsafeUnwrap()
+          .data,
+      ).toMatchObject({
+        outcome: "failed",
+        error: expect.stringContaining("boom"),
+      });
+      // The undo step was finalised: redo brings back what was shown.
+      session.editor.undo();
+      expect(content(session)).toEqual(ORIGINAL);
+      session.editor.redo();
+      expect(content(session)).toEqual(kept);
     });
 
     test("a replacement deleted mid-stream leaves the replaced blocks in the old record", async () => {

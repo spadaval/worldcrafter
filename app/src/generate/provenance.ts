@@ -31,10 +31,12 @@ export const PROVENANCE_VERSION = 1;
 /**
  * - `complete`: the model finished (`finishReason` says how).
  * - `cancelled`: the writer stopped it; `text` is what arrived before.
- * - `failed`: the connection or server failed part-way; `error` says how and
- *   `text` is what arrived before.
+ * - `stopped`: the writer edited the segment while it generated; the
+ *   segment kept what it showed, and `text` is what had arrived.
+ * - `failed`: the connection or server failed part-way, or showing the text
+ *   did; `error` says how and `text` is what arrived before.
  */
-export type GenerationOutcome = "complete" | "cancelled" | "failed";
+export type GenerationOutcome = "complete" | "cancelled" | "stopped" | "failed";
 
 export type Provenance = {
   version: typeof PROVENANCE_VERSION;

@@ -41,6 +41,12 @@
  *   request is cancelled and nothing more is written, except that a
  *   regeneration whose replaced segment is gone too archives the replaced
  *   blocks in that segment's record.
+ * - A writer's edit that touches the segment while it generates stops the
+ *   generation first: the segment keeps what it shows, the edit applies to
+ *   it, and its provenance says `stopped`. Streamed text never overwrites
+ *   the writer's edits.
+ * - An unexpected throw while showing text ends the generation the same
+ *   way, as `failed` with the error, rather than leaving it locked.
  * - "Generating" is session-only (`editor/ai-segment.ts`): a segment saved
  *   mid-stream reopens ready, with no provenance, so it can be accepted but
  *   not regenerated.
@@ -456,19 +462,36 @@ export function createGenerator(options: GeneratorOptions): Generator {
     let shown = 0;
     const logprobs: TokenLogprob[] = [];
     let removed = false;
+    /** An unexpected throw while showing text; ends the generation as failed. */
+    let failure: unknown = null;
     let cancelRender: (() => void) | null = null;
     active.set({ segmentId, requestId, text });
 
     const render = () => {
       cancelRender = null;
-      const { finished } = parser;
-      const present = generation.render([...finished, ...parser.tail()], shown);
-      shown = finished.length;
-      active.set({ segmentId, requestId, text });
-      if (!present) {
-        removed = true;
+      if (generation.state !== "live" || failure !== null) return;
+      try {
+        const { finished } = parser;
+        const present = generation.render(
+          [...finished, ...parser.tail()],
+          shown,
+        );
+        shown = finished.length;
+        active.set({ segmentId, requestId, text });
+        if (!present) {
+          removed = true;
+          abort.abort();
+        }
+      } catch (cause) {
+        failure = cause;
         abort.abort();
       }
+    };
+    // The writer edited the segment: it was finished as shown; stop sending.
+    generation.onStop = () => {
+      cancelRender?.();
+      cancelRender = null;
+      abort.abort();
     };
     const result = await sendRequest(profile, request, {
       signal: abort.signal,
@@ -481,14 +504,7 @@ export function createGenerator(options: GeneratorOptions): Generator {
     });
     controller = null;
     (cancelRender as (() => void) | null)?.();
-    if (result.isOk() && result.value.text !== text) {
-      // Not streamed (or the stream disagreed): show the whole response.
-      text = result.value.text;
-      parser = new GeneratedTextStream();
-      parser.push(text);
-      shown = 0;
-    }
-    if (!removed) render();
+    generation.onStop = null;
 
     const done = (
       outcome: GenerationOutcome,
@@ -506,65 +522,101 @@ export function createGenerator(options: GeneratorOptions): Generator {
       };
     };
 
-    const outcome: GenerationOutcome = result.isOk()
-      ? "complete"
-      : result.error.kind === "aborted"
-        ? "cancelled"
-        : "failed";
-    const error = result.isErr() ? result.error : undefined;
-    const at = now();
-    if (removed) {
-      // The writer deleted or undid the new segment. If it replaced one that
-      // is gone too, keep the replaced blocks in the old record.
-      generation.abandon();
-      if (replaced && segmentIndex(editor, replaced.segmentId) === -1) {
-        const archive = await replacedArchive(replaced, null, at);
-        if (archive) {
-          written.set(archive.id, archive);
-          return done(
-            "cancelled",
-            null,
-            await session.saveWith({ annotations: [archive] }),
-          );
-        }
+    /** Finishes the segment as shown and saves its provenance. */
+    const keep = async (
+      outcome: GenerationOutcome,
+      error: string | null,
+      llmError?: LlmError,
+    ): Promise<GenerationResult> => {
+      try {
+        generation.finish();
+      } catch {
+        generation.abandon();
       }
-      return done("cancelled", null, session.status.get());
-    }
-    if (parser.finished.length === 0 && parser.tail().length === 0) {
-      generation.discard();
-      return done(outcome, null, await session.flush(), error);
-    }
-
-    generation.finish();
-    const completion = result.isOk() ? result.value : null;
-    const provenance: Provenance = {
-      version: PROVENANCE_VERSION,
-      requestId,
-      profile: request.profile,
-      endpoint: request.endpoint,
-      model:
-        completion?.model ??
-        (typeof request.body.model === "string" ? request.body.model : null),
-      sampler: samplerOf(request.body),
-      outcome,
-      finishReason: completion?.finishReason ?? null,
-      error: error ? error.message : null,
-      text,
-      logprobs: completion ? completion.logprobs : logprobs,
-      startedAt,
-      finishedAt: at,
-      replaces: replaced
-        ? { segmentId: replaced.segmentId, content: blocksOf(replaced.node) }
-        : null,
+      const at = now();
+      const completion = result.isOk() ? result.value : null;
+      const provenance: Provenance = {
+        version: PROVENANCE_VERSION,
+        requestId,
+        profile: request.profile,
+        endpoint: request.endpoint,
+        model:
+          completion?.model ??
+          (typeof request.body.model === "string" ? request.body.model : null),
+        sampler: samplerOf(request.body),
+        outcome,
+        finishReason: completion?.finishReason ?? null,
+        error,
+        text,
+        logprobs: completion ? completion.logprobs : logprobs,
+        startedAt,
+        finishedAt: at,
+        replaces: replaced
+          ? { segmentId: replaced.segmentId, content: blocksOf(replaced.node) }
+          : null,
+      };
+      const records = [provenanceRecord(documentId, segmentId, provenance, at)];
+      if (replaced) {
+        const archive = await replacedArchive(replaced, segmentId, at);
+        if (archive) records.push(archive);
+      }
+      for (const record of records) written.set(record.id, record);
+      const save = await session.saveWith({ annotations: records });
+      return done(outcome, segmentId, save, llmError);
     };
-    const records = [provenanceRecord(documentId, segmentId, provenance, at)];
-    if (replaced) {
-      const archive = await replacedArchive(replaced, segmentId, at);
-      if (archive) records.push(archive);
+
+    const failed = (cause: unknown) =>
+      keep(
+        "failed",
+        `Showing the output failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+      );
+
+    try {
+      if (failure !== null) return await failed(failure);
+      if (generation.state === "stopped") {
+        return await keep("stopped", null);
+      }
+      if (result.isOk() && result.value.text !== text) {
+        // Not streamed (or the stream disagreed): show the whole response.
+        text = result.value.text;
+        parser = new GeneratedTextStream();
+        parser.push(text);
+        shown = 0;
+      }
+      if (!removed) render();
+      if (failure !== null) return await failed(failure);
+
+      const outcome: GenerationOutcome = result.isOk()
+        ? "complete"
+        : result.error.kind === "aborted"
+          ? "cancelled"
+          : "failed";
+      const error = result.isErr() ? result.error : undefined;
+      if (removed) {
+        // The writer deleted or undid the new segment. If it replaced one
+        // that is gone too, keep the replaced blocks in the old record.
+        generation.abandon();
+        if (replaced && segmentIndex(editor, replaced.segmentId) === -1) {
+          const archive = await replacedArchive(replaced, null, now());
+          if (archive) {
+            written.set(archive.id, archive);
+            return done(
+              "cancelled",
+              null,
+              await session.saveWith({ annotations: [archive] }),
+            );
+          }
+        }
+        return done("cancelled", null, session.status.get());
+      }
+      if (parser.finished.length === 0 && parser.tail().length === 0) {
+        generation.discard();
+        return done(outcome, null, await session.flush(), error);
+      }
+      return await keep(outcome, error ? error.message : null, error);
+    } catch (cause) {
+      return await failed(cause);
     }
-    for (const record of records) written.set(record.id, record);
-    const save = await session.saveWith({ annotations: records });
-    return done(outcome, segmentId, save, error);
   }
 
   /**

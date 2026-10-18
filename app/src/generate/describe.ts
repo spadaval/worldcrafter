@@ -57,6 +57,8 @@ export function describeGenerationResult(
       return nothing
         ? "Stopped. No text was kept."
         : "Stopped. The text so far is kept.";
+    case "stopped":
+      return "Stopped because you edited the AI text. What it showed is kept.";
     case "failed": {
       const reason = result.error?.message ?? "the request failed";
       return nothing

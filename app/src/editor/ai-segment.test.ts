@@ -220,26 +220,6 @@ describe("AI segment generations", () => {
     expect(segment(editor, 1).status).toBe("ready");
   });
 
-  test("a render after a delete reaching into the segment re-syncs every paragraph", async () => {
-    const editor = fresh();
-    const generation = start(editor);
-    await tick();
-    show(generation, "one\ntwo");
-    editor.tf.select({
-      anchor: { path: [0, 0], offset: 3 },
-      focus: { path: [1, 0, 0], offset: 1 },
-    });
-    editor.tf.deleteFragment();
-    await tick();
-    // The segment's first paragraph went into the one before it.
-    expect(texts(segment(editor, 1))).toEqual(["two"]);
-    const index = 1;
-    expect(generation.render(parseGeneratedText("one\ntwo\nthree"), 2)).toBe(
-      true,
-    );
-    expect(texts(segment(editor, index))).toEqual(["one", "two", "three"]);
-  });
-
   test("discard after the writer's edit was undone keeps redo working", async () => {
     const editor = fresh();
     const generation = start(editor);
@@ -274,33 +254,122 @@ describe("AI segment generations", () => {
     ] as ContentDocument);
     expect(unwrapSegment(editor, "seg")).toBeUndefined();
   });
+});
 
-  test("typing is ignored inside a generating segment, not a ready one", () => {
+describe("writer edits touching a generating segment", () => {
+  /** Before. | segment [Hello | world] | After. — generating, with a stop spy. */
+  async function streaming() {
     const editor = fresh();
     const generation = start(editor);
-    show(generation, "Arriving");
-    editor.tf.select({ path: [1, 0, 0], offset: 3 });
-    editor.tf.insertText("X");
-    editor.tf.insertBreak();
-    editor.tf.deleteBackward("character");
-    editor.tf.addMark("bold", true);
-    expect(texts(segment(editor, 1))).toEqual(["Arriving"]);
+    const stops: string[] = [];
+    generation.onStop = () => stops.push(generation.state);
+    await tick();
+    show(generation, "Hello\nworld");
+    return { editor, generation, stops };
+  }
 
-    generation.finish();
-    editor.tf.select({ path: [1, 0, 0], offset: 3 });
-    editor.tf.insertText("X");
-    expect(texts(segment(editor, 1))).toEqual(["ArrXiving"]);
-  });
+  const after = (editor: DocumentEditor, index: number) =>
+    content(editor)[index];
 
-  test("a selection reaching outside a generating segment edits normally", () => {
-    const editor = fresh();
-    const generation = start(editor);
-    show(generation, "Arriving");
+  /** Undo back to the start, then redo forward again, checking both ends. */
+  function roundTrip(editor: DocumentEditor, steps: number) {
+    const edited = content(editor);
+    for (let i = 0; i < steps; i++) editor.undo();
+    expect(content(editor)).toEqual(ORIGINAL);
+    for (let i = 0; i < steps; i++) editor.redo();
+    expect(content(editor)).toEqual(edited);
+  }
+
+  test("a delete from inside into the next block stops it first and keeps the writer's text", async () => {
+    const { editor, generation, stops } = await streaming();
     editor.tf.select({
-      anchor: { path: [0, 0], offset: 0 },
-      focus: { path: [2, 0], offset: 0 },
+      anchor: { path: [1, 1, 0], offset: 2 },
+      focus: { path: [2, 0], offset: 3 },
     });
     editor.tf.deleteFragment();
+    expect(stops).toEqual(["stopped"]);
+    expect(generation.state).toBe("stopped");
+    expect(segment(editor, 1).status).toBe("ready");
+    expect(texts(segment(editor, 1))).toEqual(["Hello", "woer."]);
+    expect(content(editor)).toHaveLength(2);
+    // Nothing renders over the edit afterwards.
+    expect(show(generation, "Hello\nworld wide")).toBe(false);
+    expect(texts(segment(editor, 1))).toEqual(["Hello", "woer."]);
+    await tick();
+    // Undo takes back the delete, then the segment, as shown when stopped.
+    editor.undo();
+    expect(texts(segment(editor, 1))).toEqual(["Hello", "world"]);
+    expect(after(editor, 2)).toEqual(AFTER);
+    roundTrip(editor, 1);
+  });
+
+  test("typing over a selection reaching out of the segment stops it first", async () => {
+    const { editor, generation } = await streaming();
+    editor.tf.select({
+      anchor: { path: [1, 1, 0], offset: 2 },
+      focus: { path: [2, 0], offset: 3 },
+    });
+    editor.tf.insertText("MINE");
+    expect(generation.state).toBe("stopped");
+    expect(texts(segment(editor, 1))).toEqual(["Hello", "woMINEer."]);
+    show(generation, "Hello\nworld wide");
+    expect(texts(segment(editor, 1))).toEqual(["Hello", "woMINEer."]);
+    await tick();
+    roundTrip(editor, 2);
+  });
+
+  test("a delete reaching in from the previous block stops it first", async () => {
+    const { editor, generation } = await streaming();
+    editor.tf.select({
+      anchor: { path: [0, 0], offset: 3 },
+      focus: { path: [1, 0, 0], offset: 2 },
+    });
+    editor.tf.deleteFragment();
+    expect(generation.state).toBe("stopped");
+    expect(after(editor, 0)).toMatchObject({ children: [{ text: "Befllo" }] });
+    expect(texts(segment(editor, 1))).toEqual(["world"]);
+    await tick();
+    roundTrip(editor, 2);
+  });
+
+  test("Backspace at the start of the next block stops it first", async () => {
+    const { editor, generation } = await streaming();
+    editor.tf.select({ path: [2, 0], offset: 0 });
+    editor.tf.deleteBackward("character");
+    expect(generation.state).toBe("stopped");
+    expect(texts(segment(editor, 1))).toEqual(["Hello", "worldAfter."]);
+  });
+
+  test("typing inside it stops it first and the text lands", async () => {
+    const { editor, generation } = await streaming();
+    editor.tf.select({ path: [1, 0, 0], offset: 5 });
+    editor.tf.insertText("!");
+    expect(generation.state).toBe("stopped");
+    expect(texts(segment(editor, 1))).toEqual(["Hello!", "world"]);
+    await tick();
+    roundTrip(editor, 2);
+  });
+
+  test("select-all and type removes the segment, which cancels it", async () => {
+    const { editor, generation } = await streaming();
+    editor.tf.select([]);
+    editor.tf.insertText("X");
+    expect(generation.state).toBe("live");
+    expect(show(generation, "Hello\nworld wide")).toBe(false);
+    generation.abandon();
     expect(content(editor).map((b) => b.type)).not.toContain("ai_segment");
+    expect(editor.api.string([])).toBe("X");
+    await tick();
+    editor.undo();
+    expect(texts(segment(editor, 1))).toEqual(["Hello", "world"]);
+    expect(segment(editor, 1).status).toBe("ready");
+  });
+
+  test("edits elsewhere leave it streaming", async () => {
+    const { editor, generation } = await streaming();
+    editor.tf.select({ path: [2, 0], offset: 2 });
+    editor.tf.insertText("x");
+    editor.tf.deleteBackward("character");
+    expect(generation.state).toBe("live");
   });
 });

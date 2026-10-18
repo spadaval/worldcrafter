@@ -23,6 +23,8 @@ import {
   createSlatePlugin,
   type Descendant,
   ElementApi,
+  PointApi,
+  RangeApi,
   type SlateEditor,
   type TElement,
   TextApi,
@@ -68,6 +70,16 @@ export interface SegmentGeneration {
    * if the segment is gone (the writer deleted or undid it).
    */
   render(paragraphs: readonly GeneratedParagraph[], from: number): boolean;
+  /**
+   * `live` while streaming. `stopped` when the writer edited the segment
+   * (`GeneratingSegmentPlugin`): it was finished as shown, before the edit
+   * applied, and must not be rendered into again. The others follow
+   * `finish`, `discard` and `abandon`. Only a live generation changes the
+   * document; the methods do nothing otherwise.
+   */
+  readonly state: "live" | "stopped" | "finished" | "discarded" | "abandoned";
+  /** Called (synchronously, inside the writer's edit) when the writer stops it. */
+  onStop: (() => void) | null;
   /** Marks the segment ready and records it, finished, as the generation's undo step. */
   finish(): void;
   /**
@@ -105,7 +117,8 @@ export function startGeneration(
   } else {
     index = placement.index;
   }
-  setLive(editor, segmentId, true);
+  // Registered before the segment exists, so normalising keeps it generating.
+  setLive(editor, segmentId, () => stop());
   editor.tf.withNewBatch(() => {
     editor.tf.withoutNormalizing(() => {
       if (replaced) editor.tf.removeNodes({ at: [index] });
@@ -119,10 +132,42 @@ export function startGeneration(
   const silently = (change: () => void) => editor.tf.withoutSaving(change);
   /** The segment as this generation last left it; Slate nodes are immutable. */
   let last: Descendant | undefined = editor.children[index];
+  let state: SegmentGeneration["state"] = "live";
+
+  /** Marks the segment ready and makes the undo step place it as it is. */
+  const settle = () => {
+    const at = segmentIndex(editor, segmentId);
+    if (at === -1) return;
+    silently(() => editor.tf.setNodes({ status: "ready" }, { at: [at] }));
+    const finished = editor.children[at];
+    const insert = step?.operations.findIndex(
+      (op) =>
+        op.type === "insert_node" &&
+        ElementApi.isElement(op.node) &&
+        op.node.id === segmentId,
+    );
+    const op = insert === undefined ? undefined : step?.operations[insert];
+    if (step && op?.type === "insert_node" && finished) {
+      step.operations[insert as number] = {
+        ...op,
+        node: structuredClone(finished),
+      };
+    }
+  };
+
+  const end = (next: SegmentGeneration["state"]) => {
+    state = next;
+    setLive(editor, segmentId, null);
+  };
 
   const generation: SegmentGeneration = {
     segmentId,
+    get state() {
+      return state;
+    },
+    onStop: null,
     render(paragraphs, from) {
+      if (state !== "live") return false;
       const at = segmentIndex(editor, segmentId);
       const segment = editor.children[at];
       if (!segment) return false;
@@ -137,27 +182,12 @@ export function startGeneration(
       return true;
     },
     finish() {
-      const at = segmentIndex(editor, segmentId);
-      if (at !== -1) {
-        silently(() => editor.tf.setNodes({ status: "ready" }, { at: [at] }));
-        const finished = editor.children[at];
-        const insert = step?.operations.findIndex(
-          (op) =>
-            op.type === "insert_node" &&
-            ElementApi.isElement(op.node) &&
-            op.node.id === segmentId,
-        );
-        const op = insert === undefined ? undefined : step?.operations[insert];
-        if (step && op?.type === "insert_node" && finished) {
-          step.operations[insert as number] = {
-            ...op,
-            node: structuredClone(finished),
-          };
-        }
-      }
-      setLive(editor, segmentId, false);
+      if (state !== "live") return;
+      settle();
+      end("finished");
     },
     discard() {
+      if (state !== "live") return;
       const at = segmentIndex(editor, segmentId);
       if (at !== -1) {
         const undo = () =>
@@ -179,12 +209,19 @@ export function startGeneration(
           editor.tf.withNewBatch(undo);
         }
       }
-      setLive(editor, segmentId, false);
+      end("discarded");
     },
     abandon() {
-      setLive(editor, segmentId, false);
+      if (state !== "live") return;
+      end("abandoned");
     },
   };
+  function stop() {
+    if (state !== "live") return;
+    settle();
+    end("stopped");
+    generation.onStop?.();
+  }
   return { generation, replaced };
 }
 
@@ -279,19 +316,52 @@ export function unwrapSegment(
   return ids;
 }
 
-/** True when the whole selection is inside one generating AI segment. */
-export function isSelectionInGeneratingSegment(editor: SlateEditor): boolean {
+/**
+ * Stops every live generation whose segment the writer's next edit touches,
+ * so the edit lands on a ready segment and no render overwrites it. The
+ * edit's reach is the selection, plus the neighbouring block for a
+ * collapsed Backspace at the start of a block or Delete at the end (they
+ * merge into it). A segment the selection covers whole is left alone: the
+ * edit removes it, which cancels its generation.
+ */
+function stopTouched(
+  editor: SlateEditor,
+  live: ReadonlyMap<string, () => void>,
+  reach?: "backward" | "forward",
+): void {
   const { selection } = editor;
-  if (!selection) return false;
-  const [anchor] = selection.anchor.path;
-  const [focus] = selection.focus.path;
-  const node = anchor === undefined ? undefined : editor.children[anchor];
-  return (
-    anchor === focus &&
-    ElementApi.isElement(node) &&
-    node.type === "ai_segment" &&
-    node.status === "generating"
-  );
+  if (!selection || live.size === 0) return;
+  const [start, end] = RangeApi.edges(selection);
+  const collapsed = RangeApi.isCollapsed(selection);
+  let first = start.path[0] ?? 0;
+  let last = end.path[0] ?? 0;
+  if (collapsed && reach === "backward" && editor.api.isStart(start, [first])) {
+    first -= 1;
+  }
+  if (collapsed && reach === "forward" && editor.api.isEnd(end, [last])) {
+    last += 1;
+  }
+  for (let i = Math.max(first, 0); i <= last; i++) {
+    const node = editor.children[i];
+    if (
+      !ElementApi.isElement(node) ||
+      node.type !== "ai_segment" ||
+      node.status !== "generating"
+    ) {
+      continue;
+    }
+    const stop = live.get(String(node.id));
+    if (!stop) continue;
+    const segmentStart = editor.api.start([i]);
+    const segmentEnd = editor.api.end([i]);
+    const covered =
+      !collapsed &&
+      segmentStart !== undefined &&
+      segmentEnd !== undefined &&
+      PointApi.compare(start, segmentStart) <= 0 &&
+      PointApi.compare(end, segmentEnd) >= 0;
+    if (!covered) stop();
+  }
 }
 
 /**
@@ -301,18 +371,21 @@ export function isSelectionInGeneratingSegment(editor: SlateEditor): boolean {
  *   generating; normalisation makes any other one ready. So a segment saved
  *   mid-stream reopens ready (crash, closed tab), and undo can't bring back
  *   a locked one.
- * - The writer's edits are kept out of a generating segment, where the next
- *   streamed text would overwrite them: typing, deleting, pasting, breaking
- *   lines and changing marks do nothing while the whole selection is inside
- *   one. (The old app's segment kit blocked the same input with DOM
- *   handlers, for every segment.) A ready segment edits like any other
- *   text, and a selection reaching outside the segment edits normally, so a
- *   generating segment can still be deleted. The transforms above are not
- *   affected.
+ * - A writer's edit that touches a generating segment (typing, deleting,
+ *   pasting, breaking lines or changing marks, inside it or reaching into it
+ *   from either side) first stops its generation, keeping the text shown,
+ *   and then applies to the now ready segment. Streamed text never
+ *   overwrites the writer's edits, and history stays consistent: the
+ *   generation's undo step places the segment as it was when stopped. An
+ *   edit that removes the whole segment just removes it (its generation then
+ *   sees it gone and cancels). The transforms above are not affected.
  */
 export const GeneratingSegmentPlugin = createSlatePlugin({
   key: "generatingSegment",
-  options: { live: new Set<string>() as ReadonlySet<string> },
+  options: {
+    /** Live generations by segment ID, each with the function that stops it. */
+    live: new Map<string, () => void>() as ReadonlyMap<string, () => void>,
+  },
 }).overrideEditor(
   ({
     editor,
@@ -331,10 +404,14 @@ export const GeneratingSegmentPlugin = createSlatePlugin({
       removeMark,
     },
   }) => {
-    const guarded =
-      <A extends unknown[]>(transform: (...args: A) => void) =>
+    const stopping =
+      <A extends unknown[]>(
+        transform: (...args: A) => void,
+        reach?: "backward" | "forward",
+      ) =>
       (...args: A): void => {
-        if (!isSelectionInGeneratingSegment(editor)) transform(...args);
+        stopTouched(editor, getOptions().live, reach);
+        transform(...args);
       };
     return {
       transforms: {
@@ -356,36 +433,39 @@ export const GeneratingSegmentPlugin = createSlatePlugin({
           normalizeNode(entry);
         },
         insertText(text, options) {
-          if (options?.at || !isSelectionInGeneratingSegment(editor)) {
-            insertText(text, options);
-          }
+          if (!options?.at) stopTouched(editor, getOptions().live);
+          insertText(text, options);
         },
-        insertBreak: guarded(insertBreak),
-        insertSoftBreak: guarded(insertSoftBreak),
-        deleteBackward: guarded(deleteBackward),
-        deleteForward: guarded(deleteForward),
-        deleteFragment: guarded(deleteFragment),
-        insertFragment: guarded(insertFragment),
-        insertData: guarded(insertData),
-        addMark: guarded(addMark),
-        removeMark: guarded(removeMark),
+        insertBreak: stopping(insertBreak),
+        insertSoftBreak: stopping(insertSoftBreak),
+        deleteBackward: stopping(deleteBackward, "backward"),
+        deleteForward: stopping(deleteForward, "forward"),
+        deleteFragment: stopping(deleteFragment),
+        insertFragment: stopping(insertFragment),
+        insertData: stopping(insertData),
+        addMark: stopping(addMark),
+        removeMark: stopping(removeMark),
       },
     };
   },
 );
 
 /**
- * Registers or ends a live generation. Ending one normalises its segment,
- * so if it is still generating it becomes ready.
+ * Registers a live generation with the function that stops it, or (with
+ * null) ends one. Ending one normalises its segment, so if it is still
+ * generating it becomes ready.
  */
-function setLive(editor: SlateEditor, segmentId: string, live: boolean): void {
-  const current = editor.getOption(GeneratingSegmentPlugin, "live");
-  const next = new Set(current);
-  if (live) next.add(segmentId);
+function setLive(
+  editor: SlateEditor,
+  segmentId: string,
+  stop: (() => void) | null,
+): void {
+  const next = new Map(editor.getOption(GeneratingSegmentPlugin, "live"));
+  if (stop) next.set(segmentId, stop);
   else next.delete(segmentId);
   editor.setOption(GeneratingSegmentPlugin, "live", next);
   const at = segmentIndex(editor, segmentId);
-  if (!live && at !== -1) {
+  if (!stop && at !== -1) {
     editor.tf.withoutSaving(() =>
       editor.tf.normalizeNode([editor.children[at] as TElement, [at]]),
     );

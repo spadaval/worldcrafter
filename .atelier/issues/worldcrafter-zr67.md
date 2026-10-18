@@ -11,9 +11,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Manuscript outline: an ordered tree of scene documents"
-updated_at: "2026-10-18T00:17:25.563066276+00:00"
+updated_at: "2026-10-18T00:18:01.803458039+00:00"
 ---
 
 ## Goal

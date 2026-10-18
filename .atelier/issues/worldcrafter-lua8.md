@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Prose and plain+map projections with source maps"
-updated_at: "2026-10-17T07:07:33.747780273+00:00"
+updated_at: "2026-10-18T00:18:01.681669782+00:00"
 ---
 
 ## Goal

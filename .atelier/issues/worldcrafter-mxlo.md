@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Port world entries and relation model onto the storage adapter"
-updated_at: "2026-10-18T00:03:16.897326148+00:00"
+updated_at: "2026-10-18T00:18:01.741376301+00:00"
 ---
 
 ## Goal

@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "App shell and editor on the restricted schema"
-updated_at: "2026-10-18T00:14:28.248086264+00:00"
+updated_at: "2026-10-18T00:18:01.618312445+00:00"
 ---
 
 ## Goal

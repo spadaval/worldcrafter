@@ -9,7 +9,10 @@ relationships:
   blocks: []
   children: []
   attachments: []
-  relates: []
+  relates:
+  - kind: "issue"
+    id: "worldcrafter-2tz9"
+    type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
 status: "todo"

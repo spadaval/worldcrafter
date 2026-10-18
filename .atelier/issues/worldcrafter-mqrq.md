@@ -22,6 +22,8 @@ relationships:
   - kind: "issue"
     id: "worldcrafter-2ony"
   - kind: "issue"
+    id: "worldcrafter-2tz9"
+  - kind: "issue"
     id: "worldcrafter-3eqt"
   - kind: "issue"
     id: "worldcrafter-3lho"
@@ -54,7 +56,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Core loop: write, generate with visible world context, accept or regenerate"
-updated_at: "2026-10-18T00:55:31.762961671+00:00"
+updated_at: "2026-10-18T03:30:01.024549769+00:00"
 ---
 
 ## Goal

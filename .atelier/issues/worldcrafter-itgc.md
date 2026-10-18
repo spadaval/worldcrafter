@@ -14,9 +14,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-18T06:38:28.354368154+00:00"
+status: "done"
 title: "Story time: let frame rates order events, and check durations"
-updated_at: "2026-10-18T05:58:15.438087509+00:00"
+updated_at: "2026-10-18T06:38:28.354368154+00:00"
 ---
 
 ## Goal
@@ -36,3 +37,7 @@ Review of worldcrafter-2ony (2026-10-17), findings R2 and R9; app/src/time/chron
 - 2026-10-17 [note] From the 2ony build (2026-10-17): a position says where an event lies, not how long it lasts. 'War [1200, 1210)' means the war happened somewhere in that range, not that it spans the decade, so a scene positioned at 1205 is unordered with the war rather than during it. Expressing an event's extent in a frame needs a separate field on positions; until then 'during' must be stated as a constraint.
 - 2026-10-17 [note] From the 2ony re-review (2026-10-17): (N3) 'during' uncertain reasons are one per event while 'unordered' groups its events into one reason; add a count test and group 'during' the same way. Building a 2000-event timeline one command at a time took over 5 s (each command rewrites the whole timeline record); batch or measure when bookkeeping writes timelines.
 - 2026-10-18 [note] Pulled into the core-loop increment (2026-10-18): independent validation (bg6v, receipt worldcrafter-4ep5) failed S10 on time dilation. Acceptance includes the validator's probe /tmp/wc-validate/probes/s10-frames.test.ts (copied into the task's worktree as a permanent test): a rate-10 frame synced at a portal with a fact change placed only in frame time must hold at a later world scene, and a rate-0.1 voyage likewise.
+
+## Close Reason
+
+Frame rates, pauses and sync points now order events through derived world intervals that always contain the true time; frames that may pause (including through their reference chain) keep paused readings apart; durations checked against positions, loose by unit (user decision); rounding margins relative to input magnitude; grouped during reasons. Validator's S10 dilation scenarios pass as permanent tests; reviewed three times with rational-ground-truth fuzzing. Timeline building is ~12 ms/command at 2,000 events (batching noted on 8agg).

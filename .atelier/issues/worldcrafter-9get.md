@@ -17,9 +17,10 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-18T03:10:58.306646750+00:00"
+status: "done"
 title: "Build the Night Edition writing workspace"
-updated_at: "2026-10-18T02:19:10.929668216+00:00"
+updated_at: "2026-10-18T03:10:58.306646750+00:00"
 ---
 
 ## Goal
@@ -42,3 +43,7 @@ Presentation and layer rendering only, over data the other tasks provide; layers
 
 - 2026-10-17 [note] From the 2hcn final review (2026-10-17): when a second close lands behind a failed close, the writer sees the first close's 'unsaved' error while the second close actually saved and returned still_open; the tab stays open and the message is stale. When building the tab strip, let a still_open close finish closing once its save succeeds, or clear the stale error. environment.ts's still_open message says 'because it was opened again', which is wrong for the failed-close case.
 - 2026-10-17 [note] From the a8b0 review (2026-10-17): (R1) createConnectedStorage(...).close() closes the database connection shared with document sessions; don't call it on teardown (or make it a no-op). (R2) StorageError now includes ReadOnlyError; describeSaveStatus and other error describers only special-case 'failure' and would describe read_only as 'the document is missing'. Handle read_only explicitly wherever storage or world-store errors are shown. When wiring outline and timeline stores into the app, pass them createConnectedStorage(workspace.connection, workspace.readOnly).
+
+## Close Reason
+
+Night Edition workspace merged: rail with reading order and chronology spark, tab strip with crumb, story-time stamp, layer toggles (Speakers default, Subtext opt-in per scene), Fountain cues and speaker tints, gloss notes with confirm/dismiss, AI segment plate, self-hosted fonts; layers are editor decorations that never touch the tree; toggles measured at max ~33 ms click-to-paint with 0 px prose movement in headless Chrome; Impeccable finish review 'ship'; DESIGN.md and .impeccable/design.json written; code reviewed. Speakers, subtext and time notes are demo fixtures (?demo) until bookkeeping exists; the demo store can't recover from a storage failure (demo only).

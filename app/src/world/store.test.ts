@@ -438,6 +438,123 @@ describe("addRelation", () => {
   });
 });
 
+describe("recordFactChange", () => {
+  const inferred = {
+    level: "inferred",
+    provenance: { model: "m", requestId: "req1", sourceBlockId: "b1" },
+  } as const;
+  beforeEach(async () => {
+    await create({ documentId: "aldric", title: "Aldric", kind: "person" });
+    await create({ documentId: "court", title: "Court", kind: "organization" });
+  });
+
+  test("adds a change to a field, creating it with no base if needed", async () => {
+    await run({
+      name: "setField",
+      payload: { documentId: "aldric", field: "title", value: "prince" },
+    });
+    await run({
+      name: "recordFactChange",
+      payload: {
+        documentId: "aldric",
+        fact: { kind: "field", name: "title" },
+        event: "coronation",
+        value: "king",
+      },
+    });
+    const entry = await run({
+      name: "recordFactChange",
+      payload: {
+        documentId: "aldric",
+        fact: { kind: "field", name: "exiled" },
+        event: "coup",
+        value: true,
+        authority: inferred,
+      },
+    });
+    expect(entry.fields).toEqual({
+      title: {
+        base: { value: "prince", authority: { level: "asserted" } },
+        changes: [
+          {
+            event: "coronation",
+            value: "king",
+            authority: { level: "asserted" },
+          },
+        ],
+      },
+      exiled: {
+        base: null,
+        changes: [{ event: "coup", value: true, authority: inferred }],
+      },
+    });
+  });
+
+  test("replaces a change at the same event, but never an asserted one with an inferred one", async () => {
+    const change = (value: string, authority?: typeof inferred) =>
+      world.execute({
+        name: "recordFactChange",
+        payload: {
+          documentId: "aldric",
+          fact: { kind: "field", name: "title" },
+          event: "coronation",
+          value,
+          ...(authority === undefined ? {} : { authority }),
+        },
+      });
+    (await change("king", inferred))._unsafeUnwrap();
+    (await change("high king"))._unsafeUnwrap();
+    expect((await change("emperor", inferred))._unsafeUnwrapErr()).toEqual({
+      kind: "invalid_command",
+      command: "recordFactChange",
+      documentId: "aldric",
+      reason:
+        "the asserted change at event coronation cannot be replaced by an inferred one",
+    });
+    expect(
+      (await world.entry("aldric"))._unsafeUnwrap().fields.title?.changes,
+    ).toEqual([
+      {
+        event: "coronation",
+        value: "high king",
+        authority: { level: "asserted" },
+      },
+    ]);
+  });
+
+  test("starts or ends a relation at an event, checking its kinds", async () => {
+    const relation = (type: string, target: string, value: true | null) =>
+      world.execute({
+        name: "recordFactChange",
+        payload: {
+          documentId: "aldric",
+          fact: { kind: "relation", type, target },
+          event: "oath",
+          value,
+        },
+      });
+    const entry = (await relation("member_of", "court", true))._unsafeUnwrap();
+    expect(entry.relations).toEqual([
+      {
+        type: "member_of",
+        target: "court",
+        holds: {
+          base: null,
+          changes: [
+            { event: "oath", value: true, authority: { level: "asserted" } },
+          ],
+        },
+      },
+    ]);
+    expect(
+      (await relation("governs", "court", true))._unsafeUnwrapErr(),
+    ).toMatchObject({ kind: "relation_rejected" });
+    expect(
+      (await relation("member_of", "aldric", true))._unsafeUnwrapErr(),
+    ).toMatchObject({ reason: "an entry cannot relate to itself" });
+  });
+});
+
 describe("card", () => {
   test("a fixture entry renders the expected card", async () => {
     await create({

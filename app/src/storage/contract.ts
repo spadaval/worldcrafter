@@ -239,6 +239,20 @@ export function describeStorageContract(
       }),
     );
 
+    describeCollection(
+      "timelines",
+      () => storage.timelines,
+      (id, version) => ({
+        id,
+        timeline: {
+          version,
+          events: [{ id: "e1", label: "The coronation" }],
+          positions: [],
+        },
+        updatedAt: version,
+      }),
+    );
+
     test("a document's content tree round-trips losslessly", async () => {
       const document = {
         id: "doc1",

@@ -51,6 +51,7 @@ function upgrade(db: IDBDatabase, oldVersion: number): void {
     // Added to version 1 before any user data existed. From now on, schema
     // changes bump DB_VERSION.
     db.createObjectStore("outlines", { keyPath: "id" });
+    db.createObjectStore("timelines", { keyPath: "id" });
   }
 }
 
@@ -294,6 +295,7 @@ function createAdapter(db: IDBDatabase): StorageAdapter {
     requests: keyed("requests", (record) => record.id),
     snapshots,
     outlines: keyed("outlines", (record) => record.id),
+    timelines: keyed("timelines", (record) => record.id),
     close: () => db.close(),
   };
 }

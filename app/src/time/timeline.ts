@@ -84,9 +84,10 @@ const TIME_RELATIONS: readonly TimeRelation[] = [
 ];
 
 /**
- * The gap of a `before` or `after` ("three days after"), in a frame's unit.
- * Stored for display and for the AI; the engine orders by it, but doesn't yet
- * derive positions from it.
+ * The gap of a `before` or `after` ("three days after"), in a frame's unit:
+ * from the end of the earlier event to the start of the later one. The engine
+ * orders by the relation and checks the gap against the events' positions
+ * (`durationProblems`), but doesn't derive positions from it.
  */
 export type Duration = { amount: number; frame: FrameId };
 

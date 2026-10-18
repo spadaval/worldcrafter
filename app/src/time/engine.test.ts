@@ -522,6 +522,266 @@ describe("frames", () => {
   });
 });
 
+describe("frames order events", () => {
+  const at = (
+    event: string,
+    frame: string,
+    start: number,
+    end = start,
+  ): TimelineCommand => ({
+    type: "setPosition",
+    event,
+    frame,
+    position: { start, end },
+  });
+
+  test("a scene under a rate-0.5 frame sees world changes clearly before or after it", () => {
+    const timeline = build([
+      ...events("departure", "coup", "treaty"),
+      { type: "addFrame", id: "ship", label: "Ship", unit: "year", rate: 0.5 },
+      at("departure", "world", 100),
+      at("departure", "ship", 0),
+      // Ship year 10 is world 120.
+      at(s("s2"), "ship", 10),
+      at("coup", "world", 110),
+      at("treaty", "world", 130),
+    ]);
+    const chronology = compileChronology(timeline, SCENES);
+    expect(compareEvents(chronology, "coup", s("s2"))).toBe("before");
+    expect(compareEvents(chronology, s("s2"), "treaty")).toBe("before");
+    expect(chronology.interval(s("s2"), "world")?.start).toBeCloseTo(120);
+    expect(chronology.interval(s("s2"), "world")?.end).toBeCloseTo(120);
+    expect(
+      stateAt(
+        timeline,
+        changes("free", ["coup", "occupied"], ["treaty", "liberated"]),
+        "s2",
+      ),
+    ).toMatchObject({ status: "holds", value: "occupied", since: "coup" });
+  });
+
+  test("a pause orders events before and after it, and the paused moment spans it", () => {
+    const timeline = build([
+      ...events("born", "sealed", "freed", "vow", "dream", "wake"),
+      { type: "addFrame", id: "own", label: "Own time", unit: "year" },
+      at("born", "world", 1180),
+      at("born", "own", 0),
+      at("sealed", "world", 1200),
+      at("freed", "world", 1250),
+      {
+        type: "addCorrespondence",
+        id: "stasis",
+        frame: "own",
+        from: "sealed",
+        to: "freed",
+        rate: 0,
+      },
+      // World 1190; her clock reads 20 throughout the pause; world 1255.
+      at("vow", "own", 10),
+      at("dream", "own", 20),
+      at("wake", "own", 25),
+      at(s("s2"), "world", 1230),
+    ]);
+    const chronology = compileChronology(timeline, SCENES);
+    expect(timelineProblems(chronology)).toEqual([]);
+    expect(compareEvents(chronology, "vow", s("s2"))).toBe("before");
+    expect(compareEvents(chronology, s("s2"), "wake")).toBe("before");
+    expect(compareEvents(chronology, "dream", s("s2"))).toBe("unordered");
+    const dream = chronology.interval("dream", "world");
+    expect(dream?.start).toBeCloseTo(1200);
+    expect(dream?.end).toBeCloseTo(1250);
+    expect(
+      stateAt(
+        timeline,
+        changes("young", ["vow", "sworn"], ["wake", "free"]),
+        "s2",
+      ),
+    ).toMatchObject({ status: "holds", value: "sworn", since: "vow" });
+    // Elapsed time on the world clock uses the derived interval.
+    const toWake = elapsed(chronology, "world", "born", "wake");
+    if (toWake.status !== "known") throw new Error("expected known");
+    expect(toWake.min).toBeCloseTo(75);
+    expect(toWake.max).toBeCloseTo(75);
+  });
+
+  test("without a sync point, or with an unknown rate, frame time doesn't order what it can't", () => {
+    const timeline = build([
+      ...events("portal", "early", "late", "spell", "drift"),
+      { type: "addFrame", id: "fae", label: "Fae", unit: "year", rate: 10 },
+      { type: "addFrame", id: "wild", label: "Wild", unit: "year", rate: null },
+      // Fae has no sync point.
+      at("spell", "fae", 5),
+      at("portal", "world", 100),
+      at("portal", "wild", 0),
+      at("drift", "wild", 5),
+      at("early", "world", 90),
+      at("late", "world", 110),
+    ]);
+    const chronology = compileChronology(timeline, SCENES);
+    expect(compareEvents(chronology, "spell", "early")).toBe("unordered");
+    expect(chronology.interval("spell", "world")).toBeUndefined();
+    // At any rate, wild year 5 comes after the portal, but how long after
+    // is unknown.
+    expect(compareEvents(chronology, "early", "drift")).toBe("before");
+    expect(compareEvents(chronology, "drift", "late")).toBe("unordered");
+    expect(chronology.interval("drift", "world")).toBeUndefined();
+  });
+
+  test("a derived interval that contradicts a constraint is rejected", () => {
+    const timeline = build([
+      ...events("portal", "crowning"),
+      { type: "addFrame", id: "fae", label: "Fae", unit: "year", rate: 10 },
+      at("portal", "world", 1200),
+      at("portal", "fae", 0),
+      at("crowning", "fae", 5),
+      at(s("s3"), "world", 1255),
+    ]);
+    const error = applyTimelineCommand(
+      timeline,
+      {
+        type: "constrain",
+        id: "late",
+        a: "crowning",
+        relation: "after",
+        b: s("s3"),
+      },
+      SCENES,
+    )._unsafeUnwrapErr();
+    expect(error).toMatchObject({ kind: "contradiction" });
+    if (error.kind !== "contradiction")
+      throw new Error("expected contradiction");
+    expect(error.cycle).toEqual(
+      expect.arrayContaining([
+        { kind: "constraint", id: "late" },
+        {
+          kind: "derived_position",
+          event: "crowning",
+          frame: "fae",
+          reference: "world",
+        },
+      ]),
+    );
+    // Stored, the same contradiction loads and is reported.
+    const stored: Timeline = {
+      ...timeline,
+      constraints: [
+        {
+          id: "late",
+          a: "crowning",
+          relation: "after",
+          b: s("s3"),
+          duration: null,
+          authority: asserted,
+        },
+      ],
+    };
+    expect(compileChronology(stored, SCENES).problems).toMatchObject([
+      { kind: "contradiction", events: ["crowning", s("s3")] },
+    ]);
+  });
+
+  test("a duration the positions rule out is rejected, including derived ones", () => {
+    const timeline = build([
+      ...events("a", "b", "portal", "crowning"),
+      at("a", "world", 1200),
+      at("b", "world", 1201),
+      { type: "addFrame", id: "fae", label: "Fae", unit: "year", rate: 10 },
+      at("portal", "world", 1200),
+      at("portal", "fae", 0),
+      at("crowning", "fae", 5),
+    ]);
+    const after = (
+      id: string,
+      a: string,
+      b: string,
+      amount: number,
+    ): TimelineCommand => ({
+      type: "constrain",
+      id,
+      a,
+      relation: "after",
+      b,
+      duration: { amount, frame: "world" },
+    });
+    expect(
+      applyTimelineCommand(
+        timeline,
+        after("c", "b", "a", 10),
+        SCENES,
+      )._unsafeUnwrapErr(),
+    ).toEqual({
+      kind: "inconsistent_duration",
+      referencedBy: "constraint c",
+      events: ["a", "b"],
+      message:
+        "constraint c puts 10 year between a and b, but their positions put 1 year between them",
+    });
+    expect(
+      applyTimelineCommand(timeline, after("c", "b", "a", 1), SCENES).isOk(),
+    ).toBe(true);
+    // Crowning is half a world year after the portal.
+    expect(
+      applyTimelineCommand(
+        timeline,
+        after("d", "crowning", "portal", 10),
+        SCENES,
+      )._unsafeUnwrapErr(),
+    ).toMatchObject({
+      kind: "inconsistent_duration",
+      referencedBy: "constraint d",
+    });
+    expect(
+      applyTimelineCommand(
+        timeline,
+        after("d", "crowning", "portal", 0.5),
+        SCENES,
+      ).isOk(),
+    ).toBe(true);
+    // Scene placements are checked too.
+    expect(
+      applyTimelineCommand(
+        build([
+          ...events("a"),
+          at("a", "world", 1200),
+          at(s("s2"), "world", 1201),
+        ]),
+        {
+          type: "placeScene",
+          scene: "s2",
+          placement: [
+            {
+              relation: "after",
+              event: "a",
+              duration: { amount: 3, frame: "world" },
+            },
+          ],
+        },
+        SCENES,
+      )._unsafeUnwrapErr(),
+    ).toMatchObject({
+      kind: "inconsistent_duration",
+      referencedBy: "the placement of scene s2",
+    });
+    // Stored, it loads and is reported.
+    const stored: Timeline = {
+      ...timeline,
+      constraints: [
+        {
+          id: "c",
+          a: "b",
+          relation: "after",
+          b: "a",
+          duration: { amount: 10, frame: "world" },
+          authority: asserted,
+        },
+      ],
+    };
+    expect(timelineProblems(compileChronology(stored, SCENES))).toMatchObject([
+      { kind: "inconsistent_duration", referencedBy: "constraint c" },
+    ]);
+  });
+});
+
 describe("uncertainty from stored data", () => {
   test("a contradictory stored timeline still loads, and its results are uncertain", () => {
     const timeline: Timeline = {
@@ -639,6 +899,28 @@ describe("uncertainty from stored data", () => {
     expect(state.reasons).toEqual([
       { kind: "unordered", relativeTo: s("s2"), events: ids("open") },
       { kind: "unordered_changes", events: ids("in") },
+    ]);
+  });
+
+  test("a scene during many changes gets one during reason", () => {
+    const n = 300;
+    const ids = Array.from({ length: n }, (_, i) => `war${i}`);
+    const timeline = build([
+      ...events(...ids),
+      {
+        type: "placeScene",
+        scene: "s2",
+        placement: ids.map((event) => ({ relation: "during", event })),
+      },
+    ]);
+    const state = stateAt(
+      timeline,
+      changes("free", ...ids.map((id): [string, FieldValue] => [id, id])),
+      "s2",
+    );
+    if (state?.status !== "uncertain") throw new Error("expected uncertain");
+    expect(state.reasons).toEqual([
+      { kind: "during", relativeTo: s("s2"), events: ids },
     ]);
   });
 

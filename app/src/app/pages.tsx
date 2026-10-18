@@ -1,7 +1,7 @@
 import { useParams } from "@tanstack/react-router";
 import { Plate } from "platejs/react";
 import { useEffect, useState } from "react";
-import type { DocumentSession } from "~/workspace/document-session";
+import type { DocumentSession, SaveStatus } from "~/workspace/document-session";
 import type { CommandError } from "~/workspace/workspace";
 import { describeCommandError, describeSaveStatus } from "./environment";
 import { Sheet } from "./gloss";
@@ -71,13 +71,16 @@ function DocumentView({ session }: { session: DocumentSession }) {
         session={session}
         head={
           <div className="document-head">
-            {scene && (
-              <span className="scene-number" aria-hidden="true">
-                {scene.position}
-              </span>
-            )}
+            <div className="head-margin">
+              {scene && (
+                <span className="scene-number" aria-hidden="true">
+                  {scene.position}
+                </span>
+              )}
+              <SaveStatusLine session={session} />
+            </div>
             <TitleField session={session} />
-            <SaveStatusLine session={session} />
+            <SaveProblem session={session} />
           </div>
         }
       />
@@ -111,14 +114,29 @@ function TitleField({ session }: { session: DocumentSession }) {
   );
 }
 
+const isProblem = (status: SaveStatus) =>
+  status.kind === "invalid" || status.kind === "failed";
+
+/** The short status, in the margin beside the title. */
 function SaveStatusLine({ session }: { session: DocumentSession }) {
   const status = useStore(session.status);
-  const problem = status.kind === "invalid" || status.kind === "failed";
   return (
-    <p
-      className={problem ? "save-status save-status-problem" : "save-status"}
-      role={problem ? "alert" : "status"}
+    <output
+      className={
+        isProblem(status) ? "save-status save-status-problem" : "save-status"
+      }
     >
+      {isProblem(status) ? "Not saved" : describeSaveStatus(status)}
+    </output>
+  );
+}
+
+/** What went wrong and what happens next, under the title, when a save fails. */
+function SaveProblem({ session }: { session: DocumentSession }) {
+  const status = useStore(session.status);
+  if (!isProblem(status)) return null;
+  return (
+    <p className="save-problem" role="alert">
       {describeSaveStatus(status)}
     </p>
   );

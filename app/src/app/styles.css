@@ -425,7 +425,7 @@ a {
   align-items: center;
   gap: 12px;
   min-width: 0;
-  padding: 0 24px 0 32px;
+  padding: 0 20px 0 28px;
   border-bottom: 1px solid var(--rule);
 }
 
@@ -484,6 +484,23 @@ a {
   white-space: pre;
 }
 
+.tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Fractional text widths otherwise round into a needless ellipsis. */
+  padding-right: 1px;
+}
+
+/* Inactive tabs give way first when the header is full. */
+.tab[data-active="false"] {
+  flex: 0 1 auto;
+  min-width: 64px;
+}
+
+.tab[data-active="false"] a {
+  min-width: 0;
+}
+
 .tab[data-active="true"] .tab-title {
   font-weight: 600;
   color: var(--ink);
@@ -517,9 +534,9 @@ a {
 
 .stamp {
   flex: none;
-  margin: 0 0 0 6px;
+  margin: 0;
   font: 400 14px var(--font-prose);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
   color: var(--ink-2);
@@ -543,7 +560,7 @@ a {
   display: flex;
   flex: none;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   margin-left: auto;
 }
 
@@ -557,7 +574,7 @@ a {
 }
 
 .layer-toggles button {
-  padding: 6px 11px;
+  padding: 6px 10px;
   border: 0;
   border-right: 1px solid var(--rule);
   background: none;
@@ -576,8 +593,25 @@ a {
 }
 
 .layer-toggles button[aria-pressed="true"] {
-  background: var(--raised);
+  background: #2b261f;
   color: var(--ink);
+}
+
+/* An underline in the layer's own hue when it's on: the strip is its legend. */
+.layer-toggles button[aria-pressed="true"] {
+  box-shadow: inset 0 -2px 0 var(--ink-3);
+}
+
+.layer-toggles button[data-layer="speakers"][aria-pressed="true"] {
+  box-shadow: inset 0 -2px 0 var(--say-0);
+}
+
+.layer-toggles button[data-layer="time"][aria-pressed="true"] {
+  box-shadow: inset 0 -2px 0 var(--time);
+}
+
+.layer-toggles button[data-layer="subtext"][aria-pressed="true"] {
+  box-shadow: inset 0 -2px 0 var(--subtext);
 }
 
 .layer-toggles button:focus-visible {
@@ -680,10 +714,19 @@ a {
   position: relative;
 }
 
-.scene-number {
+/* The margin beside the title: the scene's number, then the save status. */
+.head-margin {
   position: absolute;
   top: 15px;
   right: calc(100% + 22px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 9px;
+  width: var(--margin-width);
+}
+
+.scene-number {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.1em;
@@ -706,10 +749,7 @@ a {
 }
 
 .save-status {
-  position: absolute;
-  top: 38px;
-  right: calc(100% + 22px);
-  width: var(--margin-width);
+  display: block;
   margin: 0;
   font-size: 12px;
   text-align: right;
@@ -717,13 +757,15 @@ a {
 }
 
 .save-status-problem {
-  position: static;
-  width: auto;
-  margin-top: 10px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.save-problem {
+  margin: 10px 0 0;
   padding: 8px 12px;
   background: var(--raised);
   font-size: 13.5px;
-  text-align: left;
   color: var(--ink);
 }
 
@@ -909,6 +951,10 @@ a {
   --band: linear-gradient(rgb(230 223 207 / 0.08), rgb(230 223 207 / 0.08));
 }
 
+.lm-tie {
+  white-space: nowrap;
+}
+
 [data-layer-notes] .lm-note {
   color: var(--ink-2);
   --band-w: 100%;
@@ -984,6 +1030,22 @@ a {
   user-select: none;
 }
 
+.ai-segment-actions {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.ai-segment-pending {
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-3);
+}
+
+/* Off until generation is connected: drawn like the gloss's unavailable actions. */
 .ai-segment-label button {
   padding: 0;
   border: 0;
@@ -991,20 +1053,12 @@ a {
   font: inherit;
   letter-spacing: 0.04em;
   text-transform: inherit;
-  color: var(--ink-2);
-}
-
-.ai-segment-label button:first-of-type {
-  margin-left: auto;
+  color: var(--ink-3);
+  cursor: not-allowed;
 }
 
 .ai-segment-label button::after {
   content: " ›";
-  color: var(--ink-3);
-}
-
-.ai-segment-label button:disabled {
-  cursor: not-allowed;
 }
 
 .ai-segment[data-status="generating"] .ai-segment-source {
@@ -1263,8 +1317,8 @@ a {
     row-gap: 2px;
   }
 
-  .ai-segment-label button {
-    white-space: nowrap;
+  .ai-segment-actions {
+    margin-left: 0;
   }
 
   .masthead-controls .button {
@@ -1286,24 +1340,30 @@ a {
     padding-top: 18px;
   }
 
-  .scene-number,
-  .save-status {
+  /* The header already names the scene; the save status follows the title. */
+  .document-head {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .head-margin {
     position: static;
+    order: 2;
+    align-items: flex-start;
     width: auto;
-    text-align: left;
+    margin-top: 4px;
   }
 
   .scene-number {
-    display: block;
-    margin-bottom: 4px;
+    display: none;
   }
 
   .title-field {
     font-size: 27px;
   }
 
-  .save-status {
-    margin-top: 4px;
+  .save-problem {
+    order: 3;
   }
 
   /* Cues sit in the gap above their paragraph instead of the margin. */

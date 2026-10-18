@@ -60,6 +60,7 @@ interface LayerLeafProps {
   wcTime?: true;
   wcSub?: true;
   wcNote?: true;
+  wcTie?: true;
   wcKey?: string;
   wcKeyLayer?: LayerId;
   wcAnchor?: string;
@@ -155,6 +156,7 @@ function LayerLeaf(props: PlateLeafProps) {
   if (leaf.wcTime) classes.push("lm-time");
   if (leaf.wcSub) classes.push("lm-sub");
   if (leaf.wcNote) classes.push("lm-note");
+  if (leaf.wcTie) classes.push("lm-tie");
   if (leaf.wcSay !== undefined) classes.push("lm-say");
   if (leaf.wcKey) classes.push("lm-key");
   return (
@@ -229,6 +231,13 @@ export function blockDecorations(
   }
   for (const note of fountainNotes(text)) {
     decorations.push({ start: note.start, end: note.end, wcNote: true });
+    // Keep the closing brackets with the note's last word.
+    let tail = note.end - 2;
+    while (tail > note.start && /\s/.test(text.charAt(tail - 1))) tail--;
+    const word = text.lastIndexOf(" ", tail - 1) + 1;
+    if (word > note.start + 2) {
+      decorations.push({ start: word, end: note.end, wcTie: true });
+    }
   }
   return decorations;
 }

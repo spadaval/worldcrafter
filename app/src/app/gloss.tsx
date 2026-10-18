@@ -124,6 +124,11 @@ export function Sheet({
         <Gloss
           sheetRef={sheetRef}
           notes={sceneLayers.notes}
+          marked={
+            sceneLayers.notes.length > 0 ||
+            sceneLayers.marks.length > 0 ||
+            sceneLayers.speakers.length > 0
+          }
           keys={keys}
           on={on}
           resolutions={resolutions}
@@ -161,6 +166,7 @@ const EMPTY_LAYOUT: Layout = { tops: new Map(), height: 0 };
 function Gloss({
   sheetRef,
   notes,
+  marked,
   keys,
   on,
   resolutions,
@@ -168,6 +174,8 @@ function Gloss({
 }: {
   sheetRef: React.RefObject<HTMLDivElement | null>;
   notes: readonly GlossNote[];
+  /** Whether the bookkeeping has marked this document at all. */
+  marked: boolean;
   keys: ReadonlyMap<string, NoteKey>;
   on: ReadonlySet<LayerId>;
   resolutions: ReadonlyMap<string, NoteResolution>;
@@ -260,7 +268,9 @@ function Gloss({
   }, [sheetRef]);
 
   const shown = [...visible].filter((id) => layout.tops.has(id)).length;
-  const hint = glossHint(on, shown);
+  const hint = marked
+    ? glossHint(on, shown)
+    : "No notes in this document yet. Notes attach to the words they're about.";
   return (
     <aside
       className="gloss-column"

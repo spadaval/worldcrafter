@@ -11,6 +11,7 @@ import { textBlocks } from "~/editor/layer-plugin";
 import { LAYER_LABELS, LAYERS, layersForScene, mentions } from "~/layers/model";
 import { createStore } from "~/workspace/store";
 import type { CommandError } from "~/workspace/workspace";
+import { KIND_DEFINITIONS } from "~/world/kinds";
 import { describeCommandError } from "./environment";
 import { useEnvironment, useServices, useStore, useWorkspace } from "./hooks";
 import { formatStoryTime } from "./manuscript";
@@ -131,7 +132,8 @@ function TabStrip({
   active: string | null;
   onMessage: Dispatch<SetStateAction<Message | null>>;
 }) {
-  const { workspace, manuscript } = useServices();
+  const { workspace, manuscript, worldIndex } = useServices();
+  const entries = useStore(worldIndex.entries);
   const tabs = useStore(workspace.tabs);
   const documents = useStore(workspace.documents);
   const state = useStore(manuscript.state);
@@ -174,6 +176,12 @@ function TabStrip({
       {tabs.open.map((id) => {
         const scene = sceneOf(id);
         const isActive = id === active;
+        const kind = entries.get(id)?.kind;
+        const crumb = scene
+          ? scene.chapterTitle
+          : kind
+            ? `World › ${KIND_DEFINITIONS[kind].label}`
+            : "";
         return (
           <div key={id} className="tab" data-active={isActive}>
             <Link
@@ -181,9 +189,7 @@ function TabStrip({
               params={{ documentId: id }}
               aria-current={isActive ? "page" : undefined}
             >
-              {isActive && scene?.chapterTitle && (
-                <span className="crumb">{scene.chapterTitle} › </span>
-              )}
+              {isActive && crumb && <span className="crumb">{crumb} › </span>}
               <span className="tab-title">
                 {scene && isActive ? `${scene.position} ` : ""}
                 {titleOf(id)}

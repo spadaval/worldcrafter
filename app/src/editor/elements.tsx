@@ -60,12 +60,15 @@ export function AiSegmentElement(props: PlateElementProps) {
           {generating ? "AI · generating" : "AI segment"}
           {model && <span className="ai-segment-model"> · {model}</span>}
         </span>
-        <button type="button" disabled title={unavailable}>
-          Regenerate
-        </button>
-        <button type="button" disabled title={unavailable}>
-          Accept
-        </button>
+        <span className="ai-segment-actions">
+          <span className="ai-segment-pending">Not connected yet</span>
+          <button type="button" disabled title={unavailable}>
+            Regenerate
+          </button>
+          <button type="button" disabled title={unavailable}>
+            Accept
+          </button>
+        </span>
       </span>
       {props.children}
     </PlateElement>

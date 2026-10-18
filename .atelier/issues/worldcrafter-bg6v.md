@@ -13,6 +13,9 @@ relationships:
   - kind: "issue"
     id: "worldcrafter-2tz9"
     type: "blocked_by"
+  - kind: "issue"
+    id: "worldcrafter-itgc"
+    type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"

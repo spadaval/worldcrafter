@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "AI edit proposals by block ID"
-updated_at: "2026-10-18T03:59:36.412859343+00:00"
+updated_at: "2026-10-18T04:36:06.838432384+00:00"
 ---
 
 ## Goal
@@ -47,3 +47,4 @@ Suggestion rendering in Plate (the suggestion plugin, or a custom one).
 - 2026-10-17 [note] From the efkh generate review (2026-10-17): (R5) undoing an accept brings the segment back as ready while its provenance stays archived as accepted (re-accepting writes no record; regenerating doesn't mark it replaced), and undoing a saved generation leaves an active record for a segment that no longer exists. Text is never lost, but 'archived' can't be trusted; reconcile provenance with the document on undo/redo (or on save) when building edit proposals, which add the same problem. (R8) commands that change node properties (setNodes/toggleBlock from a future toolbar) bypass the generating-segment guard.
 - 2026-10-17 [note] From the efkh re-review (2026-10-17): if a regeneration's new segment is deleted mid-stream and reading the old provenance record fails with a storage error, the replaced blocks are written to no record (they survive only in undo history and the open-time snapshot). A blind archive would overwrite the existing record, so don't; instead request a snapshot when that read fails. Also: undoing a generation mid-stream then redoing brings back an empty ready segment with no provenance (harmless; writer can delete it).
 - 2026-10-17 [note] From the efkh third review (2026-10-17): (R2) undoing a cross-boundary delete after a generation finished can leave a duplicated paragraph in the segment; a delete starting before a segment merges segment text into the writer's paragraph without marking it as AI (the same happens with ready segments by design). (R5) if a generating segment is deleted and the delete is undone before the stream ends, the segment returns as ready AI text with no provenance. Visible and editable, but provenance tracking of AI text across merges needs a rule when edit proposals land.
+- 2026-10-18 [note] From the efkh fifth review (2026-10-18): undoing a generation mid-stream records it as cancelled with no provenance, but redo brings the segment back with the text it showed, so AI text sits in the document with no record (regenerate fails with no_provenance); with replace placement the redo also removes the old segment again without archiving it. No content is lost, only metadata; reconcile provenance on redo with the other undo/provenance work.

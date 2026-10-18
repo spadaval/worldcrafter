@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Story time: let frame rates order events, and check durations"
-updated_at: "2026-10-18T02:04:48.470076441+00:00"
+updated_at: "2026-10-18T02:08:46.982552245+00:00"
 ---
 
 ## Goal
@@ -34,3 +34,4 @@ Review of worldcrafter-2ony (2026-10-17), findings R2 and R9; app/src/time/chron
 ## Notes
 
 - 2026-10-17 [note] From the 2ony build (2026-10-17): a position says where an event lies, not how long it lasts. 'War [1200, 1210)' means the war happened somewhere in that range, not that it spans the decade, so a scene positioned at 1205 is unordered with the war rather than during it. Expressing an event's extent in a frame needs a separate field on positions; until then 'during' must be stated as a constraint.
+- 2026-10-17 [note] From the 2ony re-review (2026-10-17): (N3) 'during' uncertain reasons are one per event while 'unordered' groups its events into one reason; add a count test and group 'during' the same way. Building a 2000-event timeline one command at a time took over 5 s (each command rewrites the whole timeline record); batch or measure when bookkeeping writes timelines.

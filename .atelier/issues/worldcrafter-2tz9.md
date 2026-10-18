@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Wire generation into the Night Edition workspace"
-updated_at: "2026-10-18T04:25:58.996034308+00:00"
+updated_at: "2026-10-18T04:48:19.553501240+00:00"
 ---
 
 ## Goal
@@ -38,3 +38,4 @@ app/src/generate/ (createGenerator, ContextViewer, SegmentControls), app/src/con
 ## Notes
 
 - 2026-10-18 [note] From the efkh fourth review (2026-10-18): edits that bypass the AI-segment plugin's overridden actions don't stop a live generation: changing a block's type or indent, inserting nodes (an inline is then erased by the next render) and moving nodes (moving a paragraph out of the segment duplicates it). No current UI makes these edits; when the workspace adds a toolbar, slash commands or drag-and-drop, route them through the stop-on-edit path or forbid them inside a generating segment.
+- 2026-10-18 [note] From the efkh final review (2026-10-18): harden app/src/editor/ai-segment.random.test.ts to also check validateDocument(canonicalize(...)) and block-ID uniqueness after each render (both held over 300 seeds in a probe); in app/src/generate/generate.test.ts (~790) the fault-injection test hard-codes top-level index 3 for the segment; use segmentIndex(...) so it can't silently stop firing.

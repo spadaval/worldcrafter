@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Generate command with context viewer and AI segments"
-updated_at: "2026-10-17T23:57:20.191408529+00:00"
+updated_at: "2026-10-18T00:26:04.441318408+00:00"
 ---
 
 ## Goal
@@ -46,3 +46,4 @@ Command, context viewer and segment UI. Port the AI-segment node from the keep l
 - 2026-10-17 [note] Deferred from the pz8e review (2026-10-17): (R4) the LLM client's `aborted` error carries no partial completion; decide here whether a cancelled generation keeps its partial text and logprobs in the AI segment (no-data-loss), and either attach `partial` to aborted/mid-stream errors or accumulate from onDelta. (R6) token text comes only from `token`, ignoring `bytes`, so a multi-byte character split across llama.cpp tokens shows U+FFFD; handle it wherever logprobs are first displayed.
 - 2026-10-17 [note] Deferred from the 3eqt storage review (2026-10-17): (R4) accepting an AI segment saves the document, archives the sidecar record and takes a snapshot as three separate commits; a crash between them leaves them out of step. Add a multi-collection batch write to the storage adapter when the accept flow is built, shaped by that flow.
 - 2026-10-17 [note] Also from the 3eqt re-review (N1): transact() rolls back only if issue() throws before issuing any write; when adding the multi-collection batch, wrap issue() so any throw aborts the transaction.
+- 2026-10-17 [note] From the lua8 projections review (2026-10-17): (R2) projectProse includes AI segments whose status is still 'generating', so a continuation request would send the model partial text. The continuation caller must skip or wait on generating segments, or add an option to the projection.

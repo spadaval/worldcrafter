@@ -19,7 +19,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Recognition: alias matcher, mention annotations, mentions view"
-updated_at: "2026-10-17T07:07:33.751398235+00:00"
+updated_at: "2026-10-18T00:26:04.445990090+00:00"
 ---
 
 ## Goal
@@ -39,3 +39,7 @@ Offset or quote anchoring (data-model-boundaries open question). Whether auto-li
 ## Design
 
 `docs/rebuild/entity-pipeline.md` (Stage 1, Manual path).
+
+## Notes
+
+- 2026-10-17 [note] From the lua8 projections review (2026-10-17): (R4) block offsets from the projections are UTF-16 units over the block's joined text (link text included, a soft break is one \n), which matches JS regex indices; Plate decorate and Slate selections use per-leaf {path, offset}. Mention annotations need a converter between the two. For per-block matching, blockText(block) gives the same text and offsets as plain+map.

@@ -33,7 +33,7 @@ point back to it.
 
 Tests: with a fixture world and document, the assembled request contains the expected window, includes exactly
 the cards for entries mentioned in the window plus pinned entries, honours a size budget by dropping the
-lowest-priority cards first, and round-trips through storage. An edited request is stored as a new revision.
+lowest-priority cards first, and round-trips through storage. An edited request is stored as a new revision. Cards are rendered at the scene's story position (docs/rebuild/story-time.md, "What generation sees"): facts that hold at the scene, revealed facts stated openly, held-but-unrevealed facts marked as known to the author but not yet revealed to the reader, and uncertain facts marked as uncertain rather than guessed; a fixture shows a flashback scene getting the earlier values.
 
 ## Scope
 

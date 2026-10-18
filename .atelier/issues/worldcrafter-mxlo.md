@@ -14,9 +14,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-18T00:38:59.955577075+00:00"
+status: "done"
 title: "Port world entries and relation model onto the storage adapter"
-updated_at: "2026-10-18T00:18:01.741376301+00:00"
+updated_at: "2026-10-18T00:38:59.955577075+00:00"
 ---
 
 ## Goal
@@ -42,3 +43,7 @@ Ported modules plus tests. Entry-level commands (create entry, add alias, add re
 ## Notes
 
 - 2026-10-17 [note] From the 3lho content-format review (2026-10-17): (R6) the content schema checks internal-link targets against an invented canonical-name format, ^[a-z0-9]+(?:-[a-z0-9]+)*$ (isInternalLinkTarget in app/src/content/schema.ts). It rejects Old-Mill, a--b and café. When world entries get canonical names, define the format once and make the schema, the link UI and the name generator share it.
+
+## Close Reason
+
+World-facts store merged: entries attached to existing documents with kinds, templates, canonical names, former names, aliases, tags and scalar fields; typed relations checked against domain and range; time-indexable facts (base plus event-anchored changes) with inferred/asserted authority; prompt cards; serialised commands; unreadable records skipped and reported; independently reviewed twice. Rename still writes the document title itself (tracked on 2hcn).

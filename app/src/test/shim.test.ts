@@ -22,12 +22,15 @@ const EXPECTED_NATIVE = [
 
 test("every restored global is the runtime's own", () => {
   for (const key of EXPECTED_NATIVE) {
+    const value: unknown = globalThis[key];
+    const fn = value as { name: string };
+    // happy-dom installs some replacements (e.g. fetch) as bound functions,
+    // which also print as native code, so check the name too.
     expect({
       key,
-      native: Function.prototype.toString
-        .call(globalThis[key])
-        .includes("[native code]"),
-    }).toEqual({ key, native: true });
+      native: Function.prototype.toString.call(value).includes("[native code]"),
+      bound: fn.name.startsWith("bound "),
+    }).toEqual({ key, native: true, bound: false });
   }
 });
 

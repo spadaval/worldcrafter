@@ -1,5 +1,10 @@
 import { errAsync, okAsync, ResultAsync } from "neverthrow";
-import { type FailureContext, failure, notFound } from "./internal";
+import {
+  batchContext,
+  type FailureContext,
+  failure,
+  notFound,
+} from "./internal";
 import type {
   AnnotationCollection,
   AnnotationRecord,
@@ -105,7 +110,9 @@ function openDatabase(factory: IDBFactory, name: string): Promise<IDBDatabase> {
  * Runs `issue` in one transaction over `stores` and, once the transaction
  * commits, resolves with the value its returned getter reads. Either every
  * write in the transaction takes effect or none does. `issue` may call
- * `abort(cause)` from a request callback to roll back with that cause.
+ * `abort(cause)` from a request callback to roll back with that cause; if
+ * `issue` itself throws (e.g. a value that can't be cloned), the transaction
+ * is aborted with what it threw, even if it already issued writes.
  *
  * Writes request strict durability, so the browser reports completion only
  * after flushing to disk: a resolved write survives a reload, a crash or a
@@ -125,13 +132,25 @@ function transact<T>(
         ? db.transaction(stores, mode, { durability: "strict" })
         : db.transaction(stores, mode);
     let abortCause: unknown;
-    const result = issue(tx, (cause) => {
+    let result: (() => T) | undefined;
+    const abort = (cause: unknown) => {
       abortCause = cause;
-      tx.abort();
-    });
-    tx.oncomplete = () => resolve(result());
+      try {
+        tx.abort();
+      } catch {
+        // Already finished or aborting: the abort handler reports it.
+      }
+    };
+    tx.oncomplete = () => {
+      if (result) resolve(result());
+    };
     tx.onabort = () =>
       reject(abortCause ?? tx.error ?? new Error("transaction aborted"));
+    try {
+      result = issue(tx, abort);
+    } catch (cause) {
+      abort(cause);
+    }
   });
 }
 
@@ -297,6 +316,57 @@ function createAdapter(db: IDBDatabase): StorageAdapter {
     snapshots,
     outlines: keyed("outlines", (record) => record.id),
     timelines: keyed("timelines", (record) => record.id),
+    batch: (writes) => {
+      const stores = new Set<StoreName>();
+      for (const write of writes) {
+        if (write.kind === "saveDocument") stores.add("documents");
+        if (write.kind === "saveAnnotation") stores.add("annotations");
+        if (write.kind === "saveSnapshot") {
+          stores.add("snapshots");
+          stores.add(SNAPSHOT_CONTENT);
+        }
+      }
+      // A transaction needs at least one store.
+      if (stores.size === 0) return okAsync([]);
+      return runIn(
+        batchContext(writes),
+        [...stores],
+        "readwrite",
+        (tx, abort) => {
+          const added: { info: Omit<SnapshotInfo, "id">; add: IDBRequest }[] =
+            [];
+          for (const write of writes) {
+            switch (write.kind) {
+              case "saveDocument":
+                tx.objectStore("documents").put(write.record);
+                break;
+              case "saveAnnotation":
+                tx.objectStore("annotations").put(write.record);
+                break;
+              case "saveSnapshot": {
+                const { content, ...rest } = write.snapshot;
+                const info = { ...rest, createdAt: Date.now() };
+                const add = tx.objectStore("snapshots").add(info);
+                add.onsuccess = () => {
+                  try {
+                    tx.objectStore(SNAPSHOT_CONTENT).put({
+                      id: Number(add.result),
+                      content,
+                    } satisfies SnapshotContentRecord);
+                  } catch (cause) {
+                    abort(cause);
+                  }
+                };
+                added.push({ info, add });
+                break;
+              }
+            }
+          }
+          return () =>
+            added.map(({ info, add }) => ({ ...info, id: Number(add.result) }));
+        },
+      );
+    },
     close: () => db.close(),
   };
 }

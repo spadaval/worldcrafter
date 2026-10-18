@@ -1,5 +1,6 @@
 import { errAsync, okAsync, type ResultAsync } from "neverthrow";
 import {
+  batchContext,
   type FailureContext,
   failure,
   notFound,
@@ -10,10 +11,13 @@ import type {
   AnnotationRecord,
   Collection,
   CollectionName,
+  NewSnapshot,
   Snapshot,
   SnapshotCollection,
+  SnapshotInfo,
   StorageAdapter,
   StorageError,
+  StoredDocument,
 } from "./types";
 
 /**
@@ -42,8 +46,8 @@ export function createMemoryStorage(): StorageAdapter {
   function keyed<T>(
     collection: CollectionName,
     keyOf: (record: T) => string,
+    records = new Map<string, T>(),
   ): Collection<T> {
-    const records = new Map<string, T>();
     return {
       save: (record) =>
         run({ operation: "save", collection, id: keyOf(record) }, () => {
@@ -70,9 +74,12 @@ export function createMemoryStorage(): StorageAdapter {
     };
   }
 
+  const documentRecords = new Map<string, StoredDocument>();
+  const annotationRecords = new Map<string, AnnotationRecord>();
   const annotationStore = keyed<AnnotationRecord>(
     "annotations",
     (record) => record.id,
+    annotationRecords,
   );
   const annotations: AnnotationCollection = {
     save: annotationStore.save,
@@ -87,20 +94,22 @@ export function createMemoryStorage(): StorageAdapter {
 
   const snapshotRecords = new Map<number, Snapshot>();
   let nextSnapshotId = 1;
+  /** Stores an already-copied snapshot. */
+  const addSnapshot = (input: NewSnapshot) => {
+    const snapshot: Snapshot = {
+      ...input,
+      id: nextSnapshotId,
+      createdAt: Date.now(),
+    };
+    snapshotRecords.set(snapshot.id, snapshot);
+    nextSnapshotId += 1;
+    return snapshotInfo(snapshot);
+  };
   const snapshots: SnapshotCollection = {
     save: (input) =>
       run(
         { operation: "save", collection: "snapshots", id: input.documentId },
-        () => {
-          const snapshot: Snapshot = {
-            ...structuredClone(input),
-            id: nextSnapshotId,
-            createdAt: Date.now(),
-          };
-          snapshotRecords.set(snapshot.id, snapshot);
-          nextSnapshotId += 1;
-          return snapshotInfo(snapshot);
-        },
+        () => addSnapshot(structuredClone(input)),
       ),
     list: (documentId) =>
       run({ operation: "list", collection: "snapshots", id: documentId }, () =>
@@ -120,13 +129,30 @@ export function createMemoryStorage(): StorageAdapter {
   };
 
   return {
-    documents: keyed("documents", (record) => record.id),
+    documents: keyed("documents", (record) => record.id, documentRecords),
     worldEntries: keyed("worldEntries", (record) => record.documentId),
     annotations,
     requests: keyed("requests", (record) => record.id),
     snapshots,
     outlines: keyed("outlines", (record) => record.id),
     timelines: keyed("timelines", (record) => record.id),
+    batch: (writes) =>
+      run(batchContext(writes), () => {
+        // Copy every value before changing anything, so a value that can't
+        // be stored fails the batch with nothing written.
+        const copies = structuredClone(writes);
+        const saved: SnapshotInfo[] = [];
+        for (const write of copies) {
+          if (write.kind === "saveDocument") {
+            documentRecords.set(write.record.id, write.record);
+          } else if (write.kind === "saveAnnotation") {
+            annotationRecords.set(write.record.id, write.record);
+          } else {
+            saved.push(addSnapshot(write.snapshot));
+          }
+        }
+        return saved;
+      }),
     close: () => {
       closed = true;
     },

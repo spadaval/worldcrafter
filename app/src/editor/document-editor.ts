@@ -21,6 +21,7 @@ import {
 } from "platejs";
 import { createPlateEditor, createPlatePlugin } from "platejs/react";
 import { isInternalLinkTarget, isLinkTarget } from "~/content/schema";
+import { AiSegmentGuardPlugin } from "./ai-segment";
 import { BlockIdPlugin } from "./block-id-plugin";
 import {
   AiSegmentElement,
@@ -188,6 +189,7 @@ export const documentPlugins = [
   }),
   AutoformatPlugin.configure({ options: { rules: AUTOFORMAT_RULES } }),
   AiSegmentPlugin,
+  AiSegmentGuardPlugin,
   PlaceholderPlugin,
   // Layer marks are decorations: they never touch the content.
   LayerPlugin,

@@ -6,7 +6,14 @@ import {
   createDocumentEditor,
   type DocumentEditor,
 } from "~/editor/document-editor";
-import type { JsonValue, StorageError, StoredDocument } from "~/storage/types";
+import type {
+  AnnotationRecord,
+  BatchWrite,
+  JsonValue,
+  SnapshotReason,
+  StorageError,
+  StoredDocument,
+} from "~/storage/types";
 import type { StorageConnection } from "./connection";
 import { createStore, type Store } from "./store";
 
@@ -49,6 +56,17 @@ export const timeoutScheduler: Scheduler = (callback, delayMs) => {
   return () => clearTimeout(handle);
 };
 
+/** Records saved in the same atomic write as the document (`saveWith`). */
+export interface SidecarWrites {
+  /**
+   * Annotation records about this document. A record waiting to be saved is
+   * replaced by a later one with the same ID.
+   */
+  readonly annotations?: readonly AnnotationRecord[];
+  /** Also snapshots the content saved, for this reason. */
+  readonly snapshot?: SnapshotReason;
+}
+
 /**
  * One open document: its editor and the loop that saves it. The session is
  * the only writer of its document record. Every save canonicalises and
@@ -64,6 +82,15 @@ export interface DocumentSession {
   setTitle(title: string): void;
   /** Saves now if anything is unsaved; resolves with the resulting status. */
   flush(): Promise<SaveStatus>;
+  /**
+   * Saves the document now with `writes`, as one atomic write
+   * (`StorageAdapter.batch`), so the records never land without the content
+   * they describe, or the content without them. If that save fails or is
+   * refused (`invalid`), the writes wait and go out with the next save that
+   * succeeds, retried like any failed save. Resolves with the status after
+   * this attempt. Does nothing in a read-only session.
+   */
+  saveWith(writes: SidecarWrites): Promise<SaveStatus>;
   hasUnsavedChanges(): boolean;
   /** Stops saving. Call `flush` first. */
   dispose(): void;
@@ -75,8 +102,7 @@ export interface DocumentSession {
  * repaired and the tree is normalised into the schema. If that changed the
  * stored content, the session saves the repaired version.
  *
- * Snapshot policy (decision worldcrafter-js76; the AI-accept snapshot comes
- * with generation). Storage is last-write-wins, so snapshots are what make an
+ * Snapshot policy (decision worldcrafter-js76). Storage is last-write-wins, so snapshots are what make an
  * accidental select-all + delete recoverable after it has been saved:
  * - On open, a writer session snapshots the stored content unless the
  *   document's newest snapshot already holds exactly that content. So the
@@ -88,6 +114,8 @@ export interface DocumentSession {
  *   (`periodic`) if it differs from the session's last snapshot and at least
  *   `snapshotIntervalMs` has passed since it. A failed periodic snapshot
  *   doesn't fail the save; the next save tries again.
+ * - Accepting an AI segment snapshots the accepted content
+ *   (`accepted_ai_change`), in the same write as the document (`saveWith`).
  * Read-only sessions take no snapshots.
  */
 export function openDocumentSession(
@@ -147,11 +175,7 @@ function createSession(
     Array.isArray(original) ? (structuredClone(original) as Value) : [],
     {
       readOnly,
-      onChange: () => {
-        if (editor.children === seen) return;
-        seen = editor.children;
-        changed();
-      },
+      onChange: () => noticeChanges(),
     },
   );
   seen = editor.children;
@@ -171,12 +195,32 @@ function createSession(
   let inFlight: Promise<SaveStatus> | null = null;
   let disposed = false;
 
-  const hasUnsavedChanges = () => !readOnly && version !== savedVersion;
+  /** Sidecar writes waiting for the next successful save. */
+  const pendingAnnotations = new Map<string, AnnotationRecord>();
+  /** Compared by identity, so a request made during a save isn't lost. */
+  let pendingSnapshot: { reason: SnapshotReason } | null = null;
+
+  const hasUnsavedChanges = () =>
+    !readOnly &&
+    (version !== savedVersion ||
+      pendingAnnotations.size > 0 ||
+      pendingSnapshot !== null);
 
   const schedule = (delay: number) => {
     cancelTimer();
     if (disposed || readOnly) return;
     cancelTimer = scheduleTimer(() => void flush(), delay);
+  };
+
+  /**
+   * Counts a content change. Slate reports changes a microtask after they
+   * happen, so saving also checks first: a save right after an edit then
+   * knows the content it writes is the newest version.
+   */
+  const noticeChanges = () => {
+    if (editor.children === seen) return;
+    seen = editor.children;
+    changed();
   };
 
   const changed = () => {
@@ -187,6 +231,7 @@ function createSession(
   };
 
   const saveOnce = async (): Promise<SaveStatus> => {
+    noticeChanges();
     const writing = version;
     const content = validateDocument(canonicalize(editor.children));
     if (content.isErr()) {
@@ -201,8 +246,33 @@ function createSession(
       content: content.value as JsonValue,
       updatedAt: options.now(),
     };
+    const annotations = [...pendingAnnotations.values()];
+    const snapshot = pendingSnapshot;
+    const writes: BatchWrite[] = [
+      { kind: "saveDocument", record },
+      ...annotations.map(
+        (annotation): BatchWrite => ({
+          kind: "saveAnnotation",
+          record: annotation,
+        }),
+      ),
+      ...(snapshot
+        ? [
+            {
+              kind: "saveSnapshot" as const,
+              snapshot: {
+                documentId: record.id,
+                reason: snapshot.reason,
+                content: record.content,
+              },
+            },
+          ]
+        : []),
+    ];
     const saved = await connection.run((storage) =>
-      storage.documents.save(record),
+      writes.length === 1
+        ? storage.documents.save(record)
+        : storage.batch(writes).map(() => undefined),
     );
     if (saved.isErr()) {
       const result: SaveStatus = { kind: "failed", error: saved.error };
@@ -211,6 +281,18 @@ function createSession(
       return result;
     }
     savedVersion = writing;
+    for (const annotation of annotations) {
+      if (pendingAnnotations.get(annotation.id) === annotation) {
+        pendingAnnotations.delete(annotation.id);
+      }
+    }
+    if (snapshot) {
+      if (pendingSnapshot === snapshot) pendingSnapshot = null;
+      lastSnapshot = {
+        content: JSON.stringify(record.content),
+        at: record.updatedAt,
+      };
+    }
     options.onSaved?.(record);
     await snapshotIfDue(record);
     const result: SaveStatus =
@@ -239,6 +321,7 @@ function createSession(
   };
 
   const flush = async (): Promise<SaveStatus> => {
+    noticeChanges();
     cancelTimer();
     while (inFlight) await inFlight;
     if (!hasUnsavedChanges() || disposed) return status.get();
@@ -269,6 +352,15 @@ function createSession(
       changed();
     },
     flush,
+    saveWith(writes) {
+      if (readOnly || disposed) return Promise.resolve(status.get());
+      for (const annotation of writes.annotations ?? []) {
+        pendingAnnotations.set(annotation.id, annotation);
+      }
+      if (writes.snapshot) pendingSnapshot = { reason: writes.snapshot };
+      if (status.get().kind !== "invalid") status.set({ kind: "unsaved" });
+      return flush();
+    },
     hasUnsavedChanges,
     dispose() {
       disposed = true;

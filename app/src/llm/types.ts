@@ -78,6 +78,12 @@ export type LlmRequest = {
 
 export type TokenAlternative = {
   token: string;
+  /**
+   * The token's UTF-8 bytes, when the server sends them. A character split
+   * across tokens shows as U+FFFD in `token`; joining the bytes of
+   * consecutive tokens recovers it.
+   */
+  bytes?: number[];
   /** Present unless the server reported post-sampling probabilities only. */
   logprob?: number;
   /** llama.cpp `post_sampling_probs`: probability in [0, 1]. */
@@ -101,7 +107,18 @@ export type Completion = {
   model: string | null;
 };
 
+/**
+ * Refused before sending: the request doesn't fit its endpoint, or isn't
+ * addressed to the profile whose credentials would be sent with it.
+ */
+export type InvalidRequestError = {
+  kind: "invalid_request";
+  url: string;
+  message: string;
+};
+
 export type LlmError =
+  | InvalidRequestError
   | { kind: "http"; url: string; status: number; message: string }
   | { kind: "network"; url: string; message: string; cause: unknown }
   | { kind: "aborted"; url: string; message: string }

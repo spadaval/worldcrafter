@@ -359,6 +359,95 @@ export function describeStorageContract(
       });
     });
 
+    describe("batch", () => {
+      const document = (title: string) => ({
+        id: "doc1",
+        title,
+        content: contentFixture,
+        updatedAt: 2,
+      });
+      const annotation = {
+        id: "seg_01",
+        documentId: "doc1",
+        kind: "ai_provenance",
+        data: { model: "local" },
+        updatedAt: 2,
+      };
+
+      test("writes a document, an annotation and a snapshot together", async () => {
+        const infos = await value(
+          storage.batch([
+            { kind: "saveDocument", record: document("After") },
+            { kind: "saveAnnotation", record: annotation },
+            {
+              kind: "saveSnapshot",
+              snapshot: {
+                documentId: "doc1",
+                reason: "accepted_ai_change",
+                content: contentFixture,
+              },
+            },
+          ]),
+        );
+        expect(await value(storage.documents.load("doc1"))).toEqual(
+          document("After"),
+        );
+        expect(await value(storage.annotations.load("seg_01"))).toEqual(
+          annotation,
+        );
+        expect(infos).toHaveLength(1);
+        expect(await value(storage.snapshots.list("doc1"))).toEqual(infos);
+        const [info] = infos;
+        if (info === undefined) throw new Error("expected a snapshot");
+        expect(info.reason).toBe("accepted_ai_change");
+        expect(await value(storage.snapshots.load(info.id))).toEqual({
+          ...info,
+          content: contentFixture,
+        });
+      });
+
+      // A function can't be stored, so each of these fails part-way: after
+      // the document is written, at the annotation or at the snapshot.
+      const unstorable = [() => undefined] as unknown as JsonValue;
+      test.each([
+        ["an annotation", { ...annotation, data: unstorable }, contentFixture],
+        ["a snapshot", annotation, unstorable],
+      ])("writes nothing when %s fails", async (_, record, content) => {
+        await value(storage.documents.save(document("Before")));
+        const failure = await error(
+          storage.batch([
+            { kind: "saveDocument", record: document("After") },
+            { kind: "saveAnnotation", record },
+            {
+              kind: "saveSnapshot",
+              snapshot: {
+                documentId: "doc1",
+                reason: "accepted_ai_change",
+                content,
+              },
+            },
+          ]),
+        );
+        expect(failure).toMatchObject({
+          kind: "failure",
+          operation: "save",
+          collection: "documents",
+          id: "doc1",
+        });
+        expect(await value(storage.documents.load("doc1"))).toEqual(
+          document("Before"),
+        );
+        expect(await error(storage.annotations.load("seg_01"))).toMatchObject({
+          kind: "not_found",
+        });
+        expect(await value(storage.snapshots.list("doc1"))).toEqual([]);
+      });
+
+      test("an empty batch succeeds", async () => {
+        expect(await value(storage.batch([]))).toEqual([]);
+      });
+    });
+
     test("operations on a closed store fail as Results, not throws", async () => {
       storage.close();
       const document = { id: "d", title: "t", content: [], updatedAt: 1 };
@@ -368,6 +457,9 @@ export function describeStorageContract(
         await error(storage.worldEntries.list()),
         await error(storage.annotations.listForDocument("d")),
         await error(storage.requests.delete("d")),
+        await error(
+          storage.batch([{ kind: "saveDocument", record: document }]),
+        ),
         await error(
           storage.snapshots.save({
             documentId: "d",

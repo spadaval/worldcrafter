@@ -19,7 +19,8 @@ export type CollectionName =
   | "worldEntries"
   | "annotations"
   | "requests"
-  | "snapshots";
+  | "snapshots"
+  | "outlines";
 
 export type StorageOperation = "open" | "save" | "load" | "list" | "delete";
 
@@ -69,6 +70,31 @@ export interface AnnotationRecord {
   readonly kind: string;
   readonly data: JsonValue;
   readonly updatedAt: number;
+}
+
+/**
+ * A manuscript outline: ordered books of ordered chapters of scenes. Scenes
+ * are references to documents by ID, never their content. The outline module
+ * (`src/outline`) owns the invariants and the commands that edit it.
+ */
+export interface StoredOutline {
+  readonly id: string;
+  readonly books: readonly OutlineBook[];
+  /** Epoch milliseconds, set by the caller. */
+  readonly updatedAt: number;
+}
+
+export interface OutlineBook {
+  readonly id: string;
+  readonly title: string;
+  readonly chapters: readonly OutlineChapter[];
+}
+
+export interface OutlineChapter {
+  readonly id: string;
+  readonly title: string;
+  /** Document IDs of the chapter's scenes, in reading order. */
+  readonly scenes: readonly string[];
 }
 
 /** An assembled LLM request, kept so it can be viewed and debugged. */
@@ -143,6 +169,8 @@ export interface StorageAdapter {
   readonly annotations: AnnotationCollection;
   readonly requests: Collection<StoredRequest>;
   readonly snapshots: SnapshotCollection;
+  /** Keyed by `id`. A world has one outline, saved and loaded whole. */
+  readonly outlines: Collection<StoredOutline>;
   /** Releases the store. Later operations fail with a `StorageFailure`. */
   close(): void;
 }

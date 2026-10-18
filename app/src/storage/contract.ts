@@ -220,6 +220,25 @@ export function describeStorageContract(
       }),
     );
 
+    describeCollection(
+      "outlines",
+      () => storage.outlines,
+      (id, version) => ({
+        id,
+        books: [
+          {
+            id: "book1",
+            title: `Book ${version}`,
+            chapters: [
+              { id: "ch1", title: "Arrival", scenes: ["doc1", "doc2"] },
+              { id: "ch2", title: "Empty", scenes: [] },
+            ],
+          },
+        ],
+        updatedAt: version,
+      }),
+    );
+
     test("a document's content tree round-trips losslessly", async () => {
       const document = {
         id: "doc1",

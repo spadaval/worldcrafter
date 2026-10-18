@@ -19,7 +19,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Recognition: alias matcher, mention annotations, mentions view"
-updated_at: "2026-10-18T02:39:01.185418577+00:00"
+updated_at: "2026-10-18T03:08:21.394782433+00:00"
 ---
 
 ## Goal
@@ -45,3 +45,4 @@ Offset or quote anchoring (data-model-boundaries open question). Whether auto-li
 - 2026-10-17 [note] From the lua8 projections review (2026-10-17): (R4) block offsets from the projections are UTF-16 units over the block's joined text (link text included, a soft break is one \n), which matches JS regex indices; Plate decorate and Slate selections use per-leaf {path, offset}. Mention annotations need a converter between the two. For per-block matching, blockText(block) gives the same text and offsets as plain+map.
 - 2026-10-17 [note] Decision (Sumeet, 2026-10-17): cut and paste gives the pasted block a new ID. Annotations anchored to the cut block (mentions, notes, provenance) must re-attach to the pasted block by matching their quoted text, so the annotation sidecar needs a quote anchor alongside blockId + offset. Dragging a block by its handle keeps the ID.
 - 2026-10-17 [note] From the jcj3 re-review (2026-10-17): the context builder's naive mention matcher NFC-normalises per base character plus combining marks, so Hangul conjoining jamo (decomposed Korean, e.g. NFD text pasted from macOS) are never composed and don't match a composed name. Group by grapheme (Intl.Segmenter) in the real alias matcher.
+- 2026-10-17 [note] From the 9get workspace code review (2026-10-17): (R3) app/src/app/main.tsx refreshes the whole world index on every documents change with no guard against overlapping refreshes, so an older refresh can finish last and show stale entries, and every refresh redraws all marks. Replace with incremental indexing and a latest-wins guard when building recognition.

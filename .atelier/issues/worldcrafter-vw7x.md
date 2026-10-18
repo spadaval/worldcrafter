@@ -19,7 +19,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Subtext layer: speaker attribution, foreshadowing and implications"
-updated_at: "2026-10-17T21:32:39.662330842+00:00"
+updated_at: "2026-10-18T03:08:21.388296510+00:00"
 ---
 
 ## Goal
@@ -37,3 +37,7 @@ Provisional: fixture-text scenarios show that:
 ## Context
 
 Direction: `.impeccable/surfaces/writing-workspace.md` (Night Edition). Sketches: `.impeccable/mocks/decision/synth-calm.html` and `synth-layers.html`. Extends the bookkeeping pass in worldcrafter-8agg.
+
+## Notes
+
+- 2026-10-17 [note] From the 9get workspace code review (2026-10-17): (R2) dismissed gloss notes keep their letter (dismiss b → a, c, d…); pass the dismissed set to assignKeys in app/src/editor/layer-plugin.tsx. Confirm/dismiss are memory-only today (only fixture notes exist); when real inferred marks arrive they must persist as annotations (pins/dismissals), never in the content tree.

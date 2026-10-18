@@ -21,9 +21,10 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-18T02:08:51.398856624+00:00"
+status: "done"
 title: "Story-time core: events, frames, fact changes, holds/revealed queries"
-updated_at: "2026-10-18T00:39:07.158938927+00:00"
+updated_at: "2026-10-18T02:08:51.398856624+00:00"
 ---
 
 ## Goal
@@ -67,3 +68,7 @@ the fixtures and record the choice in a dated note.
 ## Notes
 
 - 2026-10-17 [note] From the mxlo world-entries review (2026-10-17): the fact shape (base value plus changes anchored to event IDs, null = stops holding, authority on every value, relations via holds: Fact<true>) fits story time without a rewrite. Additive gaps, each needing a facts version bump: no source content hash on provenance (needed for 'inferred data goes stale when its source changes'), no confidence (needed for escalating low-confidence results), no revealed-at, and no ordering for several changes at the same event. Cards show base values only; the card renderer needs a story position. Ages should be computed in the entity's own time, not stored as a fixed field.
+
+## Close Reason
+
+Story-time core merged: happens-before events with durations, frames with sync points, rates and pauses, interval positions, entities following frames, fact changes at events, main-line default scene placement with continuation and hints, holdsAt/revealedBy/sceneContext/elapsed queries that report uncertainty instead of guessing; all six Done-when fixtures pass on memory and IndexedDB; reviewed twice. Rates don't yet order events (S10 dilation partly met; worldcrafter-itgc).

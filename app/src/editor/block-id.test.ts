@@ -101,6 +101,17 @@ describe("block IDs", () => {
     expect(ids(editor)[2]).toBe("c");
   });
 
+  test("loading repairs repeated IDs: the first block keeps it, later ones get fresh IDs", () => {
+    const editor = createEditor([
+      p("one", "a"),
+      p("two", "a"),
+      p("three", "a"),
+    ]);
+    expectIdInvariant(editor);
+    expect(ids(editor)[0]).toBe("a");
+    expect(editor.history.undos).toHaveLength(0);
+  });
+
   describe("split (Enter)", () => {
     test("mid-block: the upper block keeps the ID, the lower gets a fresh one", () => {
       const editor = createEditor([p("hello world", "a"), p("next", "b")]);
@@ -314,6 +325,26 @@ describe("block IDs", () => {
       );
       const quote = editor.children[1];
       expect(quote?.id).toBe("q");
+    });
+
+    test("IDs restored by undo count as in use for the next insert", () => {
+      const editor = createEditor([
+        p("one", "a"),
+        p("two", "b"),
+        p("three", "c"),
+      ]);
+      step(editor, () => editor.tf.removeNodes({ at: [1] }));
+      step(editor, () => editor.tf.removeNodes({ at: [1] }));
+      step(editor, () => editor.tf.undo());
+      step(editor, () => editor.tf.undo());
+      expect(ids(editor)).toEqual(["a", "b", "c"]);
+      step(editor, () =>
+        editor.tf.insertNodes([p("x", "b"), p("y", "c"), p("z", "d")], {
+          at: [3],
+        }),
+      );
+      expect(ids(editor).slice(0, 3)).toEqual(["a", "b", "c"]);
+      expect(ids(editor)[5]).toBe("d");
     });
 
     test("inline elements never get an ID", () => {

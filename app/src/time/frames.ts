@@ -17,6 +17,7 @@
 import type { Chronology, PointOrder, TimelineProblem } from "./chronology";
 import {
   type Correspondence,
+  type Duration,
   type EventId,
   type Frame,
   type FrameId,
@@ -293,6 +294,15 @@ export function referenceIntervals(timeline: Timeline): ReferenceInterval[] {
           to: at(c.to, reference),
         })),
     );
+    // Rounding error grows with the inputs' magnitudes, and frame time is
+    // divided by the rate, so it grows as the slowest running rate shrinks.
+    const slowest = Math.min(
+      1,
+      ...[...rates.low, ...rates.high].filter(
+        (r) => r > 0 && Number.isFinite(r),
+      ),
+    );
+    const breakScale = Math.max(1, ...rates.breaks.map(Math.abs));
     for (const position of own) {
       if (at(position.event, reference) !== undefined) continue;
       // The nearest sync points by frame time, one on each side.
@@ -305,7 +315,19 @@ export function referenceIntervals(timeline: Timeline): ReferenceInterval[] {
       const nearest = syncs.slice(Math.max(0, next - 1), next + 1);
       let start = Number.NEGATIVE_INFINITY;
       let end = Number.POSITIVE_INFINITY;
+      let scale = Math.max(
+        breakScale,
+        Math.abs(position.start) / slowest,
+        Math.abs(position.end) / slowest,
+      );
       for (const sync of nearest) {
+        scale = Math.max(
+          scale,
+          Math.abs(sync.reference.start),
+          Math.abs(sync.reference.end),
+          Math.abs(sync.own.start) / slowest,
+          Math.abs(sync.own.end) / slowest,
+        );
         const bounds = boundsFrom(rates, sync, position);
         start = Math.max(start, bounds.start);
         end = Math.min(end, bounds.end);
@@ -315,8 +337,8 @@ export function referenceIntervals(timeline: Timeline): ReferenceInterval[] {
           event: position.event,
           frame: frame.id,
           reference,
-          start: start - margin(start),
-          end: end + margin(end),
+          start: start - margin(start, scale),
+          end: end + margin(end, scale),
         });
       }
     }
@@ -324,9 +346,14 @@ export function referenceIntervals(timeline: Timeline): ReferenceInterval[] {
   return derived;
 }
 
-/** How far floating-point rounding may have moved `value`. */
-function margin(value: number): number {
-  return Number.isFinite(value) ? 1e-9 * Math.max(1, Math.abs(value)) : 0;
+/**
+ * How far floating-point rounding may have moved `value`, computed from
+ * inputs no larger than `scale`.
+ */
+function margin(value: number, scale: number): number {
+  return Number.isFinite(value)
+    ? 1e-9 * Math.max(1, Math.abs(value), scale)
+    : 0;
 }
 
 /**
@@ -505,7 +532,7 @@ export function durationProblems(chronology: Chronology): TimelineProblem[] {
     })),
     ...timeline.placements.flatMap((p) =>
       p.constraints.map((c) => ({
-        by: `the placement of scene ${p.scene}`,
+        by: `the placement of scene ${p.scene} (${c.relation} ${c.event})`,
         a: sceneEventId(p.scene),
         relation: c.relation,
         b: c.event,
@@ -520,20 +547,58 @@ export function durationProblems(chronology: Chronology): TimelineProblem[] {
     const [earlier, later] = relation === "before" ? [a, b] : [b, a];
     const gap = elapsed(chronology, duration.frame, earlier, later);
     if (gap.status !== "known") continue;
-    const slack = 1e-9 * Math.max(1, Math.abs(gap.min), Math.abs(gap.max));
+    const tolerance = duration.tolerance ?? DEFAULT_TOLERANCE;
+    const slack = 1e-9 * roundingScale(chronology, duration, [earlier, later]);
     if (
-      duration.amount < gap.min - slack ||
-      duration.amount > gap.max + slack
+      duration.amount + tolerance < gap.min - slack ||
+      duration.amount - tolerance > gap.max + slack
     ) {
+      const stated =
+        tolerance === 0
+          ? `exactly ${duration.amount}`
+          : `${duration.amount} give or take ${tolerance}`;
       problems.push({
         kind: "inconsistent_duration",
         referencedBy: by,
         events: [earlier, later],
-        message: `${by} puts ${duration.amount} ${gap.unit} between ${earlier} and ${later}, but their positions put ${formatRange(gap)} ${gap.unit} between them`,
+        message: `${by} puts ${stated} ${gap.unit} between ${earlier} and ${later}, but their positions put ${formatRange(gap)} ${gap.unit} between them`,
       });
     }
   }
   return problems;
+}
+
+/** A duration without a tolerance is as precise as its unit: half a unit. */
+const DEFAULT_TOLERANCE = 0.5;
+
+/**
+ * The largest magnitude the elapsed time between `events` on the duration's
+ * frame is computed from: their intervals there and on its reference frame,
+ * scaled by the fastest rate between the two.
+ */
+function roundingScale(
+  chronology: Chronology,
+  duration: Duration,
+  events: readonly EventId[],
+): number {
+  const frame = findFrame(chronology.timeline, duration.frame);
+  const frames = frame === undefined ? [] : [frame.id, frame.reference];
+  const rates = chronology.timeline.correspondences
+    .filter((c) => c.frame === duration.frame)
+    .map((c) => c.rate)
+    .concat(frame?.rate ?? 1);
+  const magnitudes = events.flatMap((event) =>
+    frames.flatMap((f) => {
+      const interval = chronology.interval(event, f);
+      return interval === undefined
+        ? []
+        : [Math.abs(interval.start), Math.abs(interval.end)];
+    }),
+  );
+  return (
+    Math.max(1, Math.abs(duration.amount), ...magnitudes) *
+    Math.max(1, ...rates)
+  );
 }
 
 /** Bounds of `b - a` for events within intervals `a` and `b`. */

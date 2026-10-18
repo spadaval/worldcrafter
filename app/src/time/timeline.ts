@@ -85,11 +85,13 @@ const TIME_RELATIONS: readonly TimeRelation[] = [
 
 /**
  * The gap of a `before` or `after` ("three days after"), in a frame's unit:
- * from the end of the earlier event to the start of the later one. The engine
- * orders by the relation and checks the gap against the events' positions
- * (`durationProblems`), but doesn't derive positions from it.
+ * from the end of the earlier event to the start of the later one, give or
+ * take `tolerance` units. Without a tolerance it is as precise as its unit
+ * suggests, half a unit ("ten years" is 9.5 to 10.5 years); 0 is "exactly".
+ * The engine orders by the relation and checks the gap against the events'
+ * positions (`durationProblems`), but doesn't derive positions from it.
  */
-export type Duration = { amount: number; frame: FrameId };
+export type Duration = { amount: number; frame: FrameId; tolerance?: number };
 
 export type Constraint = {
   id: string;
@@ -273,12 +275,16 @@ function checkRelation(value: unknown, at: string): Check<TimeRelation> {
 function checkDuration(value: unknown, at: string): Check<Duration | null> {
   if (value === null) return ok(null);
   if (isRecord(value) && isFiniteNumber(value.amount) && value.amount >= 0) {
-    if (isString(value.frame)) {
-      return ok({ amount: value.amount, frame: value.frame });
+    const { amount, frame, tolerance } = value;
+    if (isString(frame)) {
+      if (tolerance === undefined) return ok({ amount, frame });
+      if (isFiniteNumber(tolerance) && tolerance >= 0) {
+        return ok({ amount, frame, tolerance });
+      }
     }
   }
   return err(
-    `${at}.duration must be null or a non-negative amount and a frame`,
+    `${at}.duration must be null or a non-negative amount, a frame and an optional non-negative tolerance`,
   );
 }
 

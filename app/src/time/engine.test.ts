@@ -15,7 +15,7 @@ import {
   type TimelineCommand,
   timelineProblems,
 } from "./commands";
-import { elapsed } from "./frames";
+import { elapsed, referenceIntervals } from "./frames";
 import { type FactState, holdsAt, holdsAtEvent } from "./holds";
 import {
   emptyTimeline,
@@ -714,7 +714,7 @@ describe("frames order events", () => {
       referencedBy: "constraint c",
       events: ["a", "b"],
       message:
-        "constraint c puts 10 year between a and b, but their positions put 1 year between them",
+        "constraint c puts 10 give or take 0.5 year between a and b, but their positions put 1 year between them",
     });
     expect(
       applyTimelineCommand(timeline, after("c", "b", "a", 1), SCENES).isOk(),
@@ -760,7 +760,7 @@ describe("frames order events", () => {
       )._unsafeUnwrapErr(),
     ).toMatchObject({
       kind: "inconsistent_duration",
-      referencedBy: "the placement of scene s2",
+      referencedBy: "the placement of scene s2 (after a)",
     });
     // Stored, it loads and is reported.
     const stored: Timeline = {
@@ -779,6 +779,390 @@ describe("frames order events", () => {
     expect(timelineProblems(compileChronology(stored, SCENES))).toMatchObject([
       { kind: "inconsistent_duration", referencedBy: "constraint c" },
     ]);
+  });
+});
+
+describe("durations", () => {
+  const at = (event: string, start: number): TimelineCommand => ({
+    type: "setPosition",
+    event,
+    frame: "world",
+    position: { start, end: start },
+  });
+  const tenYearsAfter = (b: string, tolerance?: number): TimelineCommand => ({
+    type: "constrain",
+    id: "gap",
+    a: b,
+    relation: "after",
+    b: "a",
+    duration: {
+      amount: 10,
+      frame: "world",
+      ...(tolerance === undefined ? {} : { tolerance }),
+    },
+  });
+  const timeline = (a: number, b: number) =>
+    build([...events("a", "b"), at("a", a), at("b", b)]);
+
+  test("a duration is as precise as its unit unless it says otherwise", () => {
+    // "Ten years" is 9.5 to 10.5 years.
+    expect(
+      applyTimelineCommand(
+        timeline(1200, 1210.3),
+        tenYearsAfter("b"),
+        SCENES,
+      ).isOk(),
+    ).toBe(true);
+    expect(
+      applyTimelineCommand(
+        timeline(1200, 1211),
+        tenYearsAfter("b"),
+        SCENES,
+      )._unsafeUnwrapErr(),
+    ).toMatchObject({
+      kind: "inconsistent_duration",
+      referencedBy: "constraint gap",
+    });
+    // "Exactly ten years".
+    expect(
+      applyTimelineCommand(
+        timeline(1200, 1210.3),
+        tenYearsAfter("b", 0),
+        SCENES,
+      )._unsafeUnwrapErr(),
+    ).toMatchObject({
+      kind: "inconsistent_duration",
+      message: expect.stringMatching(
+        /^constraint gap puts exactly 10 year between a and b, but their positions put 10\.29+\d* year between them$/,
+      ),
+    });
+    // An explicit bound can widen it.
+    expect(
+      applyTimelineCommand(
+        timeline(1200, 1211),
+        tenYearsAfter("b", 2),
+        SCENES,
+      ).isOk(),
+    ).toBe(true);
+    expect(
+      applyTimelineCommand(
+        timeline(1200, 1210),
+        tenYearsAfter("b", -1),
+        SCENES,
+      )._unsafeUnwrapErr(),
+    ).toMatchObject({ kind: "invalid_command" });
+  });
+
+  test("an exact duration far from zero isn't rejected for rounding", () => {
+    // 1e9 + 0.1 - 1e9 is 0.10000002384... in floating point.
+    expect(
+      applyTimelineCommand(
+        timeline(1e9, 1e9 + 0.1),
+        {
+          type: "constrain",
+          id: "gap",
+          a: "b",
+          relation: "after",
+          b: "a",
+          duration: { amount: 0.1, frame: "world", tolerance: 0 },
+        },
+        SCENES,
+      ).isOk(),
+    ).toBe(true);
+  });
+
+  test("each inconsistent duration of a placement is its own problem", () => {
+    const placed = (amounts: [string, number][]): TimelineCommand => ({
+      type: "placeScene",
+      scene: "s2",
+      placement: amounts.map(([event, amount]) => ({
+        relation: "after",
+        event,
+        duration: { amount, frame: "world" },
+      })),
+    });
+    const base = build([
+      ...events("a", "b"),
+      at("a", 1200),
+      at("b", 1201),
+      at(s("s2"), 1210),
+    ]);
+    // Stored with one inconsistent duration (after a, 3 years).
+    const stored: Timeline = {
+      ...base,
+      placements: [
+        {
+          scene: "s2",
+          constraints: [
+            {
+              relation: "after",
+              event: "a",
+              duration: { amount: 3, frame: "world" },
+            },
+          ],
+          continues: false,
+          authority: asserted,
+        },
+      ],
+    };
+    expect(
+      applyTimelineCommand(
+        stored,
+        placed([
+          ["a", 3],
+          ["b", 9],
+        ]),
+        SCENES,
+      ).isOk(),
+    ).toBe(true);
+    expect(
+      applyTimelineCommand(
+        stored,
+        placed([
+          ["a", 3],
+          ["b", 2],
+        ]),
+        SCENES,
+      )._unsafeUnwrapErr(),
+    ).toMatchObject({
+      kind: "inconsistent_duration",
+      referencedBy: "the placement of scene s2 (after b)",
+    });
+  });
+});
+
+test("derived intervals far from the sync point allow for rounding", () => {
+  // Exact rationals: every value here is a multiple of 2^-80.
+  const exact = (x: number) => BigInt(x * 2 ** 80);
+  const unit = exact(1);
+  let seed = 45;
+  const random = () => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed / 2147483648;
+  };
+  for (let trial = 0; trial < 200; trial++) {
+    const rate = [0.3, 3, 0.7, 1 / 3][trial % 4] ?? 1;
+    // A sync point tens of millions of years away; the event lands near 0.
+    const sync = (1 + random() * 9) * 1e7 + random();
+    const reading = (0.1 + random() - sync) * rate;
+    const timeline: Timeline = {
+      ...emptyTimeline,
+      events: [
+        { id: "sync", label: "" },
+        { id: "e", label: "" },
+      ],
+      positions: [
+        ["sync", "world", sync],
+        ["sync", "F", 0],
+        ["e", "F", reading],
+      ].map(([event, frame, start]) => ({
+        event: String(event),
+        frame: String(frame),
+        start: Number(start),
+        end: Number(start),
+        precision: null,
+        authority: asserted,
+      })),
+      frames: [{ id: "F", label: "F", unit: "year", reference: "world", rate }],
+    };
+    const [derived] = referenceIntervals(timeline);
+    if (derived === undefined) throw new Error("expected an interval");
+    // True time t = sync + reading / rate, so start <= t <= end exactly when
+    // (start - sync) * rate <= reading <= (end - sync) * rate.
+    const r = exact(rate);
+    const lhs = (x: number) => (exact(x) - exact(sync)) * r;
+    const at = exact(reading) * unit;
+    expect([trial, lhs(derived.start) <= at, at <= lhs(derived.end)]).toEqual([
+      trial,
+      true,
+      true,
+    ]);
+  }
+});
+
+describe("frames that pause", () => {
+  /** Ardelia sleeps from world 1000 to 1100; her clock reads 30 throughout. */
+  function ardelia(): Timeline {
+    return build([
+      ...events("sleep", "wake", "dream", "harvest"),
+      { type: "addFrame", id: "S", label: "Ardelia", unit: "year" },
+      // Declared first: without the pause, one reading 100 years apart at
+      // rate 1 is rightly rejected.
+      {
+        type: "addCorrespondence",
+        id: "stasis",
+        frame: "S",
+        from: "sleep",
+        to: "wake",
+        rate: 0,
+      },
+      ...(
+        [
+          ["sleep", "world", 1000],
+          ["sleep", "S", 30],
+          ["wake", "world", 1100],
+          ["wake", "S", 30],
+          ["harvest", "world", 1050],
+          ["dream", "S", 30],
+        ] as const
+      ).map(
+        ([event, frame, start]): TimelineCommand => ({
+          type: "setPosition",
+          event,
+          frame,
+          position: { start, end: start },
+        }),
+      ),
+    ]);
+  }
+
+  test("two events at the same reading of a paused clock aren't simultaneous", () => {
+    const chronology = compileChronology(ardelia(), SCENES);
+    expect(timelineProblems(chronology)).toEqual([]);
+    expect(compareEvents(chronology, "sleep", "wake")).toBe("before");
+  });
+
+  test("an event at the paused reading is unordered with world events during the pause", () => {
+    const chronology = compileChronology(ardelia(), SCENES);
+    expect(compareEvents(chronology, "dream", "harvest")).toBe("unordered");
+    const dream = chronology.interval("dream", "world");
+    expect(dream?.start).toBeCloseTo(1000);
+    expect(dream?.end).toBeCloseTo(1100);
+  });
+
+  test("derived intervals and holds stay true under random pauses", () => {
+    let seed = 20261018;
+    const random = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+    const pick = <T>(xs: readonly T[]): T =>
+      xs[Math.floor(random() * xs.length)] ?? xs[0] ?? (undefined as never);
+    const int = (lo: number, hi: number) =>
+      lo + Math.floor(random() * (hi - lo + 1));
+    const scenes = scenesOf(["s1"]);
+    let holds = 0;
+    let derived = 0;
+    for (let trial = 0; trial < 1500; trial++) {
+      const usual = pick([0.5, 1, 2]);
+      const cuts = Array.from({ length: 4 }, () => int(0, 100)).sort(
+        (x, y) => x - y,
+      );
+      const spans = Array.from({ length: int(1, 2) }, (_, k) => ({
+        from: cuts[2 * k] ?? 0,
+        to: cuts[2 * k + 1] ?? 0,
+        rate: pick([0, 0, 0.5, 2]),
+      }));
+      const rate = (t: number) =>
+        spans.find((sp) => sp.from <= t && t < sp.to)?.rate ?? usual;
+      // The clock's reading at world time t, with c(0) = 0; exact, since
+      // every bound is an integer and every rate a power of two (or 0).
+      const clock = (t: number) => {
+        const points = [
+          ...new Set([0, t, ...spans.flatMap((sp) => [sp.from, sp.to])]),
+        ]
+          .filter((x) => x >= Math.min(0, t) && x <= Math.max(0, t))
+          .sort((x, y) => x - y);
+        let reading = 0;
+        for (let i = 1; i < points.length; i++) {
+          const p = points[i - 1] ?? 0;
+          const q = points[i] ?? 0;
+          reading += rate((p + q) / 2) * (q - p);
+        }
+        return t >= 0 ? reading : -reading;
+      };
+      const positions: Timeline["positions"] = [];
+      const place = (event: string, frame: string, start: number) =>
+        positions.push({
+          event,
+          frame,
+          start,
+          end: start,
+          precision: null,
+          authority: asserted,
+        });
+      const ids: string[] = [];
+      spans.forEach((sp, k) => {
+        ids.push(`from${k}`, `to${k}`);
+        place(`from${k}`, "world", sp.from);
+        place(`to${k}`, "world", sp.to);
+      });
+      for (let i = 0; i < int(1, 2); i++) {
+        const t = int(-10, 110);
+        ids.push(`sync${i}`);
+        place(`sync${i}`, "world", t);
+        place(`sync${i}`, "S", clock(t));
+      }
+      const truth = new Map<string, number>();
+      for (let i = 0; i < 4; i++) {
+        const t = int(-10, 110);
+        ids.push(`change${i}`);
+        truth.set(`change${i}`, t);
+        place(`change${i}`, "S", clock(t));
+      }
+      const sceneAt = int(-10, 110) + 0.5;
+      place(s("s1"), "world", sceneAt);
+      const timeline: Timeline = {
+        ...emptyTimeline,
+        events: ids.map((id) => ({ id, label: id })),
+        positions,
+        frames: [
+          {
+            id: "S",
+            label: "S",
+            unit: "year",
+            reference: "world",
+            rate: usual,
+          },
+        ],
+        correspondences: spans.map((sp, k) => ({
+          id: `c${k}`,
+          frame: "S",
+          from: `from${k}`,
+          to: `to${k}`,
+          rate: sp.rate,
+          authority: asserted,
+        })),
+      };
+      const chronology = compileChronology(timeline, scenes);
+      const context = JSON.stringify({ trial, spans, usual, positions });
+      expect([context, timelineProblems(chronology)]).toEqual([context, []]);
+      for (const [event, t] of truth) {
+        const interval = chronology.interval(event, "world");
+        if (interval === undefined) continue;
+        derived += 1;
+        expect([
+          context,
+          event,
+          interval.start <= t && t <= interval.end,
+        ]).toEqual([context, event, true]);
+      }
+      const effective = [...truth].filter(([, t]) => t < sceneAt);
+      const latest = Math.max(...effective.map(([, t]) => t));
+      const latestEvents = effective.filter(([, t]) => t === latest);
+      const state = holdsAt(
+        chronology,
+        person(
+          changes(
+            "base",
+            ...[...truth.keys()].map((e): [string, string] => [e, e]),
+          ),
+        ),
+        "s1",
+      )._unsafeUnwrap().facts[0]?.state;
+      if (state?.status !== "holds") continue;
+      holds += 1;
+      const expected =
+        latestEvents.length === 0
+          ? "base"
+          : latestEvents.length === 1
+            ? (latestEvents[0]?.[0] ?? "ambiguous")
+            : "ambiguous";
+      expect([context, state.value]).toEqual([context, expected]);
+    }
+    // The check means something: many results are certain.
+    expect(holds).toBeGreaterThan(300);
+    expect(derived).toBeGreaterThan(1000);
   });
 });
 

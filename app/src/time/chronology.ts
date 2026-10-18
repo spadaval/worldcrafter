@@ -11,7 +11,12 @@
  *   bound, joined by `<` edges. A position `[start, end)` is
  *   `T(start) <= e.start` and `e.end < T(end)` (`<=` for an exact position),
  *   so positions in one frame order events without any pairwise edges, and an
- *   event positioned in two frames (a sync point) links their clocks;
+ *   event positioned in two frames (a sync point) links their clocks. A frame
+ *   that may pause (rate 0 or unknown, or a rate-0 correspondence) holds a
+ *   reading for a while, so each reading v is two points lo(v) <= hi(v): a
+ *   start bounds against lo, an exact end against hi, and an end before v
+ *   against lo. Two events at one reading of such a frame are then not
+ *   simultaneous;
  * - an event positioned in a frame but not in its reference frame gets the
  *   interval its frame's sync points and rates give it on the reference
  *   clock (`referenceIntervals`), as `<=` edges against that clock; where
@@ -47,6 +52,7 @@ import {
   sceneEventId,
   type Timeline,
   type TimeRelation,
+  WORLD_FRAME,
 } from "./timeline";
 
 /** Where an ordering edge came from, so a contradiction can name its causes. */
@@ -378,25 +384,43 @@ export function compileChronology(
       });
     }
   }
+  // A frame that may pause holds each reading for a while of world time, so
+  // a reading v is two points lo(v) <= hi(v) (when the clock reaches v, and
+  // when it leaves), with hi(v) < lo(v') for v < v'. An event starts no
+  // earlier than lo of its start; an exact event ends by hi of its reading,
+  // and an event within [s, e) ends before lo(e).
+  const mayPause = (frame: FrameId) => {
+    const found = findFrame(timeline, frame);
+    return (
+      frame !== WORLD_FRAME &&
+      (found === undefined ||
+        found.rate === null ||
+        found.rate === 0 ||
+        timeline.correspondences.some((c) => c.frame === frame && c.rate === 0))
+    );
+  };
   for (const [frame, bounds] of byFrame) {
     const values = [...new Set(bounds.map(({ value }) => value))].sort(
       (x, y) => x - y,
     );
-    const clock = new Map<number, number>();
+    const pauses = mayPause(frame);
+    const reading = new Map<number, { lo: number; hi: number }>();
     let previous: number | undefined;
     for (const value of values) {
-      const node = addNode();
-      clock.set(value, node);
+      const lo = addNode();
+      const hi = pauses ? addNode() : lo;
+      if (pauses) addEdge(lo, hi, false, { kind: "clock", frame });
+      reading.set(value, { lo, hi });
       if (previous !== undefined) {
-        addEdge(previous, node, true, { kind: "clock", frame });
+        addEdge(previous, lo, true, { kind: "clock", frame });
       }
-      previous = node;
+      previous = hi;
     }
     for (const { event, value, side, strict, origin } of bounds) {
-      const time = clock.get(value);
+      const time = reading.get(value);
       if (time === undefined) continue;
-      if (side === "start") addEdge(time, startOf(event), strict, origin);
-      else addEdge(endOf(event), time, strict, origin);
+      if (side === "start") addEdge(time.lo, startOf(event), false, origin);
+      else addEdge(endOf(event), strict ? time.lo : time.hi, strict, origin);
     }
   }
 

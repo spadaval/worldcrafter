@@ -171,9 +171,12 @@ function edit(
       ? undefined
       : !Number.isFinite(duration.amount) || duration.amount < 0
         ? "duration must be a non-negative number"
-        : findFrame(timeline, duration.frame) === undefined
-          ? `frame ${duration.frame} does not exist`
-          : undefined;
+        : duration.tolerance !== undefined &&
+            (!Number.isFinite(duration.tolerance) || duration.tolerance < 0)
+          ? "a duration's tolerance must be a non-negative number"
+          : findFrame(timeline, duration.frame) === undefined
+            ? `frame ${duration.frame} does not exist`
+            : undefined;
   /** Whether `existing` is asserted, so an inferred value can't replace it. */
   const pinned = (existing: Authority | undefined, authority: Authority) =>
     existing?.level === "asserted" && authority.level === "inferred";

@@ -14,9 +14,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "World store: follow storage reconnects and respect read-only tabs"
-updated_at: "2026-10-18T00:55:31.761782212+00:00"
+updated_at: "2026-10-18T02:12:02.331060238+00:00"
 ---
 
 ## Goal

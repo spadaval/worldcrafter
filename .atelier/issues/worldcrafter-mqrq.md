@@ -56,9 +56,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+closed_at: "2026-10-18T06:43:27.288871987+00:00"
+status: "done"
 title: "Core loop: write, generate with visible world context, accept or regenerate"
-updated_at: "2026-10-18T05:58:04.658768939+00:00"
+updated_at: "2026-10-18T06:43:27.288871987+00:00"
 ---
 
 ## Goal
@@ -86,3 +87,7 @@ function with typed input and a `Result` output, using neverthrow); the UI only 
 (`bun test`), Biome and Legend State as in AGENTS.md. Recognition in this increment is a naive title/alias
 presence check for card selection only. The real matcher is the next increment. Writer-entered story-time data
 is enough here; AI bookkeeping comes with discovery.
+
+## Close Reason
+
+Core loop delivered on feature/worldcrafter-mqrq: restricted content schema with lossless export, stable block IDs, storage adapter (IndexedDB + memory), one OpenAI-compatible client, projections, world entries, manuscript outline, story-time engine, context builder, generate command, app shell and the Night Edition workspace with generation wired in. Independently validated: S1, S2, S4, S9, S10 pass (S10 after the itgc fix); CORS against real servers blocked. Every slice independently reviewed.

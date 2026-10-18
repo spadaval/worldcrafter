@@ -29,14 +29,21 @@ export type Candidate = {
   authority: Authority | null;
 };
 
+/**
+ * Why a fact is uncertain. A fact has at most one reason of each kind, except
+ * one `unknown_event` or `same_event` per event, so reasons grow linearly
+ * with the fact's changes.
+ */
 export type Uncertainty =
-  /** The events' order (to each other, or to the scene's event) is unknown. */
-  | { kind: "unordered"; events: [EventId, EventId] }
+  /** Changes at `events` may or may not take effect before `relativeTo`. */
+  | { kind: "unordered"; relativeTo: EventId; events: EventId[] }
+  /** Changes at `events` are all in effect, but which is latest is unknown. */
+  | { kind: "unordered_changes"; events: EventId[] }
   | { kind: "unknown_event"; event: EventId }
   /** Two changes to the fact are anchored to the same event. */
   | { kind: "same_event"; event: EventId }
-  /** The order of these events is contradictory (see `TimelineProblem`). */
-  | { kind: "contradiction"; events: [EventId, EventId] };
+  /** The order among `events` is contradictory (see `TimelineProblem`). */
+  | { kind: "contradiction"; events: EventId[] };
 
 export type FactState =
   | {
@@ -234,7 +241,10 @@ function stateAt<T extends FactValueAt>(
   event: EventId,
   at: number | undefined,
 ): FactState {
-  const reasons: Uncertainty[] = [];
+  const unknownEvents = new Set<EventId>();
+  /** Open changes whose order relative to `event` is unknown. */
+  const unordered = new Set<EventId>();
+  const contradictory = new Set<EventId>();
   /** Changes known to take effect before `at`. */
   const before: { change: Fact<T>["changes"][number]; end: number }[] = [];
   /** Changes that might take effect before `at`. */
@@ -244,10 +254,7 @@ function stateAt<T extends FactValueAt>(
     const end = chronology.point(change.event, "end");
     if (end === undefined || at === undefined) {
       open.push({ change, end });
-      reasons.push({
-        kind: "unknown_event",
-        event: end === undefined ? change.event : event,
-      });
+      unknownEvents.add(end === undefined ? change.event : event);
       continue;
     }
     // Compare from `at`, so every change reuses the same two cached walks.
@@ -256,11 +263,11 @@ function stateAt<T extends FactValueAt>(
       before.push({ change, end });
     } else if (order === "contradictory") {
       open.push({ change, end });
-      reasons.push({ kind: "contradiction", events: [change.event, event] });
+      contradictory.add(change.event).add(event);
     } else if (!NOT_IN_EFFECT.includes(order)) {
       // Unordered, or the change ends no later than `at` but maybe at it.
       open.push({ change, end });
-      reasons.push({ kind: "unordered", events: [change.event, event] });
+      unordered.add(change.event);
     }
   }
 
@@ -269,18 +276,17 @@ function stateAt<T extends FactValueAt>(
   const latest = before.filter(
     (c) => !before.some((d) => d !== c && strictlyBefore(c.end, d.end)),
   );
+  const counts = new Map<EventId, number>();
+  for (const { change } of latest) {
+    counts.set(change.event, (counts.get(change.event) ?? 0) + 1);
+  }
+  // Pairs of latest changes are compared (cached lookups), but only events
+  // are recorded, so the reasons stay linear in the number of changes.
   for (const [i, c] of latest.entries()) {
     for (const d of latest.slice(i + 1)) {
-      reasons.push(
-        c.change.event === d.change.event
-          ? { kind: "same_event", event: c.change.event }
-          : chronology.comparePoints(c.end, d.end) === "contradictory"
-            ? {
-                kind: "contradiction",
-                events: [c.change.event, d.change.event],
-              }
-            : { kind: "unordered", events: [c.change.event, d.change.event] },
-      );
+      if (chronology.comparePoints(c.end, d.end) === "contradictory") {
+        contradictory.add(c.change.event).add(d.change.event);
+      }
     }
   }
   // An open change known to be overtaken by a later change in effect is moot.
@@ -324,15 +330,32 @@ function stateAt<T extends FactValueAt>(
         };
   }
   const relevant = new Set(candidates.map((c) => c.since));
-  return {
-    status: "uncertain",
-    candidates,
-    reasons: reasons.filter((reason) =>
-      reason.kind === "unknown_event"
-        ? relevant.has(reason.event) || reason.event === event
-        : reason.kind === "same_event"
-          ? relevant.has(reason.event)
-          : reason.events.some((e) => relevant.has(e)),
-    ),
-  };
+  const reasons: Uncertainty[] = [];
+  for (const e of unknownEvents) {
+    if (relevant.has(e) || e === event) {
+      reasons.push({ kind: "unknown_event", event: e });
+    }
+  }
+  const openEvents = [...unordered].filter((e) => relevant.has(e));
+  if (openEvents.length > 0) {
+    reasons.push({ kind: "unordered", relativeTo: event, events: openEvents });
+  }
+  const latestEvents = [...counts.keys()].filter(
+    (e) => relevant.has(e) && !contradictory.has(e),
+  );
+  if (latestEvents.length > 1) {
+    reasons.push({ kind: "unordered_changes", events: latestEvents });
+  }
+  for (const [e, count] of counts) {
+    if (count > 1 && relevant.has(e)) {
+      reasons.push({ kind: "same_event", event: e });
+    }
+  }
+  const conflicting = [...contradictory].filter(
+    (e) => relevant.has(e) || e === event,
+  );
+  if (conflicting.length > 0) {
+    reasons.push({ kind: "contradiction", events: conflicting });
+  }
+  return { status: "uncertain", candidates, reasons };
 }

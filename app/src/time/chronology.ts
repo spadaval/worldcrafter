@@ -18,8 +18,13 @@
  *
  * `p` happens before `q` when a path from `p` to `q` has a strict edge. Points
  * with no path between them are unordered: queries report them as uncertain,
- * never guess. A cycle through a strict edge is a contradiction; it is
- * reported as a problem, and comparisons that depend on it are uncertain.
+ * never guess. A cycle through a strict edge is a contradiction: it is
+ * reported as a problem, and a comparison is reported as contradictory (so
+ * queries treat it as uncertain) only when the two points compared are
+ * themselves both before and after each other. Comparisons that merely pass
+ * through a contradictory cycle are answered normally: with a < b < a and
+ * a before s2, a change at a still holds at s3. `problems` is the signal
+ * that such answers rest on an inconsistent order.
  *
  * Cost: compiling is O(V + E + P log P) for V points, E edges and P
  * positions, plus O(V + E) for each explicitly placed scene. Each comparison

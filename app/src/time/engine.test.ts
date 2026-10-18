@@ -153,7 +153,7 @@ describe("scene placement", () => {
       stateAt(timeline, changes("free", [s("s2"), "captive"]), "s3"),
     ).toMatchObject({
       status: "uncertain",
-      reasons: [{ kind: "unordered", events: [s("s2"), s("s3")] }],
+      reasons: [{ kind: "unordered", relativeTo: s("s3"), events: [s("s2")] }],
     });
   });
 
@@ -453,6 +453,52 @@ describe("uncertainty from stored data", () => {
       status: "uncertain",
       reasons: [{ kind: "same_event", event: s("s1") }],
     });
+  });
+
+  test("reasons grow linearly with unordered changes", () => {
+    const n = 300;
+    // n changes before s1 but unordered among themselves, and n more after
+    // s1 that are unordered with s2.
+    const ids = (prefix: string) =>
+      Array.from({ length: n }, (_, i) => `${prefix}${i}`);
+    const timeline = build([
+      ...events(...ids("in"), ...ids("open")),
+      ...ids("in").map(
+        (id): TimelineCommand => ({
+          type: "constrain",
+          id: `c-${id}`,
+          a: id,
+          relation: "before",
+          b: s("s1"),
+        }),
+      ),
+      ...ids("open").map(
+        (id): TimelineCommand => ({
+          type: "constrain",
+          id: `c-${id}`,
+          a: id,
+          relation: "after",
+          b: s("s1"),
+        }),
+      ),
+    ]);
+    const state = stateAt(
+      timeline,
+      changes(
+        "free",
+        ...[...ids("in"), ...ids("open")].map((id): [string, FieldValue] => [
+          id,
+          id,
+        ]),
+      ),
+      "s2",
+    );
+    if (state?.status !== "uncertain") throw new Error("expected uncertain");
+    expect(state.candidates).toHaveLength(2 * n);
+    expect(state.reasons).toEqual([
+      { kind: "unordered", relativeTo: s("s2"), events: ids("open") },
+      { kind: "unordered_changes", events: ids("in") },
+    ]);
   });
 
   test("a scene leaving the outline takes its event with it", () => {

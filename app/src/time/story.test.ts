@@ -245,7 +245,9 @@ for (const [name, open] of [
         "aldric.title uncertain: king since scene:s2 | exile since abdication",
       ]);
       expect(third.uncertain[0]?.state).toMatchObject({
-        reasons: [{ kind: "unordered", events: ["abdication", s("s3")] }],
+        reasons: [
+          { kind: "unordered", relativeTo: s("s3"), events: ["abdication"] },
+        ],
       });
       expect(third.uncertain[0]?.revealedSince).toEqual([s("s2")]);
       expect(third.revealed).toEqual([]);

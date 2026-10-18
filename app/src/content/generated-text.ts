@@ -198,7 +198,7 @@ class Closers {
   }
 
   private build(delimiter: string): Int32Array {
-    const { source } = this;
+    const source = this.source;
     const char = delimiter[0] as string;
     const table = new Int32Array(source.length + 1).fill(-1);
     for (let close = source.length - 1; close >= 0; close--) {

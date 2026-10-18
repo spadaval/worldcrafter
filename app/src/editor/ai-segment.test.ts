@@ -68,8 +68,8 @@ describe("AI segment generations", () => {
     show(generation, "The road");
     const [first] = segment(editor, 1).children;
     show(generation, "The road bent.\n\nMara **ran");
-    // Paragraph 0 is finished: only paragraph 1 onward is passed.
-    generation.render(parseGeneratedText("Mara **ran**."), 1);
+    // Paragraph 0 is finished: only paragraph 1 onward is looked at.
+    generation.render(parseGeneratedText("The road bent.\n\nMara **ran**."), 1);
     generation.finish();
 
     const done = segment(editor, 1);
@@ -203,6 +203,60 @@ describe("AI segment generations", () => {
     editor.undo();
     editor.undo();
     expect(content(editor)).toEqual(ORIGINAL);
+  });
+
+  test("a render after undo and redo of the segment re-syncs every paragraph", async () => {
+    const editor = fresh();
+    const generation = start(editor);
+    await tick();
+    show(generation, "one\ntwo");
+    editor.undo();
+    editor.redo();
+    expect(generation.render(parseGeneratedText("one\ntwo\nthree"), 2)).toBe(
+      true,
+    );
+    expect(texts(segment(editor, 1))).toEqual(["one", "two", "three"]);
+    generation.finish();
+    expect(segment(editor, 1).status).toBe("ready");
+  });
+
+  test("a render after a delete reaching into the segment re-syncs every paragraph", async () => {
+    const editor = fresh();
+    const generation = start(editor);
+    await tick();
+    show(generation, "one\ntwo");
+    editor.tf.select({
+      anchor: { path: [0, 0], offset: 3 },
+      focus: { path: [1, 0, 0], offset: 1 },
+    });
+    editor.tf.deleteFragment();
+    await tick();
+    // The segment's first paragraph went into the one before it.
+    expect(texts(segment(editor, 1))).toEqual(["two"]);
+    const index = 1;
+    expect(generation.render(parseGeneratedText("one\ntwo\nthree"), 2)).toBe(
+      true,
+    );
+    expect(texts(segment(editor, index))).toEqual(["one", "two", "three"]);
+  });
+
+  test("discard after the writer's edit was undone keeps redo working", async () => {
+    const editor = fresh();
+    const generation = start(editor);
+    await tick();
+    // In the block after the segment, whose path the segment shifts.
+    editor.tf.insertText("!", { at: { path: [2, 0], offset: 0 } });
+    await tick();
+    editor.undo();
+    generation.discard();
+    expect(content(editor)).toEqual(ORIGINAL);
+    expect(() => editor.redo()).not.toThrow();
+    expect(() => editor.undo()).not.toThrow();
+    for (const block of content(editor)) {
+      expect(block.type === "ai_segment" && block.status === "generating").toBe(
+        false,
+      );
+    }
   });
 
   test("unwrap leaves the segment's blocks in place with their IDs", () => {

@@ -59,11 +59,13 @@ function generatingSegment(id: string): TElement {
 export interface SegmentGeneration {
   readonly segmentId: string;
   /**
-   * Shows the output: paragraphs `from` onward become `paragraphs`, and any
-   * after them are removed. Paragraphs before `from` are as last shown and
-   * aren't looked at, so each render costs only what changed. A paragraph
-   * that only grew gets the new text inserted. False if the segment is gone
-   * (the writer deleted or undid it).
+   * Shows the output: the segment's paragraphs become `paragraphs`. The
+   * caller promises those before `from` are as it last passed them, so if
+   * the segment is as this generation last left it they aren't looked at and
+   * each render costs only what changed; if anything else changed the
+   * segment (undo, redo, a delete reaching into it), every paragraph is
+   * compared. A paragraph that only grew gets the new text inserted. False
+   * if the segment is gone (the writer deleted or undid it).
    */
   render(paragraphs: readonly GeneratedParagraph[], from: number): boolean;
   /** Marks the segment ready and records it, finished, as the generation's undo step. */
@@ -115,6 +117,8 @@ export function startGeneration(
   // in the same tick.
   editor.tf.setSplittingOnce(true);
   const silently = (change: () => void) => editor.tf.withoutSaving(change);
+  /** The segment as this generation last left it; Slate nodes are immutable. */
+  let last: Descendant | undefined = editor.children[index];
 
   const generation: SegmentGeneration = {
     segmentId,
@@ -122,12 +126,14 @@ export function startGeneration(
       const at = segmentIndex(editor, segmentId);
       const segment = editor.children[at];
       if (!segment) return false;
+      const start = segment === last ? from : 0;
       // Normalised once at the end, not after every inserted paragraph.
       silently(() =>
         editor.tf.withoutNormalizing(() =>
-          syncParagraphs(editor, at, segment, paragraphs, from),
+          syncParagraphs(editor, at, segment, paragraphs.slice(start), start),
         ),
       );
+      last = editor.children[at];
       return true;
     },
     finish() {
@@ -161,8 +167,12 @@ export function startGeneration(
               editor.tf.insertNodes(structuredClone(replaced), { at: [at] });
             }
           });
-        if (step && editor.history.undos.at(-1) === step) {
-          // Nothing was recorded since: forget the step as well.
+        if (
+          step &&
+          editor.history.undos.at(-1) === step &&
+          editor.history.redos.length === 0
+        ) {
+          // Nothing was recorded or undone since: forget the step as well.
           editor.history.undos.pop();
           silently(undo);
         } else {

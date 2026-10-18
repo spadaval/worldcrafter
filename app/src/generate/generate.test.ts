@@ -623,6 +623,70 @@ for (const [name, open] of [
       expect(content(session)).toEqual(ORIGINAL);
     });
 
+    test.each([
+      [
+        "undo and redo",
+        (editor: DocumentSession["editor"]) => {
+          editor.undo();
+          editor.redo();
+        },
+      ],
+      [
+        "a delete reaching into the segment",
+        (editor: DocumentSession["editor"]) => {
+          editor.tf.select({
+            anchor: { path: [2, 0], offset: 5 },
+            focus: { path: [3, 0, 0], offset: 1 },
+          });
+          editor.tf.deleteFragment();
+        },
+      ],
+    ])("%s mid-stream ends in a Result, unlocked", async (_, interfere) => {
+      const assembled = await prepare();
+      scripts.push(
+        stream(
+          [
+            ...pieces("First line.\nSecond line.\nThird line.", 3).map(chunk),
+            finish,
+          ],
+          15,
+        ),
+      );
+      const sending = generator.send(assembled.id, {
+        kind: "after",
+        blockId: "p2",
+      });
+      await until(() => (generator.active.get()?.text.length ?? 0) > 14);
+      await Bun.sleep(20);
+      interfere(session.editor);
+      const result = await sending;
+      expect(result.isOk()).toBe(true);
+      expect(generator.active.get()).toBeNull();
+      const document = content(session);
+      expect(
+        document.some(
+          (block) =>
+            block.type === "ai_segment" && block.status === "generating",
+        ),
+      ).toBe(false);
+      const id = result._unsafeUnwrap().segmentId;
+      if (id) {
+        const index = document.findIndex((block) => block.id === id);
+        expect(textOf(segmentAt(document, index))).toEqual([
+          "First line.",
+          "Second line.",
+          "Third line.",
+        ]);
+      }
+      // Not left busy: another generation can start.
+      scripts.push(streamText("Again."));
+      expect(
+        (
+          await generator.send(assembled.id, { kind: "after", blockId: null })
+        )._unsafeUnwrap().outcome,
+      ).toBe("complete");
+    });
+
     test("a replacement deleted mid-stream leaves the replaced blocks in the old record", async () => {
       const assembled = await prepare();
       scripts.push(streamText("Keep me."));

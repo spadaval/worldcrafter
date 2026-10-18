@@ -132,7 +132,14 @@ export type GenerateError =
   | { kind: "segment_generating"; documentId: string; segmentId: string }
   /** Regenerate needs the request that made the segment. */
   | { kind: "no_provenance"; documentId: string; segmentId: string }
-  | { kind: "invalid_provenance"; segmentId: string; reason: string };
+  | { kind: "invalid_provenance"; segmentId: string; reason: string }
+  /** Generation stopped on an unexpected error; the segment keeps what it shows. */
+  | {
+      kind: "generation_failed";
+      documentId: string;
+      segmentId: string;
+      message: string;
+    };
 
 /** Where `send` puts the output. */
 export type GenerationTarget =
@@ -367,8 +374,26 @@ export function createGenerator(options: GeneratorOptions): Generator {
         if (placed.isErr()) {
           return errAsync<GenerationResult, GenerateError>(placed.error);
         }
-        return ResultAsync.fromSafePromise(
-          stream(profile, requestId, request, placed.value),
+        const placement = placed.value;
+        return ResultAsync.fromPromise(
+          stream(profile, requestId, request, placement),
+          (cause): GenerateError => {
+            // A bug, not an LLM failure: still end the generation, so neither
+            // the segment nor this generator stays locked.
+            controller?.abort();
+            controller = null;
+            try {
+              placement.generation.abandon();
+            } finally {
+              active.set(null);
+            }
+            return {
+              kind: "generation_failed",
+              documentId,
+              segmentId: placement.segmentId,
+              message: cause instanceof Error ? cause.message : String(cause),
+            };
+          },
         );
       });
   }
@@ -437,10 +462,7 @@ export function createGenerator(options: GeneratorOptions): Generator {
     const render = () => {
       cancelRender = null;
       const { finished } = parser;
-      const present = generation.render(
-        [...finished.slice(shown), ...parser.tail()],
-        shown,
-      );
+      const present = generation.render([...finished, ...parser.tail()], shown);
       shown = finished.length;
       active.set({ segmentId, requestId, text });
       if (!present) {

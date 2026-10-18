@@ -21,6 +21,8 @@ export function describeGenerateError(error: GenerateError): string {
       return "WorldCrafter has no record of the request that made this AI text, so it can't regenerate it.";
     case "invalid_provenance":
       return `The record of this AI text is damaged (${error.reason}).`;
+    case "generation_failed":
+      return `Generation stopped on an unexpected error (${error.message}). The text so far is kept.`;
     case "world_context_failed":
       return `The world notes couldn't be loaded (${error.error.kind}).`;
     case "unknown_pin":

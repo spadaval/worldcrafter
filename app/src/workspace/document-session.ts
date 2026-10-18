@@ -32,8 +32,12 @@ export interface SessionOptions {
   readonly saveDelayMs: number;
   /** Wait before retrying a failed save. */
   readonly retryDelayMs: number;
+  /** Least time between periodic snapshots. Defaults to five minutes. */
+  readonly snapshotIntervalMs?: number;
   readonly onSaved?: (document: StoredDocument) => void;
 }
+
+export const SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000;
 
 /**
  * One open document: its editor and the loop that saves it. The session is
@@ -59,8 +63,22 @@ export interface DocumentSession {
  * Loads a document through the storage connection and opens it in an editor.
  * Loading goes through editor creation, so missing and repeated block IDs are
  * repaired and the tree is normalised into the schema. If that changed the
- * stored content, the session saves the repaired version, after keeping the
- * original as a snapshot when it was outside the schema.
+ * stored content, the session saves the repaired version.
+ *
+ * Snapshot policy (decision worldcrafter-js76; the AI-accept snapshot comes
+ * with generation). Storage is last-write-wins, so snapshots are what make an
+ * accidental select-all + delete recoverable after it has been saved:
+ * - On open, a writer session snapshots the stored content unless the
+ *   document's newest snapshot already holds exactly that content. So the
+ *   state before every editing session can be recovered. The reason is
+ *   `repaired_on_load` when the stored content is outside the schema (the
+ *   editor is about to replace it with a repaired tree), else `periodic`.
+ *   If that snapshot can't be written, the document doesn't open.
+ * - While editing, after a successful save, the saved content is snapshotted
+ *   (`periodic`) if it differs from the session's last snapshot and at least
+ *   `snapshotIntervalMs` has passed since it. A failed periodic snapshot
+ *   doesn't fail the save; the next save tries again.
+ * Read-only sessions take no snapshots.
  */
 export function openDocumentSession(
   documentId: string,
@@ -68,7 +86,42 @@ export function openDocumentSession(
 ): ResultAsync<DocumentSession, StorageError> {
   return options.connection
     .run((storage) => storage.documents.load(documentId))
-    .map((stored) => createSession(stored, options));
+    .andThen((stored) =>
+      (options.readOnly
+        ? okAsync(undefined)
+        : snapshotOnOpen(options, stored)
+      ).map(() => createSession(stored, options)),
+    );
+}
+
+function snapshotOnOpen(
+  { connection }: SessionOptions,
+  stored: StoredDocument,
+): ResultAsync<void, StorageError> {
+  const content = JSON.stringify(stored.content);
+  return connection.run((storage) =>
+    storage.snapshots.list(stored.id).andThen((infos) => {
+      const newest = infos.at(-1);
+      const unchanged: ResultAsync<boolean, StorageError> = newest
+        ? storage.snapshots
+            .load(newest.id)
+            .map((snapshot) => JSON.stringify(snapshot.content) === content)
+        : okAsync(false);
+      return unchanged.andThen((same) =>
+        same
+          ? okAsync(undefined)
+          : storage.snapshots
+              .save({
+                documentId: stored.id,
+                reason: validateDocument(stored.content).isErr()
+                  ? "repaired_on_load"
+                  : "periodic",
+                content: stored.content,
+              })
+              .map(() => undefined),
+      );
+    }),
+  );
 }
 
 function createSession(
@@ -100,8 +153,9 @@ function createSession(
   /** Bumped on every change; a save records the version it wrote. */
   let version = 0;
   let savedVersion = 0;
-  /** Keep the stored original before overwriting it with a repaired tree. */
-  let snapshotOriginal = validateDocument(original).isErr();
+  /** What the newest snapshot holds (as JSON), and when this session knew it. */
+  let lastSnapshot = { content: JSON.stringify(original), at: options.now() };
+  const snapshotInterval = options.snapshotIntervalMs ?? SNAPSHOT_INTERVAL_MS;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let inFlight: Promise<SaveStatus> | null = null;
   let disposed = false;
@@ -136,20 +190,9 @@ function createSession(
       content: content.value as JsonValue,
       updatedAt: options.now(),
     };
-    const saved = await connection.run((storage) => {
-      const backup: ResultAsync<unknown, StorageError> = snapshotOriginal
-        ? storage.snapshots
-            .save({
-              documentId: stored.id,
-              reason: "repaired_on_load",
-              content: original,
-            })
-            .andTee(() => {
-              snapshotOriginal = false;
-            })
-        : okAsync(undefined);
-      return backup.andThen(() => storage.documents.save(record));
-    });
+    const saved = await connection.run((storage) =>
+      storage.documents.save(record),
+    );
     if (saved.isErr()) {
       const result: SaveStatus = { kind: "failed", error: saved.error };
       status.set(result);
@@ -158,11 +201,30 @@ function createSession(
     }
     savedVersion = writing;
     options.onSaved?.(record);
+    await snapshotIfDue(record);
     const result: SaveStatus =
       version === writing ? { kind: "saved" } : { kind: "unsaved" };
     status.set(result);
     if (version !== writing) schedule(options.saveDelayMs);
     return result;
+  };
+
+  const snapshotIfDue = async (record: StoredDocument) => {
+    const content = JSON.stringify(record.content);
+    if (
+      record.updatedAt - lastSnapshot.at < snapshotInterval ||
+      content === lastSnapshot.content
+    ) {
+      return;
+    }
+    const snapshot = await connection.run((storage) =>
+      storage.snapshots.save({
+        documentId: record.id,
+        reason: "periodic",
+        content: record.content,
+      }),
+    );
+    if (snapshot.isOk()) lastSnapshot = { content, at: record.updatedAt };
   };
 
   const flush = async (): Promise<SaveStatus> => {

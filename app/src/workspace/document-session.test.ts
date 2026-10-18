@@ -261,4 +261,82 @@ describe("document session", () => {
       document(duplicated),
     );
   });
+
+  describe("snapshots", () => {
+    const contents = async (storage: StorageAdapter) => {
+      const infos = (await storage.snapshots.list("doc1"))._unsafeUnwrap();
+      const all = [];
+      for (const info of infos) {
+        const snapshot = (
+          await storage.snapshots.load(info.id)
+        )._unsafeUnwrap();
+        all.push({ reason: snapshot.reason, content: snapshot.content });
+      }
+      return all;
+    };
+
+    test("opening snapshots the stored content once; reopening unchanged adds none", async () => {
+      const storage = createMemoryStorage();
+      (await storage.documents.save(document()))._unsafeUnwrap();
+      (await open(sessionOptions(storage))).dispose();
+      (await open(sessionOptions(storage))).dispose();
+      expect(await contents(storage)).toEqual([
+        { reason: "periodic", content: STORED },
+      ]);
+    });
+
+    test("a saved select-all + delete can be recovered after reload", async () => {
+      const storage = createMemoryStorage();
+      (await storage.documents.save(document()))._unsafeUnwrap();
+      const session = await open(sessionOptions(storage));
+      session.editor.tf.select([]);
+      session.editor.tf.deleteFragment();
+      await tick();
+      expect(await session.flush()).toEqual({ kind: "saved" });
+      session.dispose();
+
+      const reloaded = await open(sessionOptions(storage));
+      expect(reloaded.editor.api.string([])).toBe("");
+      const history = await contents(storage);
+      expect(history[0]?.content).toEqual(STORED);
+      // Opening the emptied document snapshots it too.
+      expect(history).toHaveLength(2);
+    });
+
+    test("while editing, a save snapshots at most once per interval", async () => {
+      const storage = createMemoryStorage();
+      (await storage.documents.save(document()))._unsafeUnwrap();
+      let clock = 0;
+      const session = await open({
+        ...sessionOptions(storage),
+        now: () => clock,
+        snapshotIntervalMs: 1000,
+      });
+      const edit = async (text: string) => {
+        session.editor.tf.insertText(text, { at: { path: [1, 0], offset: 0 } });
+        await tick();
+        await session.flush();
+      };
+      clock = 500;
+      await edit("a");
+      expect(await contents(storage)).toHaveLength(1); // only the open one
+      clock = 1200;
+      await edit("b");
+      clock = 1500;
+      await edit("c");
+      const history = await contents(storage);
+      expect(history).toHaveLength(2);
+      expect(JSON.stringify(history[1]?.content)).toContain("baMara");
+      clock = 2300;
+      await edit("d");
+      expect(await contents(storage)).toHaveLength(3);
+    });
+
+    test("a read-only session takes no snapshots", async () => {
+      const storage = createMemoryStorage();
+      (await storage.documents.save(document()))._unsafeUnwrap();
+      await open({ ...sessionOptions(storage), readOnly: true });
+      expect(await contents(storage)).toEqual([]);
+    });
+  });
 });

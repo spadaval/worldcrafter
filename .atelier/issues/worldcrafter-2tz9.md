@@ -14,9 +14,10 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-18T05:43:27.732209410+00:00"
+status: "done"
 title: "Wire generation into the Night Edition workspace"
-updated_at: "2026-10-18T04:48:46.932961104+00:00"
+updated_at: "2026-10-18T05:43:27.732209410+00:00"
 ---
 
 ## Goal
@@ -39,3 +40,7 @@ app/src/generate/ (createGenerator, ContextViewer, SegmentControls), app/src/con
 
 - 2026-10-18 [note] From the efkh fourth review (2026-10-18): edits that bypass the AI-segment plugin's overridden actions don't stop a live generation: changing a block's type or indent, inserting nodes (an inline is then erased by the next render) and moving nodes (moving a paragraph out of the segment duplicates it). No current UI makes these edits; when the workspace adds a toolbar, slash commands or drag-and-drop, route them through the stop-on-edit path or forbid them inside a generating segment.
 - 2026-10-18 [note] From the efkh final review (2026-10-18): harden app/src/editor/ai-segment.random.test.ts to also check validateDocument(canonicalize(...)) and block-ID uniqueness after each render (both held over 300 seeds in a probe); in app/src/generate/generate.test.ts (~790) the fault-injection test hard-codes top-level index 3 for the segment; use segmentIndex(...) so it can't silently stop firing.
+
+## Close Reason
+
+Generation wired into the Night Edition workspace: Generate next opens an editable request slip anchored in the gloss column (not a side panel), sent equals shown, streaming into the AI plate with Accept/Regenerate/Stop, failed sends keep the edited request, Stop works while preparing, model settings per world in local storage with a masked key and a stable profile id; app-level test against a stub server for every Done-when claim; Impeccable critique P1/P2 fixes applied; code reviewed twice.

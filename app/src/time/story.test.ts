@@ -12,7 +12,11 @@ import { openIndexedDbStorage } from "../storage/indexeddb";
 import { createMemoryStorage } from "../storage/memory";
 import type { StorageAdapter } from "../storage/types";
 import type { Kind } from "../world/kinds";
-import { createWorldStore, type WorldStore } from "../world/store";
+import {
+  createWorldStore,
+  directRenameDocument,
+  type WorldStore,
+} from "../world/store";
 import type { TimelineCommand } from "./commands";
 import type { FactAt, SceneContext } from "./holds";
 import { createTimelineStore, type TimelineStore } from "./store";
@@ -129,7 +133,10 @@ for (const [name, open] of [
 
     beforeEach(async () => {
       storage = await open();
-      world = createWorldStore(storage, { now: () => 1 });
+      world = createWorldStore(storage, {
+        now: () => 1,
+        renameDocument: directRenameDocument(storage, () => 1),
+      });
       time = createTimelineStore(storage, world, { now: () => 1 });
       await buildOutline(["s1", "s2", "s3", "s4", "s5"]);
       await entry("aldric", "person");

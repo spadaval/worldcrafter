@@ -28,7 +28,7 @@ import {
 } from "./ai-segment";
 import { createDocumentEditor, type DocumentEditor } from "./document-editor";
 
-const SEEDS = Array.from({ length: 40 }, (_, i) => i + 1);
+const SEEDS = Array.from({ length: 100 }, (_, i) => i + 1);
 const STEPS = 120;
 
 const ORIGINAL: Value = [
@@ -98,6 +98,14 @@ async function run(seed: number): Promise<void> {
     type: () => {
       editor.tf.select(point());
       editor.tf.insertText(rng.pick(["k", " ", "MINE"]));
+    },
+    // A shortcut prefix ("*", "#", ">") at a block start, caret after it:
+    // the next space typed there would autoformat the block.
+    shortcut: () => {
+      const texts = [...NodeApi.texts(editor)];
+      const [, path] = rng.pick(texts);
+      editor.tf.select({ path, offset: 0 });
+      editor.tf.insertText(rng.pick(["*", "#", ">", "1."]));
     },
     backspace: () => {
       editor.tf.select(point());
@@ -197,6 +205,7 @@ async function run(seed: number): Promise<void> {
     let action = "";
     try {
       if (rng.next() < 0.4) {
+        action = "stream";
         action = stream();
       } else {
         action = rng.pick(actions);

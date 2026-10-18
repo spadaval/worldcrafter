@@ -229,6 +229,38 @@ export function startGeneration(
   return { generation, replaced };
 }
 
+/**
+ * Render's edits, as raw operations. Transforms such as `insertText` are
+ * overridden by plugins that act on the writer's selection (autoformat turns
+ * "* " into a list item in the block holding the caret), so renders never
+ * go through them; `apply` still runs BlockIdPlugin (IDs for new blocks)
+ * and normalisation.
+ */
+const raw = {
+  insertText(
+    editor: SlateEditor,
+    path: number[],
+    offset: number,
+    text: string,
+  ) {
+    editor.tf.apply({ type: "insert_text", path, offset, text });
+  },
+  insertNodes(editor: SlateEditor, at: number[], nodes: readonly Descendant[]) {
+    nodes.forEach((node, i) => {
+      const path = [...at.slice(0, -1), (at.at(-1) as number) + i];
+      editor.tf.apply({
+        type: "insert_node",
+        path,
+        node: structuredClone(node),
+      });
+    });
+  },
+  removeNode(editor: SlateEditor, path: number[]) {
+    const node = NodeApi.get<Descendant>(editor, path);
+    if (node) editor.tf.apply({ type: "remove_node", path, node });
+  },
+};
+
 function syncParagraphs(
   editor: SlateEditor,
   index: number,
@@ -243,14 +275,14 @@ function syncParagraphs(
     const existing: Descendant | undefined = segment.children[i];
     const children = structuredClone(paragraph.children);
     if (!existing) {
-      editor.tf.insertNodes({ type: "p", children }, { at: [index, i] });
+      raw.insertNodes(editor, [index, i], [{ type: "p", children }]);
     } else if (ElementApi.isElement(existing)) {
       syncInlines(editor, [index, i], existing.children, children);
     }
   });
   const total = from + wanted.length;
   for (let i = segment.children.length - 1; i >= total; i--) {
-    editor.tf.removeNodes({ at: [index, i] });
+    raw.removeNode(editor, [index, i]);
   }
 }
 
@@ -280,21 +312,20 @@ function syncInlines(
     sameMarks(last, next) &&
     next.text.startsWith(last.text)
   ) {
-    editor.tf.insertText(next.text.slice(last.text.length), {
-      at: { path: [...path, same], offset: last.text.length },
-    });
-    if (wanted.length > same + 1) {
-      editor.tf.insertNodes(wanted.slice(same + 1), {
-        at: [...path, same + 1],
-      });
-    }
+    raw.insertText(
+      editor,
+      [...path, same],
+      last.text.length,
+      next.text.slice(last.text.length),
+    );
+    raw.insertNodes(editor, [...path, same + 1], wanted.slice(same + 1));
     return;
   }
-  if (same === current.length) {
-    editor.tf.insertNodes(wanted.slice(same), { at: [...path, same] });
-    return;
+  // Replace from the first difference on: remove the rest, insert the new.
+  for (let i = current.length - 1; i >= same; i--) {
+    raw.removeNode(editor, [...path, i]);
   }
-  editor.tf.replaceNodes(wanted, { at: path, children: true });
+  raw.insertNodes(editor, [...path, same], wanted.slice(same));
 }
 
 /**

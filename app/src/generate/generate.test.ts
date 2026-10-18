@@ -787,21 +787,20 @@ for (const [name, open] of [
       });
       await until(() => (generator.active.get()?.text.length ?? 0) > 6);
       const tf = session.editor.tf;
-      const original = {
-        insertText: tf.insertText,
-        insertNodes: tf.insertNodes,
-        replaceNodes: tf.replaceNodes,
+      const { apply } = tf;
+      // Edits inside the segment's paragraphs fail from now on.
+      tf.apply = (op) => {
+        if (
+          (op.type === "insert_text" || op.type === "insert_node") &&
+          op.path.length >= 2 &&
+          op.path[0] === 3
+        ) {
+          throw new Error("boom");
+        }
+        apply(op);
       };
-      const boom = () => {
-        throw new Error("boom");
-      };
-      Object.assign(tf, {
-        insertText: boom,
-        insertNodes: boom,
-        replaceNodes: boom,
-      });
       const result = await sending;
-      Object.assign(tf, original);
+      tf.apply = apply;
       expect(result.isOk()).toBe(true);
       const { outcome, segmentId } = result._unsafeUnwrap();
       expect(outcome).toBe("failed");

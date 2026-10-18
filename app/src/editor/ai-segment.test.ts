@@ -94,6 +94,20 @@ describe("AI segment generations", () => {
     expect(texts(segment(editor, 1))).toEqual(["The road bent"]);
   });
 
+  test("renders don't trigger the writer's autoformat shortcuts", () => {
+    const editor = createDocumentEditor([p("*", "w")]);
+    // The writer's caret sits after "*": "* " there would make a list item.
+    editor.tf.select({ path: [0, 0], offset: 1 });
+    const generation = start(editor, 1);
+    show(generation, "x");
+    show(generation, "x _i_");
+    expect(content(editor)[0]).toEqual(p("*", "w") as ContentDocument[number]);
+    expect(segment(editor, 1).children[0]?.children).toEqual([
+      { text: "x " },
+      { text: "i", italic: true },
+    ]);
+  });
+
   test("an empty render leaves one empty paragraph", () => {
     const editor = fresh();
     const generation = start(editor, 2);

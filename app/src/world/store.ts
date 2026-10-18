@@ -141,10 +141,10 @@ export interface WorldStoreOptions {
    * Sets a document's title. The document store is the only writer of
    * document records, so the app passes its rename command here (an open
    * document's editor session would otherwise overwrite, or be overwritten
-   * by, a direct write). The default writes the record directly, for tests
-   * and callers without a document store.
+   * by, a direct write). Tests without a document store pass
+   * `directRenameDocument(storage)`.
    */
-  renameDocument?: (
+  renameDocument: (
     documentId: string,
     title: string,
   ) => ResultAsync<void, WorldError>;
@@ -154,19 +154,29 @@ type StoredFacts = { documentId: string; facts: EntryFacts };
 
 const serialised = createCommandQueue();
 
+/**
+ * Writes a document's title straight to storage, bypassing the document
+ * store. Only for tests and tools that run without one: with a document open
+ * in an editor, this write and the editor's saves overwrite each other.
+ */
+export function directRenameDocument(
+  storage: StorageAdapter,
+  now: () => number = Date.now,
+): WorldStoreOptions["renameDocument"] {
+  return (documentId, title) =>
+    storage.documents
+      .load(documentId)
+      .andThen((document) =>
+        storage.documents.save({ ...document, title, updatedAt: now() }),
+      );
+}
+
 export function createWorldStore(
   storage: StorageAdapter,
-  options: WorldStoreOptions = {},
+  options: WorldStoreOptions,
 ): WorldStore {
   const now = options.now ?? Date.now;
-  const renameDocument =
-    options.renameDocument ??
-    ((documentId: string, title: string) =>
-      storage.documents
-        .load(documentId)
-        .andThen((document) =>
-          storage.documents.save({ ...document, title, updatedAt: now() }),
-        ));
+  const { renameDocument } = options;
 
   function parseRecord(record: WorldEntry): Result<StoredFacts, WorldError> {
     return parseEntryFacts(record.facts)

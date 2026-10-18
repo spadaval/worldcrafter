@@ -70,3 +70,4 @@ yarn-error.log*
 
 # Claude Code agent worktrees
 .claude/worktrees/
+!app/bun.lock

@@ -16,9 +16,10 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-18T00:14:55.507869360+00:00"
+status: "done"
 title: "Restricted content schema with lossless export projection"
-updated_at: "2026-10-17T23:47:00.220089353+00:00"
+updated_at: "2026-10-18T00:14:55.507869360+00:00"
 ---
 
 ## Goal
@@ -48,3 +49,7 @@ Whether `@platejs/markdown` can be configured to do this or a small custom seria
 ## Notes
 
 - 2026-10-17 [note] Before starting: the Night Edition direction (.impeccable/surfaces/writing-workspace.md) adds Fountain-style layers that live in the source but never in the prose export: inline writer notes ([[ ]]), a synopsis per scene (=), a boneyard for cut text, and a forced speaker on a dialogue line (@). Decide which belong in the restricted schema now, add them to docs/rebuild/data-model-boundaries.md, and include them in the round-trip fixture. The prose projection must drop them; the lossless export must keep them.
+
+## Close Reason
+
+Content schema, canonicalize, and lossless markdown export/parser merged into the increment branch: parse(export(tree)) deep-equals tree for the fixture and generated trees, out-of-schema content is rejected as an error Result; independently reviewed twice plus the indent-bound fix. CRLF files are rejected rather than read (no action until files are edited outside the app).

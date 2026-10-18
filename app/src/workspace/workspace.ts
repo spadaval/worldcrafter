@@ -146,36 +146,54 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
   };
 
   /**
-   * How many holders keep each document's session alive: its tab (one
-   * reference, identified by a token), plus each command using it. A
-   * reference is counted when it is asked for, before the load finishes. At
-   * zero the session is disposed.
+   * A claim that keeps a document's session alive. A document's tab holds
+   * one, and each command using the session holds one while it runs. Leases
+   * are counted from the moment they are taken, before the load finishes,
+   * and releasing one twice has no effect. When a document's last lease is
+   * released its session is disposed.
    */
+  interface Lease {
+    release(): void;
+  }
   const holds = new Map<string, number>();
   /**
-   * The open tab's token per document. Closing removes it before saving, so
-   * an open during the close's save takes its own reference (and a new
-   * token) and the close then leaves the tab alone.
+   * The lease of each open tab. Closing takes it away before saving, so an
+   * open during the close's save takes a lease of its own, and the close then
+   * leaves the tab alone.
    */
-  const tabTokens = new Map<string, symbol>();
+  const tabLeases = new Map<string, Lease>();
 
-  const acquire = (documentId: string) => {
+  const takeLease = (documentId: string): Lease => {
     holds.set(documentId, (holds.get(documentId) ?? 0) + 1);
-    return loadSession(documentId).mapErr((error) => {
-      release(documentId);
-      return error;
-    });
+    let released = false;
+    return {
+      release() {
+        if (released) return;
+        released = true;
+        const held = holds.get(documentId);
+        // Every lease is counted when taken, so this can't happen; never let
+        // a miscount dispose a session someone else holds.
+        if (held === undefined) return;
+        const count = held - 1;
+        if (count > 0) {
+          holds.set(documentId, count);
+          return;
+        }
+        holds.delete(documentId);
+        sessions.get(documentId)?.dispose();
+        sessions.delete(documentId);
+      },
+    };
   };
 
-  const release = (documentId: string) => {
-    const count = (holds.get(documentId) ?? 1) - 1;
-    if (count > 0) {
-      holds.set(documentId, count);
-      return;
-    }
-    holds.delete(documentId);
-    sessions.get(documentId)?.dispose();
-    sessions.delete(documentId);
+  /** Takes a lease and loads the session; a failed load gives the lease back. */
+  const acquire = (documentId: string) => {
+    const lease = takeLease(documentId);
+    const session = loadSession(documentId).mapErr((error) => {
+      lease.release();
+      return error;
+    });
+    return { lease, session };
   };
 
   /** Saves now; fails with `unsaved` if changes remain. */
@@ -208,13 +226,14 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
     },
 
     openDocument(documentId) {
-      const existing = tabTokens.get(documentId);
-      const token = existing ?? Symbol(documentId);
-      if (!existing) tabTokens.set(documentId, token);
-      const current = () => tabTokens.get(documentId) === token;
-      return (existing ? loadSession(documentId) : acquire(documentId))
+      const existing = tabLeases.get(documentId);
+      const acquired = existing ? null : acquire(documentId);
+      const lease = existing ?? acquired?.lease;
+      if (acquired) tabLeases.set(documentId, acquired.lease);
+      const current = () => tabLeases.get(documentId) === lease;
+      return (acquired ? acquired.session : loadSession(documentId))
         .mapErr((error): CommandError => {
-          if (!existing && current()) tabTokens.delete(documentId);
+          if (acquired && current()) tabLeases.delete(documentId);
           // A tab whose document is gone is dropped rather than kept broken.
           if (error.kind === "not_found") {
             setTabs(closeTab(tabs.get(), documentId));
@@ -222,7 +241,7 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
           return error;
         })
         .andThen((session) => {
-          // Closed while loading: the close releases the reference.
+          // Closed while loading: the close releases the lease.
           if (!current()) {
             return errAsync({ kind: "closed" as const, documentId });
           }
@@ -232,8 +251,8 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
     },
 
     closeTab(documentId) {
-      const token = tabTokens.get(documentId);
-      tabTokens.delete(documentId);
+      const lease = tabLeases.get(documentId);
+      tabLeases.delete(documentId);
       // Let a load in progress finish first, so its session is released too.
       const loaded = (loading.get(documentId) ?? okAsync(undefined))
         .map(() => undefined)
@@ -244,18 +263,18 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
           return session ? flushed(session) : okAsync(undefined);
         })
         .map(() => {
-          if (token) release(documentId);
-          if (!tabTokens.has(documentId)) {
+          lease?.release();
+          if (!tabLeases.has(documentId)) {
             setTabs(closeTab(tabs.get(), documentId));
           }
           return tabs.get();
         })
         .mapErr((error) => {
-          // Not closed: give the tab its reference back, unless it was
-          // reopened meanwhile with a reference of its own.
-          if (token) {
-            if (tabTokens.has(documentId)) release(documentId);
-            else tabTokens.set(documentId, token);
+          // Not closed: give the tab its lease back, unless it was reopened
+          // meanwhile with a lease of its own.
+          if (lease) {
+            if (tabLeases.has(documentId)) lease.release();
+            else tabLeases.set(documentId, lease);
           }
           return error;
         });
@@ -263,18 +282,25 @@ export function createWorkspace(options: WorkspaceOptions): Workspace {
 
     renameDocument(documentId, title) {
       if (readOnly) return errAsync({ kind: "read_only" as const });
-      return acquire(documentId).andThen((session) => {
+      const { lease, session: loaded } = acquire(documentId);
+      return loaded.andThen((session) => {
         session.setTitle(title.trim() || UNTITLED);
         return flushed(session)
-          .map(() => release(documentId))
+          .map(() => lease.release())
           .mapErr((error) => {
             // Keep the session alive (retrying, and counted by
-            // hasUnsavedChanges) until a retry saves the new title.
-            const stop = session.status.subscribe(() => {
-              if (session.hasUnsavedChanges()) return;
-              stop();
-              release(documentId);
-            });
+            // hasUnsavedChanges) until a save stores the new title. Another
+            // save may already have done so.
+            const releaseOnceSaved = () => {
+              if (session.hasUnsavedChanges()) return false;
+              lease.release();
+              return true;
+            };
+            if (!releaseOnceSaved()) {
+              const stop = session.status.subscribe(() => {
+                if (releaseOnceSaved()) stop();
+              });
+            }
             return error;
           });
       });

@@ -16,6 +16,7 @@
  */
 
 import { err, ok, type Result } from "neverthrow";
+import { isCanonicalName } from "../world/names";
 
 export const MARKS = ["bold", "italic", "strikethrough", "code"] as const;
 export type Mark = (typeof MARKS)[number];
@@ -91,12 +92,14 @@ export type ContentError =
 /** Block ID characters (Plate's nanoid alphabet). Shared with the markdown syntax. */
 export const BLOCK_ID_CHARS = "[A-Za-z0-9_-]+";
 const BLOCK_ID_PATTERN = new RegExp(`^${BLOCK_ID_CHARS}$`);
-const CANONICAL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const EXTERNAL_URL_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]*:[^\s]+$/;
 
-/** An internal link targets a document by canonical name, e.g. `old-mill`. */
+/**
+ * An internal link targets a document by canonical name, e.g. `old-mill` or
+ * `café`. The format is defined in `world/names.ts`.
+ */
 export function isInternalLinkTarget(url: string): boolean {
-  return CANONICAL_NAME_PATTERN.test(url);
+  return isCanonicalName(url);
 }
 
 function isLinkTarget(url: string): boolean {

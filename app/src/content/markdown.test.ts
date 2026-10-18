@@ -190,6 +190,21 @@ describe("round trip", () => {
     ]);
   });
 
+  test("links to canonical names in any script", () => {
+    expect(
+      roundTrip([
+        p(
+          "b_1",
+          { text: "At " },
+          { type: "a", url: "café-noir", children: [{ text: "the café" }] },
+          { text: " and " },
+          { type: "a", url: "東京", children: [{ text: "Tokyo" }] },
+          { text: "." },
+        ),
+      ]),
+    ).toBe("At [the café](café-noir) and [Tokyo](東京). {#b_1}\n");
+  });
+
   test("numbered list markers wider than one digit", () => {
     const items: Block[] = Array.from({ length: 11 }, (_, i) => ({
       type: "p",
@@ -491,6 +506,9 @@ describe("rejection", () => {
     rejectsParse("- a\\\nb {#a}\n", /line break must continue/);
     rejectsParse("x {#a}\n\ny {#a}\n", /duplicate block id/);
     rejectsParse("[x](../up) {#a}\n", /link url/);
+    // Internal targets must be canonical names (world/names.ts).
+    rejectsParse("[x](Old-Mill) {#a}\n", /link url/);
+    rejectsParse("[x](a--b) {#a}\n", /link url/);
     rejectsParse(":::placeholder{#p}\n**x**\n:::\n", /plain text only/);
   });
 

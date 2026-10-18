@@ -20,7 +20,8 @@ export type CollectionName =
   | "annotations"
   | "requests"
   | "snapshots"
-  | "outlines";
+  | "outlines"
+  | "timelines";
 
 export type StorageOperation = "open" | "save" | "load" | "list" | "delete";
 
@@ -97,6 +98,18 @@ export interface OutlineChapter {
   readonly scenes: readonly string[];
 }
 
+/**
+ * A world's story time: events, ordering constraints, frames and reveals. The
+ * story-time module (`src/time`) owns its shape, checks it on load and owns
+ * the commands that edit it; storage keeps it as JSON.
+ */
+export interface StoredTimeline {
+  readonly id: string;
+  readonly timeline: JsonValue;
+  /** Epoch milliseconds, set by the caller. */
+  readonly updatedAt: number;
+}
+
 /** An assembled LLM request, kept so it can be viewed and debugged. */
 export interface StoredRequest {
   readonly id: string;
@@ -171,6 +184,8 @@ export interface StorageAdapter {
   readonly snapshots: SnapshotCollection;
   /** Keyed by `id`. A world has one outline, saved and loaded whole. */
   readonly outlines: Collection<StoredOutline>;
+  /** Keyed by `id`. A world has one timeline, saved and loaded whole. */
+  readonly timelines: Collection<StoredTimeline>;
   /** Releases the store. Later operations fail with a `StorageFailure`. */
   close(): void;
 }

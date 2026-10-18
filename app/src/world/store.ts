@@ -20,6 +20,11 @@
  * - Free-form frontmatter is replaced by named scalar fields.
  * - There are no commands yet to change tags, kind or template, or to remove a
  *   relation.
+ *
+ * `recordFactChange` anchors a change to an event ID but cannot check that the
+ * event exists: events belong to the story-time engine. Go through the
+ * timeline store (`src/time/store.ts`), which checks the event and then runs
+ * this command.
  */
 
 import {
@@ -39,10 +44,15 @@ import type {
 } from "../storage/types";
 import { type CardRelation, renderCard } from "./card";
 import {
+  type Authority,
   asserted,
+  checkAuthority,
   type Entry,
   type EntryFacts,
+  type EventId,
   FACTS_VERSION,
+  type Fact,
+  type FactChange,
   type FieldValue,
   isFieldValue,
   isReservedFieldName,
@@ -55,7 +65,11 @@ import {
   displayNameKey,
   uniqueName,
 } from "./names";
-import { checkRelationKinds, relationDefinition } from "./relations";
+import {
+  checkRelationKinds,
+  type RelationType,
+  relationDefinition,
+} from "./relations";
 
 export type AttachEntry = {
   /**
@@ -69,6 +83,27 @@ export type AttachEntry = {
   tags?: string[];
 };
 
+/**
+ * From `event` on, the fact has `value` (`null`: it stops holding). A fact
+ * that doesn't exist yet is created with no base value, so it holds only from
+ * the event; a new relation is checked like `addRelation`. A second change to
+ * the same fact at the same event replaces the first, so each event changes a
+ * fact at most once, except that an inferred change never replaces an
+ * asserted one.
+ */
+export type RecordFactChange = {
+  documentId: string;
+  event: EventId;
+  /** Defaults to asserted. */
+  authority?: Authority;
+} & (
+  | { fact: { kind: "field"; name: string }; value: FieldValue | null }
+  | {
+      fact: { kind: "relation"; type: string; target: string };
+      value: true | null;
+    }
+);
+
 /** Every command, by name. Each one returns the entry it changed. */
 export type WorldCommands = {
   attachEntry: AttachEntry;
@@ -80,6 +115,7 @@ export type WorldCommands = {
   setField: { documentId: string; field: string; value: FieldValue | null };
   /** Adds a relation from `documentId`, checked against its domain and range. */
   addRelation: { documentId: string; type: string; target: string };
+  recordFactChange: RecordFactChange;
 };
 
 export type WorldCommandName = keyof WorldCommands;
@@ -128,6 +164,11 @@ export interface WorldStore {
    * repaired, since ignoring one could hand out a name it holds.
    */
   unreadable(): ResultAsync<UnreadableEntry[], WorldError>;
+  /**
+   * The facts of every entry, ascending by document ID. Records that can't be
+   * read are skipped, as in `card`; `unreadable` lists them.
+   */
+  facts(): ResultAsync<StoredFacts[], WorldError>;
 }
 
 export type UnreadableEntry = { documentId: string; reason: string };
@@ -137,7 +178,7 @@ export interface WorldStoreOptions {
   now?: () => number;
 }
 
-type StoredFacts = { documentId: string; facts: EntryFacts };
+export type StoredFacts = { documentId: string; facts: EntryFacts };
 
 const serialised = createCommandQueue();
 
@@ -442,43 +483,141 @@ export function createWorldStore(
     type,
     target,
   }: WorldCommands["addRelation"]): ResultAsync<Entry, WorldError> {
+    return loadFacts(target).andThen((targetFacts) =>
+      update(documentId, (current) =>
+        checkNewRelation(current, type, target, targetFacts).map(
+          (relationType) => ({
+            ...stripEntry(current),
+            relations: [
+              ...current.relations,
+              {
+                type: relationType,
+                target,
+                holds: { base: asserted(true as const), changes: [] },
+              },
+            ],
+          }),
+        ),
+      ),
+    );
+  }
+
+  /**
+   * Checks that `current` may gain a `type` relation to `target`: the kinds
+   * fit, and neither it nor (for a symmetric type) its reverse exists.
+   */
+  function checkNewRelation(
+    current: Entry,
+    type: string,
+    target: string,
+    targetFacts: EntryFacts,
+  ): Result<RelationType, WorldError> {
     const rejected = (reason: string): WorldError => ({
       kind: "relation_rejected",
       relationType: type,
-      source: documentId,
+      source: current.documentId,
       target,
       reason,
     });
-    if (target === documentId) {
-      return errAsync(rejected("an entry cannot relate to itself"));
+    if (target === current.documentId) {
+      return err(rejected("an entry cannot relate to itself"));
     }
-    return loadFacts(target).andThen((targetFacts) =>
-      update(documentId, (current) =>
-        checkRelationKinds(type, current.kind, targetFacts.kind)
-          .mapErr(rejected)
-          .andThen((relationType) => {
-            const exists =
-              current.relations.some(
-                (r) => r.type === relationType && r.target === target,
-              ) ||
-              (relationDefinition(relationType).symmetric &&
-                targetFacts.relations.some(
-                  (r) => r.type === relationType && r.target === documentId,
-                ));
-            if (exists) return err(rejected("the relation already exists"));
-            return ok({
-              ...stripEntry(current),
-              relations: [
-                ...current.relations,
-                {
-                  type: relationType,
-                  target,
-                  holds: { base: asserted(true as const), changes: [] },
-                },
-              ],
-            });
+    return checkRelationKinds(type, current.kind, targetFacts.kind)
+      .mapErr(rejected)
+      .andThen((relationType) => {
+        const exists =
+          current.relations.some(
+            (r) => r.type === relationType && r.target === target,
+          ) ||
+          (relationDefinition(relationType).symmetric &&
+            targetFacts.relations.some(
+              (r) => r.type === relationType && r.target === current.documentId,
+            ));
+        return exists
+          ? err(rejected("the relation already exists"))
+          : ok(relationType);
+      });
+  }
+
+  function recordFactChange(
+    payload: RecordFactChange,
+  ): ResultAsync<Entry, WorldError> {
+    const { documentId, event } = payload;
+    const fail = (reason: string) =>
+      errAsync<Entry, WorldError>(
+        invalid("recordFactChange", documentId, reason),
+      );
+    if (event.trim() === "") return fail("event ID is empty");
+    const authority = checkAuthority(
+      payload.authority ?? { level: "asserted" },
+      "change",
+    );
+    if (authority.isErr()) return fail(authority.error);
+    const withChange = <T>(
+      fact: Fact<T>,
+      value: T | null,
+    ): Result<Fact<T>, WorldError> =>
+      addChange(fact, { event, value, authority: authority.value }).mapErr(
+        (reason) => invalid("recordFactChange", documentId, reason),
+      );
+
+    if (payload.fact.kind === "field") {
+      const { value } = payload;
+      const field = payload.fact.name.trim();
+      if (field === "") return fail("field name is empty");
+      if (isReservedFieldName(field)) {
+        return fail(`"${field}" is a reserved name`);
+      }
+      if (value !== null && !isFieldValue(value)) {
+        return fail(
+          "value must be a string, a finite number, a boolean or null",
+        );
+      }
+      return update(documentId, (current) => {
+        const existing = Object.hasOwn(current.fields, field)
+          ? current.fields[field]
+          : undefined;
+        return withChange(existing ?? { base: null, changes: [] }, value).map(
+          (fact) => ({
+            ...stripEntry(current),
+            fields: { ...current.fields, [field]: fact },
           }),
-      ),
+        );
+      });
+    }
+
+    const { type, target } = payload.fact;
+    if (payload.value !== null && payload.value !== true) {
+      return fail("a relation change's value must be true or null");
+    }
+    const value = payload.value;
+    return loadFacts(target).andThen((targetFacts) =>
+      update(documentId, (current) => {
+        const i = current.relations.findIndex(
+          (r) => r.type === type && r.target === target,
+        );
+        const existing = current.relations[i];
+        if (existing !== undefined) {
+          return withChange(existing.holds, value).map((holds) => ({
+            ...stripEntry(current),
+            relations: current.relations.map((r, j) =>
+              j === i ? { ...r, holds } : r,
+            ),
+          }));
+        }
+        return checkNewRelation(current, type, target, targetFacts).andThen(
+          (relationType) =>
+            withChange<true>({ base: null, changes: [] }, value).map(
+              (holds) => ({
+                ...stripEntry(current),
+                relations: [
+                  ...current.relations,
+                  { type: relationType, target, holds },
+                ],
+              }),
+            ),
+        );
+      }),
     );
   }
 
@@ -511,6 +650,8 @@ export function createWorldStore(
         return setField(command.payload);
       case "addRelation":
         return addRelation(command.payload);
+      case "recordFactChange":
+        return recordFactChange(command.payload);
     }
   }
 
@@ -567,7 +708,36 @@ export function createWorldStore(
   const unreadable = () =>
     listFacts().map(({ unreadable: problems }) => problems);
 
-  return { execute, entry, resolveName, card, unreadable };
+  const facts = () => listFacts().map(({ readable }) => readable);
+
+  return { execute, entry, resolveName, card, unreadable, facts };
+}
+
+/**
+ * Adds `change`, replacing an earlier change at the same event unless that one
+ * is asserted and `change` is inferred.
+ */
+function addChange<T>(
+  fact: Fact<T>,
+  change: FactChange<T>,
+): Result<Fact<T>, string> {
+  const i = fact.changes.findIndex(({ event }) => event === change.event);
+  const existing = fact.changes[i];
+  if (existing === undefined) {
+    return ok({ ...fact, changes: [...fact.changes, change] });
+  }
+  if (
+    existing.authority.level === "asserted" &&
+    change.authority.level === "inferred"
+  ) {
+    return err(
+      `the asserted change at event ${change.event} cannot be replaced by an inferred one`,
+    );
+  }
+  return ok({
+    ...fact,
+    changes: fact.changes.map((c, j) => (j === i ? change : c)),
+  });
 }
 
 /** The facts part of an entry, for saving. */

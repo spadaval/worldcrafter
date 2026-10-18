@@ -72,6 +72,14 @@ export type Relation = {
   holds: Fact<true>;
 };
 
+/**
+ * Names one fact of an entry: a field, or an outgoing relation. Stores that
+ * refer to a fact from outside the entry (fact changes, reveals) use this.
+ */
+export type FactRef =
+  | { kind: "field"; name: string }
+  | { kind: "relation"; type: RelationType; target: string };
+
 export const FACTS_VERSION = 1;
 
 export type EntryFacts = {
@@ -113,7 +121,8 @@ function stringList(value: unknown, what: string): Check<string[]> {
     : err(`${what} must be a list of strings`);
 }
 
-function checkAuthority(value: unknown, at: string): Check<Authority> {
+/** Checks a stored or supplied authority; `at` names it in the error. */
+export function checkAuthority(value: unknown, at: string): Check<Authority> {
   if (!isRecord(value)) return err(`${at}.authority is missing`);
   if (value.level === "asserted") return ok({ level: "asserted" });
   const provenance = value.provenance;

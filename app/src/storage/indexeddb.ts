@@ -48,9 +48,11 @@ function upgrade(db: IDBDatabase, oldVersion: number): void {
       autoIncrement: true,
     }).createIndex(DOCUMENT_INDEX, "documentId");
     db.createObjectStore(SNAPSHOT_CONTENT, { keyPath: "id" });
-    // Added to version 1 before any user data existed. From now on, schema
-    // changes bump DB_VERSION.
+    // Added to version 1 before any user data existed: no release has
+    // opened a real database yet, so v1 is still open. After the first
+    // release, schema changes bump DB_VERSION instead.
     db.createObjectStore("outlines", { keyPath: "id" });
+    db.createObjectStore("timelines", { keyPath: "id" });
   }
 }
 
@@ -294,6 +296,7 @@ function createAdapter(db: IDBDatabase): StorageAdapter {
     requests: keyed("requests", (record) => record.id),
     snapshots,
     outlines: keyed("outlines", (record) => record.id),
+    timelines: keyed("timelines", (record) => record.id),
     close: () => db.close(),
   };
 }

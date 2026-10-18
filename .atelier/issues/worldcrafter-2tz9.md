@@ -14,9 +14,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Wire generation into the Night Edition workspace"
-updated_at: "2026-10-18T04:48:19.553501240+00:00"
+updated_at: "2026-10-18T04:48:46.932961104+00:00"
 ---
 
 ## Goal

@@ -334,6 +334,81 @@ describe("round trip", () => {
       "\n11. item 10 {#l_10}\n    - under ten {#l_nested}",
     );
   });
+
+  test("indents that skip levels are kept, with an explicit indent attribute", () => {
+    const item = (
+      id: string,
+      indent: number,
+      style: "disc" | "decimal" = "disc",
+    ): Block => ({
+      type: "p",
+      id,
+      listStyleType: style,
+      indent,
+      children: [{ text: id }],
+    });
+    expect(
+      roundTrip([
+        item("first", 2),
+        item("next", 2),
+        item("back", 1),
+        item("deep", 3, "decimal"),
+        item("mid", 2),
+        item("deeper", 4),
+      ]),
+    ).toBe(
+      [
+        "- first {#first indent=2}",
+        "- next {#next indent=2}",
+        "- back {#back}",
+        "  1. deep {#deep indent=3}",
+        "  - mid {#mid}",
+        "    - deeper {#deeper indent=4}",
+        "",
+      ].join("\n"),
+    );
+    // An AI segment starts a fresh list, so an indented first item inside it
+    // after an outer list needs the attribute; so does one after a paragraph.
+    expect(
+      roundTrip([
+        item("outer", 1),
+        {
+          type: "ai_segment",
+          id: "seg",
+          status: "ready",
+          children: [item("inner", 2)],
+        },
+        p("para", { text: "x" }),
+        item("after", 3),
+      ]),
+    ).toBe(
+      [
+        "- outer {#outer}",
+        "",
+        ":::ai{#seg status=ready}",
+        "- inner {#inner indent=2}",
+        ":::",
+        "",
+        "x {#para}",
+        "",
+        "- after {#after indent=3}",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  test("text with \\r, \\t and Unicode line separators in every block", () => {
+    const children: Inline[] = [{ text: "\r# a\u2028b\u2029\tc\r" }];
+    roundTrip([
+      { type: "h1", id: "b_1", children },
+      { type: "p", id: "b_2", listStyleType: "disc", indent: 1, children },
+      { type: "p", id: "b_3", listStyleType: "decimal", indent: 2, children },
+      { type: "blockquote", id: "b_4", children },
+      { type: "p", id: "b_5", children },
+      { type: "placeholder", id: "b_6", children: [{ text: "\u2028\r" }] },
+      p("b_7", { text: " \t ", code: true }),
+    ]);
+  });
 });
 
 describe("rejection", () => {
@@ -401,17 +476,27 @@ describe("rejection", () => {
       ],
       /link url/,
     );
+    const listItem = (extra: Record<string, unknown>) => [
+      {
+        type: "p",
+        id: "a",
+        listStyleType: "decimal",
+        indent: 1,
+        children: [{ text: "x" }],
+        ...extra,
+      },
+    ];
     rejectsExport(
-      [
-        {
-          type: "p",
-          id: "a",
-          listStyleType: "disc",
-          indent: 2,
-          children: [{ text: "x" }],
-        },
-      ],
-      /skips a level/,
+      listItem({ listStart: 2 }),
+      /listStart is derived.*canonicalize/,
+    );
+    rejectsExport(
+      listItem({ listRestart: 3 }),
+      /listRestart\) are not supported/,
+    );
+    rejectsExport(
+      listItem({ listRestartPolite: 3 }),
+      /listRestartPolite\) are not supported/,
     );
     rejectsExport(
       [
@@ -491,6 +576,11 @@ describe("rejection", () => {
     rejectsParse("`x {#a}\n", /unclosed code span/);
     rejectsParse("\\a {#a}\n", /backslash/);
     rejectsParse("  - x {#a}\n", /indentation/);
+    rejectsParse("x {#a indent=2}\n", /list items only/);
+    rejectsParse(
+      "- x {#a indent=2}\n  - y {#b indent=2}\n",
+      /deeper than the parent/,
+    );
     rejectsParse("- a\\\nb {#a}\n", /line break must continue/);
     rejectsParse("x {#a}\n\ny {#a}\n", /duplicate block id/);
     rejectsParse("[x](../up) {#a}\n", /link url/);
@@ -545,6 +635,16 @@ describe("generated trees", () => {
       "<",
       "\n",
       "é",
+      "\r",
+      "\t",
+      "\u2028",
+      "\u2029",
+      "+",
+      "=",
+      "|",
+      "10.",
+      "3)",
+      "# ",
     ];
     const randomText = (allowNewline: boolean) => {
       let text = "";
@@ -615,7 +715,7 @@ describe("generated trees", () => {
             : (["p", "list", "list", "h", "quote", "hr"] as const),
         );
         if (kind === "list") {
-          indent = 1 + Math.floor(next() * (indent + 1));
+          indent = 1 + Math.floor(next() * (indent + 3));
           blocks.push({
             type: "p",
             id,

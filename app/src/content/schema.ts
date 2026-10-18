@@ -11,7 +11,8 @@
  * The validator only accepts trees in Slate-normalised form (no adjacent
  * leaves with the same marks, inline links always surrounded by text, no
  * stray empty leaves), because that is the form the parser produces and
- * `parse(export(tree))` must deep-equal `tree`.
+ * `parse(export(tree))` must deep-equal `tree`. Editor trees go through
+ * `canonicalize()` first, which removes the derived state Plate adds.
  */
 
 import { err, ok, type Result } from "neverthrow";
@@ -35,7 +36,10 @@ export type Inline = Text | Link;
 export const LIST_STYLES = ["disc", "decimal"] as const;
 export type ListStyle = (typeof LIST_STYLES)[number];
 
-/** A paragraph; with `listStyleType` and `indent` (>= 1) it is a list item. */
+/**
+ * A paragraph; with `listStyleType` and `indent` (>= 1) it is a list item.
+ * Indents may skip levels (e.g. 1 then 3): that is structure the writer made.
+ */
 export type Paragraph = {
   type: "p";
   id: string;
@@ -82,7 +86,9 @@ export type ContentError =
   /** The markdown is not valid export syntax. `line` is 1-based. */
   | { kind: "invalid_markdown"; line: number; reason: string };
 
-export const BLOCK_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+/** Block ID characters (Plate's nanoid alphabet). Shared with the markdown syntax. */
+export const BLOCK_ID_CHARS = "[A-Za-z0-9_-]+";
+const BLOCK_ID_PATTERN = new RegExp(`^${BLOCK_ID_CHARS}$`);
 const CANONICAL_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const EXTERNAL_URL_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]*:[^\s]+$/;
 
@@ -117,15 +123,30 @@ function checkKeys(
 ): Check<void> {
   for (const key of Object.keys(node)) {
     if (!allowed.includes(key)) {
-      return fail(path, `property "${key}" is not allowed here`);
+      return fail(
+        path,
+        PROPERTY_REASONS[key] ?? `property "${key}" is not allowed here`,
+      );
     }
   }
   return ok(undefined);
 }
 
-function marksKey(leaf: Text): string {
-  return MARKS.filter((mark) => leaf[mark]).join(",");
+/** Plate list props that need a specific explanation when rejected. */
+const PROPERTY_REASONS: Record<string, string> = {
+  listStart:
+    "listStart is derived by the editor; run canonicalize() before validating",
+  listRestart:
+    "numbered-list restarts (listRestart) are not supported in content",
+  listRestartPolite:
+    "numbered-list restarts (listRestartPolite) are not supported in content",
+};
+
+export function sameMarks(a: Text, b: Text): boolean {
+  return MARKS.every((mark) => a[mark] === b[mark]);
 }
+
+const hasMarks = (leaf: Text) => MARKS.some((mark) => leaf[mark]);
 
 function checkText(value: unknown, path: string): Check<Text> {
   if (!isRecord(value) || typeof value.text !== "string") {
@@ -157,12 +178,15 @@ function checkLeafRun(leaves: Text[], paths: string[]): Check<void> {
       if (leaves.length > 1) {
         return fail(path, "empty text must not sit next to other text");
       }
-      if (marksKey(leaf) !== "") {
-        return fail(path, "empty text cannot carry marks");
+      if (hasMarks(leaf)) {
+        return fail(
+          path,
+          "empty text cannot carry marks; run canonicalize() first",
+        );
       }
     }
     const next = leaves[i + 1];
-    if (next && marksKey(next) === marksKey(leaf)) {
+    if (next && sameMarks(next, leaf)) {
       return fail(path, "adjacent text leaves with the same marks");
     }
   }
@@ -241,7 +265,7 @@ function checkPlainText(value: unknown, path: string): Check<[Text]> {
   }
   const leaf = checkText(value[0], `${path}[0]`);
   if (leaf.isErr()) return err(leaf.error);
-  if (marksKey(leaf.value) !== "") {
+  if (hasMarks(leaf.value)) {
     return fail(`${path}[0]`, "marks are not allowed here");
   }
   return ok(value as [Text]);
@@ -253,7 +277,7 @@ class Validator {
   checkId(node: Record<string, unknown>, path: string): Check<void> {
     const { id } = node;
     if (typeof id !== "string" || !BLOCK_ID_PATTERN.test(id)) {
-      return fail(path, "block id must match [A-Za-z0-9_-]+");
+      return fail(path, `block id must match ${BLOCK_ID_CHARS}`);
     }
     if (this.ids.has(id)) {
       return fail(path, `duplicate block id "${id}"`);
@@ -262,12 +286,7 @@ class Validator {
     return ok(undefined);
   }
 
-  /** `previousIndent` is the indent of the preceding sibling list item, or 0. */
-  checkBlock(
-    value: unknown,
-    path: string,
-    previousIndent: number,
-  ): Check<Block> {
+  checkBlock(value: unknown, path: string): Check<Block> {
     if (!isRecord(value)) return fail(path, "expected a block element");
     if (!BLOCK_TYPES.some((type) => type === value.type)) {
       return fail(
@@ -300,9 +319,6 @@ class Validator {
             indent < 1
           ) {
             return fail(path, "list indent must be an integer >= 1");
-          }
-          if (indent > previousIndent + 1) {
-            return fail(path, `list indent ${indent} skips a level`);
           }
         }
         break;
@@ -340,7 +356,6 @@ class Validator {
     allowContainers: boolean,
   ): Check<TopBlock[]> {
     if (!Array.isArray(value)) return fail(path, "expected an array of blocks");
-    let previousIndent = 0;
     for (const [i, child] of value.entries()) {
       const childPath = `${path}[${i}]`;
       const block =
@@ -348,10 +363,8 @@ class Validator {
           ? this.checkAiSegment(child, childPath)
           : allowContainers && isRecord(child) && child.type === "placeholder"
             ? this.checkPlaceholder(child, childPath)
-            : this.checkBlock(child, childPath, previousIndent);
+            : this.checkBlock(child, childPath);
       if (block.isErr()) return err(block.error);
-      const { value: node } = block;
-      previousIndent = node.type === "p" ? (node.indent ?? 0) : 0;
     }
     return ok(value as TopBlock[]);
   }

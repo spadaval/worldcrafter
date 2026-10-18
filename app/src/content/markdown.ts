@@ -17,6 +17,13 @@
  *     - Item {#b_6}               bulleted list item (indent 1)
  *       1. Nested {#b_7}          numbered item (indent 2), indented to the
  *                                 parent's content column
+ *       - Deep {#b_10 indent=4}   indent that skips levels (here 2 -> 4)
+ *
+ * A list item's indent is normally derived from its nesting: one more than
+ * its parent item's, or 1 with no parent. When the tree's indent differs
+ * (the writer skipped levels, or a list starts indented, e.g. at the top of
+ * an AI segment), the item is nested under the closest preceding item with a
+ * smaller indent and the actual value is written as `indent=N` in its braces.
  *
  * AI segments and placeholders are container directives. The segment ID and
  * status sit on the opening fence; the body is blocks or plain text:
@@ -47,12 +54,14 @@ import { err, ok, type Result } from "neverthrow";
 import {
   AI_SEGMENT_STATUSES,
   type AiSegmentStatus,
+  BLOCK_ID_CHARS,
   type Block,
   type ContentDocument,
   type ContentError,
   type Inline,
   type ListStyle,
   type Mark,
+  sameMarks,
   type Text,
   type TopBlock,
   validateDocument,
@@ -79,11 +88,14 @@ const ALWAYS_ESCAPED = new Set([
   "<",
 ]);
 const ASCII_PUNCTUATION = /^[!-/:-@[-`{-~]$/;
-const ID = "[A-Za-z0-9_-]+";
-const ID_ONLY = new RegExp(`^\\{#(${ID})\\}$`);
-const ID_SUFFIX = new RegExp(` \\{#(${ID})\\}$`);
-const LIST_ITEM = /^( *)(-|\d+\.) (.*)$/;
-const HEADING = /^(#{1,3}) (.*)$/;
+const ID = BLOCK_ID_CHARS;
+// Line regexes use the `s` flag: text may hold \r, \u2028 and \u2029, which
+// `.` would otherwise refuse to match.
+const ATTRIBUTES = `\\{#(${ID})(?: indent=([1-9]\\d*))?\\}$`;
+const ATTRIBUTES_ONLY = new RegExp(`^${ATTRIBUTES}`);
+const ATTRIBUTES_SUFFIX = new RegExp(` ${ATTRIBUTES}`);
+const LIST_ITEM = /^( *)(-|\d+\.) (.*)$/s;
+const HEADING = /^(#{1,3}) (.*)$/s;
 const RULE = new RegExp(`^--- \\{#(${ID})\\}$`);
 const AI_FENCE = new RegExp(`^:::ai\\{#(${ID}) status=(\\S+)\\}$`);
 const PLACEHOLDER_FENCE = new RegExp(`^:::placeholder\\{#(${ID})\\}$`);
@@ -134,7 +146,7 @@ class InlineWriter {
     const pad =
       value.startsWith("`") ||
       value.endsWith("`") ||
-      (value.startsWith(" ") && value.endsWith(" ") && value.trim() !== "");
+      (value.startsWith(" ") && value.endsWith(" ") && /[^ ]/.test(value));
     const body = pad ? ` ${value} ` : value;
     this.syntax(`${fence}${body}${fence}`);
   }
@@ -188,10 +200,11 @@ function writeTextBlock(
   prefix: string,
   continuation: string,
   children: Inline[],
-  id: string,
+  attributes: string,
 ): string {
   const inline = writeInlines(children);
-  const withId = inline === "" ? `{#${id}}` : `${inline} {#${id}}`;
+  const withId =
+    inline === "" ? `{${attributes}}` : `${inline} {${attributes}}`;
   return withId
     .split("\n")
     .map((line, i) => (i === 0 ? prefix : continuation) + line)
@@ -202,45 +215,51 @@ function listMarker(style: ListStyle, number: number): string {
   return style === "disc" ? "- " : `${number}. `;
 }
 
+/** An open list item: its indent, content column and numbering. */
+type OpenItem = {
+  indent: number;
+  column: number;
+  style: ListStyle;
+  count: number;
+};
+
 function writeBlocks(blocks: TopBlock[]): string {
   let out = "";
-  // Per open list level: the column its marker starts at, and its numbering.
-  let columns = [0];
-  let counters: { style: ListStyle; count: number }[] = [];
+  let open: OpenItem[] = [];
   let previousWasListItem = false;
 
   for (const block of blocks) {
     const isListItem = block.type === "p" && block.listStyleType !== undefined;
     if (out !== "") out += isListItem && previousWasListItem ? "\n" : "\n\n";
-    if (!isListItem) {
-      columns = [0];
-      counters = [];
-    }
+    if (!isListItem) open = [];
     previousWasListItem = isListItem;
 
     switch (block.type) {
       case "p": {
         if (block.listStyleType === undefined || block.indent === undefined) {
-          out += writeTextBlock("", "", block.children, block.id);
+          out += writeTextBlock("", "", block.children, `#${block.id}`);
           break;
         }
-        const level = block.indent;
-        const previous = counters[level - 1];
+        const { indent, listStyleType: style } = block;
+        // Nest under the closest open item with a smaller indent.
+        const level = open.findIndex((item) => item.indent >= indent);
+        const depth = level === -1 ? open.length : level;
+        const parent = open[depth - 1];
+        const sibling = open[depth];
         const count =
-          previous?.style === block.listStyleType ? previous.count + 1 : 1;
-        counters = [
-          ...counters.slice(0, level - 1),
-          { style: block.listStyleType, count },
-        ];
-        const marker = listMarker(block.listStyleType, count);
-        const indent = " ".repeat(columns[level - 1] ?? 0);
-        const contentColumn = indent.length + marker.length;
-        columns = [...columns.slice(0, level), contentColumn];
+          sibling?.indent === indent && sibling.style === style
+            ? sibling.count + 1
+            : 1;
+        const marker = listMarker(style, count);
+        const markerColumn = parent?.column ?? 0;
+        const column = markerColumn + marker.length;
+        open = [...open.slice(0, depth), { indent, column, style, count }];
+        const derived = (parent?.indent ?? 0) + 1;
         out += writeTextBlock(
-          indent + marker,
-          " ".repeat(contentColumn),
+          " ".repeat(markerColumn) + marker,
+          " ".repeat(column),
           block.children,
-          block.id,
+          indent === derived ? `#${block.id}` : `#${block.id} indent=${indent}`,
         );
         break;
       }
@@ -248,11 +267,11 @@ function writeBlocks(blocks: TopBlock[]): string {
       case "h2":
       case "h3": {
         const hashes = "#".repeat(Number(block.type.slice(1)));
-        out += writeTextBlock(`${hashes} `, "", block.children, block.id);
+        out += writeTextBlock(`${hashes} `, "", block.children, `#${block.id}`);
         break;
       }
       case "blockquote":
-        out += writeTextBlock("> ", "> ", block.children, block.id);
+        out += writeTextBlock("> ", "> ", block.children, `#${block.id}`);
         break;
       case "hr":
         out += `--- {#${block.id}}`;
@@ -282,12 +301,6 @@ export function exportMarkdown(value: unknown): Result<string, ContentError> {
 }
 
 // ----------------------------------------------------------------- parse
-
-const sameMarks = (a: Text, b: Text) =>
-  a.bold === b.bold &&
-  a.italic === b.italic &&
-  a.strikethrough === b.strikethrough &&
-  a.code === b.code;
 
 class InlineParser {
   private pos = 0;
@@ -415,7 +428,7 @@ class InlineParser {
           return err("code span cannot contain a line break");
         this.pos = end;
         const padded =
-          body.startsWith(" ") && body.endsWith(" ") && body.trim() !== "";
+          body.startsWith(" ") && body.endsWith(" ") && /[^ ]/.test(body);
         return ok(padded ? body.slice(1, -1) : body);
       }
       at = end;
@@ -464,7 +477,7 @@ class BlockParser {
   /** Parses blocks until the end, or until a closing fence when `inSegment`. */
   private blocks(inSegment: boolean): Result<TopBlock[], ContentError> {
     const blocks: TopBlock[] = [];
-    let columns = [0];
+    let open: { indent: number; column: number }[] = [];
     while (this.i < this.lines.length) {
       const line = this.lines[this.i] as string;
       if (line === "") {
@@ -475,24 +488,34 @@ class BlockParser {
 
       const listItem = LIST_ITEM.exec(line);
       if (listItem) {
-        const [, indent = "", marker = "", content = ""] = listItem;
-        const level = columns.indexOf(indent.length) + 1;
-        if (level === 0)
+        const [, spaces = "", marker = "", content = ""] = listItem;
+        const markerColumns = [0, ...open.map((item) => item.column)];
+        const depth = markerColumns.indexOf(spaces.length);
+        if (depth === -1) {
           return this.fail("list item indentation matches no open list level");
-        const contentColumn = indent.length + marker.length + 1;
-        columns = [...columns.slice(0, level), contentColumn];
-        const block = this.textBlock(content, " ".repeat(contentColumn));
+        }
+        const parentIndent = open[depth - 1]?.indent ?? 0;
+        const column = spaces.length + marker.length + 1;
+        const block = this.textBlock(content, " ".repeat(column));
         if (block.isErr()) return err(block.error);
+        const indent = block.value.indent ?? parentIndent + 1;
+        if (indent <= parentIndent) {
+          return this.fail(
+            `indent=${indent} must be deeper than the parent item's ${parentIndent}`,
+            this.i - 1,
+          );
+        }
+        open = [...open.slice(0, depth), { indent, column }];
         blocks.push({
           type: "p",
           id: block.value.id,
           children: block.value.children,
           listStyleType: marker === "-" ? "disc" : "decimal",
-          indent: level,
+          indent,
         });
         continue;
       }
-      columns = [0];
+      open = [];
 
       if (line.startsWith(":::")) {
         if (inSegment) return this.fail("directives cannot be nested");
@@ -519,7 +542,10 @@ class BlockParser {
           ? this.textBlock(line.slice(2), "> ")
           : this.textBlock(line, "");
       if (block.isErr()) return err(block.error);
-      const { id, children } = block.value;
+      const { id, children, indent } = block.value;
+      if (indent !== undefined) {
+        return this.fail("indent applies to list items only", this.i - 1);
+      }
       const type = heading
         ? (`h${(heading[1] as string).length}` as "h1" | "h2" | "h3")
         : quote
@@ -567,18 +593,22 @@ class BlockParser {
   private textBlock(
     first: string,
     continuation: string,
-  ): Result<{ id: string; children: Inline[] }, ContentError> {
+  ): Result<
+    { id: string; indent: number | undefined; children: Inline[] },
+    ContentError
+  > {
     const start = this.i;
     const joined = this.logicalLine(first, continuation);
     if (joined.isErr()) return err(joined.error);
-    const alone = ID_ONLY.exec(joined.value);
-    const suffix = alone ? null : ID_SUFFIX.exec(joined.value);
+    const alone = ATTRIBUTES_ONLY.exec(joined.value);
+    const suffix = alone ? null : ATTRIBUTES_SUFFIX.exec(joined.value);
     const match = alone ?? suffix;
     if (!match)
       return this.fail("block is missing its trailing {#id}", this.i - 1);
     const content = suffix ? joined.value.slice(0, suffix.index) : "";
     return this.inlines(content, start).map((children) => ({
       id: match[1] as string,
+      indent: match[2] === undefined ? undefined : Number(match[2]),
       children,
     }));
   }

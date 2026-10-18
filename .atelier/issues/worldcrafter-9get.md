@@ -17,9 +17,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Build the Night Edition writing workspace"
-updated_at: "2026-10-18T02:18:49.401186728+00:00"
+updated_at: "2026-10-18T02:19:10.929668216+00:00"
 ---
 
 ## Goal

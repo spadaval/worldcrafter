@@ -14,9 +14,9 @@ relationships:
   relates: []
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Generate command with context viewer and AI segments"
-updated_at: "2026-10-18T02:33:30.863860173+00:00"
+updated_at: "2026-10-18T02:39:19.697132298+00:00"
 ---
 
 ## Goal

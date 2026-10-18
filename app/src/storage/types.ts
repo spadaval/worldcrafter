@@ -105,7 +105,15 @@ export interface StoredRequest {
   readonly createdAt: number;
 }
 
-export type SnapshotReason = "accepted_ai_change" | "periodic";
+/**
+ * `repaired_on_load`: the stored content was outside the content schema (for
+ * example repeated block IDs) and the editor repaired it; the snapshot keeps
+ * the original before the repaired version replaces it.
+ */
+export type SnapshotReason =
+  | "accepted_ai_change"
+  | "periodic"
+  | "repaired_on_load";
 
 export interface NewSnapshot {
   readonly documentId: string;

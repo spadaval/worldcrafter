@@ -166,6 +166,34 @@ describe("AI segment generations", () => {
     expect(texts(segment(editor, 1))).toEqual(["CutX off mid"]);
   });
 
+  test("undo then redo of a regeneration that took the caret's block leaves a valid selection", async () => {
+    const editor = fresh();
+    const first = start(editor, 1, "old");
+    show(first, "first try, longer");
+    first.finish();
+    await tick();
+    editor.tf.select({ path: [1, 0, 0], offset: 12 });
+    const started = startGeneration(editor, "new", {
+      kind: "replace",
+      segmentId: "old",
+    });
+    // In the browser the caret's block going clears the selection.
+    editor.tf.deselect();
+    started?.generation.render(parseGeneratedText("x"), 0);
+    await tick();
+    editor.undo();
+    expect(texts(segment(editor, 1))).toEqual(["first try, longer"]);
+    editor.redo();
+    expect(texts(segment(editor, 1))).toEqual(["x"]);
+    const { selection } = editor;
+    for (const point of selection ? [selection.anchor, selection.focus] : []) {
+      const leaf = editor.api.node(point.path)?.[0];
+      expect(TextApi.isText(leaf) && point.offset <= leaf.text.length).toBe(
+        true,
+      );
+    }
+  });
+
   test("discard takes the segment out; a replacement puts the old one back", () => {
     const editor = fresh();
     const first = start(editor, 1, "old");

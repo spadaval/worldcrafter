@@ -2,7 +2,9 @@
  * Randomised check of streaming into AI segments against writer edits. Each
  * seed interleaves streamed text (new and growing paragraphs) with typing,
  * Backspace/Delete, deletes and typing over selections crossing segment
- * edges both ways, Enter, cut and paste, select-all, undo, redo and bold.
+ * edges both ways, Enter, cut and paste, select-all, undo, redo, bold and
+ * losing the selection; generations insert new segments or regenerate
+ * (replace) ready ones.
  * After every step: nothing threw; a live segment was changed by no writer
  * edit (an edit touching it must stop it first); a render changed nothing
  * outside its segment; the selection is valid. At the end, undoing
@@ -131,6 +133,8 @@ async function run(seed: number): Promise<void> {
       editor.tf.select([]);
       editor.tf.insertText("Z");
     },
+    // As when the caret's block goes away in the browser.
+    blur: () => editor.tf.deselect(),
     undo: () => editor.undo(),
     redo: () => editor.redo(),
     bold: () => {
@@ -145,10 +149,17 @@ async function run(seed: number): Promise<void> {
     if (!live()) {
       if (rng.next() < 0.5) return "idle";
       count += 1;
-      const started = startGeneration(editor, `g${count}`, {
-        kind: "insert",
-        index: rng.int(editor.children.length + 1),
-      });
+      const ready = editor.children.filter(
+        (node) => node.type === "ai_segment" && node.status === "ready",
+      );
+      // Half the time, regenerate a ready segment (replace placement).
+      const started = startGeneration(
+        editor,
+        `g${count}`,
+        ready.length > 0 && rng.next() < 0.5
+          ? { kind: "replace", segmentId: String(rng.pick(ready).id) }
+          : { kind: "insert", index: rng.int(editor.children.length + 1) },
+      );
       generation = started?.generation ?? null;
       parser = new GeneratedTextStream();
       shown = 0;

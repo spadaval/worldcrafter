@@ -23,6 +23,8 @@ import {
   createSlatePlugin,
   type Descendant,
   ElementApi,
+  NodeApi,
+  type Point,
   RangeApi,
   type SlateEditor,
   type TElement,
@@ -400,6 +402,7 @@ export const GeneratingSegmentPlugin = createSlatePlugin({
     tf: {
       normalizeNode,
       undo,
+      redo,
       insertText,
       insertBreak,
       insertSoftBreak,
@@ -448,6 +451,11 @@ export const GeneratingSegmentPlugin = createSlatePlugin({
             if (newest && generation.step === newest) generation.stop();
           }
           undo();
+          repairSelection(editor);
+        },
+        redo() {
+          redo();
+          repairSelection(editor);
         },
         insertText(text, options) {
           if (!options?.at) stopTouched(editor, getOptions().live);
@@ -466,6 +474,38 @@ export const GeneratingSegmentPlugin = createSlatePlugin({
     };
   },
 );
+
+/**
+ * Undo and redo restore the selection the history recorded, which can point
+ * at text that no longer exists (a regenerated segment, or a stopped one
+ * whose step was rewritten). Each point that doesn't resolve to text is moved
+ * to the nearest valid one: the end of its deepest surviving ancestor, or
+ * else the end of the document; an offset past its text is clamped.
+ */
+function repairSelection(editor: SlateEditor): void {
+  const { selection } = editor;
+  if (!selection) return;
+  const repair = (point: Point): Point | undefined => {
+    if (NodeApi.has(editor, point.path)) {
+      const node = NodeApi.get(editor, point.path);
+      if (TextApi.isText(node)) {
+        return point.offset <= node.text.length
+          ? point
+          : { path: point.path, offset: node.text.length };
+      }
+    }
+    for (let depth = point.path.length - 1; depth > 0; depth--) {
+      const ancestor = point.path.slice(0, depth);
+      if (NodeApi.has(editor, ancestor)) return editor.api.end(ancestor);
+    }
+    return editor.children.length > 0 ? editor.api.end([]) : undefined;
+  };
+  const anchor = repair(selection.anchor);
+  const focus = repair(selection.focus);
+  if (anchor === selection.anchor && focus === selection.focus) return;
+  if (anchor && focus) editor.tf.select({ anchor, focus });
+  else editor.tf.deselect();
+}
 
 /**
  * Registers a live generation with the function that stops it, or (with

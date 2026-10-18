@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Discovery and bookkeeping: suggestions, scene breakdowns, time placement"
-updated_at: "2026-10-17T17:52:29.805467075+00:00"
+updated_at: "2026-10-18T01:06:39.191560280+00:00"
 ---
 
 ## Goal
@@ -51,3 +51,7 @@ backends (probably once per scene when the writer leaves it, cached by content h
 ## Design
 
 `docs/rebuild/entity-pipeline.md` (Stages 2–3, Surfacing), `docs/rebuild/story-time.md` (Bookkeeping by AI).
+
+## Notes
+
+- 2026-10-17 [note] From the 2ony story-time review (2026-10-17): (R8) the timeline commands removeConstraint, removeReveal, followFrame and addFrame take no authority, so an inferred (AI bookkeeping) caller could delete or replace asserted data. Add authority to them before the bookkeeping pass writes timelines. (R7) the AI's time placement must use placeScene; constrain cannot override a default placement.

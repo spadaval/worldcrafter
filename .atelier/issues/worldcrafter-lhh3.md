@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Talk pages and world inbox"
-updated_at: "2026-10-17T07:07:33.752391106+00:00"
+updated_at: "2026-10-18T01:06:39.196110575+00:00"
 ---
 
 ## Goal
@@ -36,3 +36,7 @@ Provisional: scenario tests for both scopes, attribution, and proposals applying
 ## Design
 
 `docs/rebuild/talk-pages.md`.
+
+## Notes
+
+- 2026-10-17 [note] From the 2ony story-time review (2026-10-17): (R6) when a scene leaves the outline, fact changes anchored to its event and reveals it made only show up as unknown_event reasons per query; load() does not report them. Surface them (and reveals whose fact or change no longer exists) as problems in the world inbox. (R7) reordering the outline can create contradictions with explicit scene constraints that are only reported on load; surface those too.

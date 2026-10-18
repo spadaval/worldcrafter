@@ -19,7 +19,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Build the Night Edition writing workspace"
-updated_at: "2026-10-18T00:17:25.577590029+00:00"
+updated_at: "2026-10-18T02:11:05.799457406+00:00"
 ---
 
 ## Goal
@@ -37,3 +37,7 @@ Presentation and layer rendering only, over data the other tasks provide; layers
 ## Context
 
 .impeccable/surfaces/writing-workspace.md, PRODUCT.md, .impeccable/mocks/decision/synth-calm.html and synth-layers.html (the chosen sketches; synth-calm is the composition to match). Impeccable skill at ~/.claude/skills/impeccable.
+
+## Notes
+
+- 2026-10-17 [note] From the 2hcn final review (2026-10-17): when a second close lands behind a failed close, the writer sees the first close's 'unsaved' error while the second close actually saved and returned still_open; the tab stays open and the message is stale. When building the tab strip, let a still_open close finish closing once its save succeeds, or clear the stale error. environment.ts's still_open message says 'because it was opened again', which is wrong for the failed-close case.

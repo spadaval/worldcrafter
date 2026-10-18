@@ -1,11 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
-import { errAsync } from "neverthrow";
+import { errAsync, okAsync } from "neverthrow";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { createLayerStore } from "~/layers/state";
 import { createMemoryStorage } from "~/storage/memory";
-import type { JsonValue } from "~/storage/types";
+import type { JsonValue, StorageAdapter } from "~/storage/types";
 import { createStorageConnection } from "~/workspace/connection";
 import type { KeyValueStore } from "~/workspace/tabs";
 import { createWorkspace, type Workspace } from "~/workspace/workspace";
@@ -209,4 +209,69 @@ test("the save status follows edits, and storage problems are shown", async () =
   const notices = view.querySelector(".notices")?.textContent ?? "";
   expect(notices).toContain("read-only");
   expect(notices).toContain("refused persistent storage");
+});
+
+test("a close behind a failed close finishes, clears the stale error and keeps the edit", async () => {
+  const storage = createMemoryStorage();
+  (
+    await storage.documents.save({
+      id: "doc1",
+      title: "The Mill",
+      content: CONTENT,
+      updatedAt: 1,
+    })
+  )._unsafeUnwrap();
+  // The first save and the connection's retry of it fail; later saves work.
+  let failSaves = 2;
+  const flaky: StorageAdapter = {
+    ...storage,
+    // Reconnecting closes the failed adapter; keep the shared store open.
+    close: () => undefined,
+    documents: {
+      ...storage.documents,
+      save: (record) =>
+        failSaves-- > 0
+          ? errAsync({
+              kind: "failure",
+              operation: "save",
+              message: "Storage save failed: busy",
+              cause: null,
+            })
+          : storage.documents.save(record),
+    },
+  };
+  const workspace = createWorkspace({
+    worldId: "w1",
+    connection: createStorageConnection(flaky, () => okAsync(flaky)),
+    tabStore: tabStore(),
+    readOnly: false,
+    saveDelayMs: 60_000,
+    retryDelayMs: 60_000,
+  });
+  (await workspace.refreshDocuments())._unsafeUnwrap();
+  const view = await render(workspace, "/doc/doc1");
+  const session = workspace.session("doc1");
+  await act(async () => {
+    session?.editor.tf.insertText("Kept ", {
+      at: { path: [0, 0], offset: 0 },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+  // Two closes in a row: the first fails with unsaved changes, the second
+  // saves but finds the tab kept by the first, and closes it again.
+  const closeButton = view.querySelector<HTMLButtonElement>(".tab-close");
+  await act(async () => {
+    closeButton?.click();
+    closeButton?.click();
+  });
+  for (let i = 0; i < 20 && workspace.tabs.get().open.length > 0; i++) {
+    await act(() => new Promise((resolve) => setTimeout(resolve, 5)));
+  }
+
+  expect(workspace.tabs.get().open).toEqual([]);
+  expect(workspace.session("doc1")).toBeUndefined();
+  expect(view.querySelector(".notice-error")).toBeNull();
+  const stored = (await storage.documents.load("doc1"))._unsafeUnwrap();
+  expect(JSON.stringify(stored.content)).toContain("Kept ");
 });

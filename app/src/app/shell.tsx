@@ -151,6 +151,9 @@ function TabStrip({
       // Saved, but an earlier failed close gave the tab its lease back: its
       // error is stale now, and this close can finish. Reopened by the
       // writer meanwhile: nothing to tell them.
+      // Known edge: if the writer reopens the document while this close is
+      // saving after a failed one, the retry closes the tab they reopened.
+      // Nothing is lost (closing saves first); they reopen it from the rail.
       if (failedCloses.current.delete(id)) {
         onMessage((current) => (isFailedClose(current, id) ? null : current));
         if (!retried) return close(id, true);

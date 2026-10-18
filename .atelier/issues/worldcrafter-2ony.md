@@ -23,7 +23,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Story-time core: events, frames, fact changes, holds/revealed queries"
-updated_at: "2026-10-17T17:52:19.497331336+00:00"
+updated_at: "2026-10-18T00:32:27.061717800+00:00"
 ---
 
 ## Goal
@@ -63,3 +63,7 @@ worldcrafter-9zj1). Until that's decided, take it from an ordered list of scene 
 
 How fuzzy positions should be represented: an interval with precision, or constraints only. Pick whichever passes
 the fixtures and record the choice in a dated note.
+
+## Notes
+
+- 2026-10-17 [note] From the mxlo world-entries review (2026-10-17): the fact shape (base value plus changes anchored to event IDs, null = stops holding, authority on every value, relations via holds: Fact<true>) fits story time without a rewrite. Additive gaps, each needing a facts version bump: no source content hash on provenance (needed for 'inferred data goes stale when its source changes'), no confidence (needed for escalating low-confidence results), no revealed-at, and no ordering for several changes at the same event. Cards show base values only; the card renderer needs a story position. Ages should be computed in the entity's own time, not stored as a fixed field.

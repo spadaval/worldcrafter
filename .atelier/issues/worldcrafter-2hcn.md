@@ -16,7 +16,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "in_progress"
 title: "App shell and editor on the restricted schema"
-updated_at: "2026-10-18T00:25:11.266996696+00:00"
+updated_at: "2026-10-18T00:32:27.055955685+00:00"
 ---
 
 ## Goal
@@ -47,3 +47,4 @@ Spike result on block IDs; `src/components/editor/plugins/` for the old kits (AI
 - 2026-10-17 [note] From the 3lho content-format review (2026-10-17): (R5) configure the editor so it cannot produce shapes the content schema rejects: flat-list styles (listStyleType/indent) on headings or blockquotes, plain paragraphs with indent but no list style (Indent plugin), to-do items (checked), and numbering restarts (listRestart/listRestartPolite). Run content canonicalize() then validate on every save, and surface a validation failure to the writer instead of dropping the save. (R7) the schema accepts any URL scheme, including javascript:; whatever renders links must sanitise them.
 - 2026-10-17 [note] From the integration review (2026-10-17): (R6) list indent is capped at MAX_LIST_INDENT (32) in the content schema; configure the editor's indent plugin with the same maximum (or clamp on import), so a deep indent can't make a document unsaveable.
 - 2026-10-17 [note] From the zr67 outline review (2026-10-17): deleting a document does not remove its scene from the manuscript outline. Whoever implements document deletion must also run the outline's removeScene (or offer to), and the UI should confirm before removeBook/removeChapter, which turn their scenes into drafts. loadOutline reports dangling scene references; show them so the writer can repair.
+- 2026-10-17 [note] From the mxlo world-entries review (2026-10-17): (R3) the world store's renameEntry loads the whole document and saves it back with a new title, which would overwrite editor content saved in between. The shell must give documents one write owner (or a title-only update) before the editor's save path ships, and route renames through it. (R4) document creation belongs to the document store here; the world store only attaches facts to an existing document. (R6) a non-canonical internal link (Old-Mill, or decomposed unicode pasted on macOS) makes the whole document unsaveable: link insertion must produce canonical names (canonicalizeName / resolveName from app/src/world/names.ts), and canonicalize() on the save path should normalise link URLs to NFC.

@@ -263,11 +263,21 @@ describe("segment controls", () => {
     click(view.querySelector("button"));
     act(() => root?.unmount());
 
-    view = render(<SegmentControls status="ready" {...handlers} />);
-    const [accept, regenerate] = [...view.querySelectorAll("button")];
+    view = render(
+      <SegmentControls
+        status="ready"
+        {...handlers}
+        onShowRequest={() => calls.push("request")}
+      />,
+    );
+    const [request, regenerate, accept] = [...view.querySelectorAll("button")];
+    expect(
+      [...view.querySelectorAll("button")].map((b) => b.textContent),
+    ).toEqual(["Request", "Regenerate", "Accept"]);
     click(accept);
     click(regenerate);
-    expect(calls).toEqual(["stop", "accept", "regenerate"]);
+    click(request);
+    expect(calls).toEqual(["stop", "accept", "regenerate", "request"]);
 
     act(() => root?.unmount());
     view = render(<SegmentControls status="ready" disabled {...handlers} />);

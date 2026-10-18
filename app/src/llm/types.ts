@@ -128,3 +128,6 @@ export type LlmError =
   | { kind: "malformed"; url: string; message: string }
   /** The caller's `onDelta` threw; the stream was cancelled. */
   | { kind: "callback"; url: string; message: string; cause: unknown };
+
+/** What sending needs of `fetch`; the global `fetch` is one. */
+export type Fetch = (url: string, init: RequestInit) => Promise<Response>;

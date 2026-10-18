@@ -37,6 +37,7 @@ export function Shell() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: opening a document closes the rail
   useEffect(() => setRailOpen(false), [active]);
   const onError = (error: CommandError) => setMessage({ kind: "error", error });
+  const info = (text: string) => setMessage({ kind: "info", text });
   return (
     <div className="workspace" data-rail-open={railOpen ? "" : undefined}>
       <Rail active={active} onError={onError} />
@@ -60,27 +61,13 @@ export function Shell() {
         <StoryTimeStamp active={active} />
         <div className="masthead-controls">
           {active && <LayerToggles documentId={active} />}
-          <ContextButton
-            active={active}
-            onInfo={(text) => setMessage({ kind: "info", text })}
-          />
-          <button
-            type="button"
-            className="button button-primary"
-            aria-disabled="true"
-            onClick={() =>
-              setMessage({
-                kind: "info",
-                text: "Generate next isn't connected in this build yet.",
-              })
-            }
-          >
-            Generate next
-          </button>
+          <ContextButton active={active} onInfo={info} />
+          <GenerateNext active={active} onInfo={info} />
         </div>
       </header>
       <div className="notices" aria-live="polite">
         <Notices />
+        <GenerationNotice />
         {message && (
           <p
             className={
@@ -132,7 +119,7 @@ function TabStrip({
   active: string | null;
   onMessage: Dispatch<SetStateAction<Message | null>>;
 }) {
-  const { workspace, manuscript, worldIndex } = useServices();
+  const { workspace, manuscript, worldIndex, generation } = useServices();
   const entries = useStore(worldIndex.entries);
   const tabs = useStore(workspace.tabs);
   const documents = useStore(workspace.documents);
@@ -146,6 +133,10 @@ function TabStrip({
     state.kind === "ready" ? state.view.scenes.get(id) : undefined;
 
   const close = async (id: string, retried = false): Promise<void> => {
+    // A generation writes into the document until it ends: end it first,
+    // keeping what arrived, so closing saves all of it.
+    await generation.stop(id);
+    if (generation.slip.get()?.documentId === id) generation.closeSlip();
     const closed = await workspace.commands.closeTab(id);
     if (closed.isErr() && closed.error.kind === "still_open") {
       // Saved, but an earlier failed close gave the tab its lease back: its
@@ -271,8 +262,46 @@ function LayerToggles({ documentId }: { documentId: string }) {
 const NO_STATUS = createStore<unknown>(null);
 
 /**
+ * Opens the request for what comes next in the active document, or with
+ * no model set up, the model settings. Re-renders with the tabs, so it sees
+ * a session once it has loaded.
+ */
+function useOpenRequest(active: string | null) {
+  const { workspace, generation } = useServices();
+  const navigate = useNavigate();
+  useStore(workspace.tabs);
+  const session = active ? workspace.session(active) : undefined;
+  const running = useStore(generation.active(active ?? "")) !== null;
+  const [preparing, setPreparing] = useState(false);
+  const open = async () => {
+    if (!active || !session) return;
+    if (!generation.profile.get()) {
+      await generation.openRequest(active);
+      await navigate({ to: "/model" });
+      return;
+    }
+    setPreparing(true);
+    await generation.openRequest(active);
+    setPreparing(false);
+  };
+  return {
+    open,
+    /** Why it can't open now, if it can't. */
+    unavailable: !session
+      ? "Open a document to generate in it."
+      : session.readOnly
+        ? "This tab is read-only because WorldCrafter is open in another tab."
+        : running
+          ? "A generation is running. Stop it or let it finish first."
+          : preparing
+            ? "Assembling the request…"
+            : null,
+  };
+}
+
+/**
  * The context control: how many world entries this scene names, which is
- * what generation would draw on. The context viewer comes with generation.
+ * what generation would draw on. Shows or puts away the request slip.
  */
 function ContextButton({
   active,
@@ -281,10 +310,11 @@ function ContextButton({
   active: string | null;
   onInfo: (text: string) => void;
 }) {
-  const { workspace, worldIndex } = useServices();
+  const { workspace, worldIndex, generation } = useServices();
   const entries = useStore(worldIndex.entries);
   const documents = useStore(workspace.documents);
-  useStore(workspace.tabs);
+  const slip = useStore(generation.slip);
+  const { open, unavailable } = useOpenRequest(active);
   const session = active ? workspace.session(active) : undefined;
   const status = useStore<unknown>(session?.status ?? NO_STATUS);
   const count = useMemo(() => {
@@ -302,15 +332,80 @@ function ContextButton({
     }
     return found.size;
   }, [session, status, entries, documents, active]);
+  const shown = slip !== null && slip.documentId === active;
   return (
     <button
       type="button"
       className="button"
-      aria-disabled="true"
-      onClick={() => onInfo("The context viewer isn't in this build yet.")}
+      aria-expanded={shown}
+      aria-disabled={!shown && unavailable ? "true" : undefined}
+      title={!shown ? (unavailable ?? undefined) : undefined}
+      onClick={() => {
+        if (shown) generation.closeSlip();
+        else if (unavailable) onInfo(unavailable);
+        else void open();
+      }}
     >
       Context · {count} {count === 1 ? "card" : "cards"}
     </button>
+  );
+}
+
+/** Opens the request slip for what comes next; with it open, goes to its Send. */
+function GenerateNext({
+  active,
+  onInfo,
+}: {
+  active: string | null;
+  onInfo: (text: string) => void;
+}) {
+  const { generation } = useServices();
+  const slip = useStore(generation.slip);
+  const { open, unavailable } = useOpenRequest(active);
+  return (
+    <button
+      type="button"
+      className="button button-primary"
+      aria-disabled={unavailable ? "true" : undefined}
+      title={unavailable ?? undefined}
+      onClick={() => {
+        if (unavailable) return onInfo(unavailable);
+        if (slip?.documentId === active) {
+          // Assembling again would discard edits not yet sent.
+          const send = document.querySelector<HTMLElement>(
+            ".request-slip .context-viewer-send",
+          );
+          send?.scrollIntoView?.({ block: "nearest" });
+          send?.focus();
+          return;
+        }
+        void open();
+      }}
+    >
+      Generate next
+    </button>
+  );
+}
+
+/** What the last generation command came to, when there is something to say. */
+function GenerationNotice() {
+  const { generation } = useServices();
+  const notice = useStore(generation.notice);
+  if (!notice) return null;
+  return (
+    <p
+      className={notice.kind === "error" ? "notice notice-error" : "notice"}
+      role={notice.kind === "error" ? "alert" : "status"}
+    >
+      {notice.text}{" "}
+      <button
+        type="button"
+        className="notice-dismiss"
+        onClick={generation.dismissNotice}
+      >
+        Dismiss
+      </button>
+    </p>
   );
 }
 

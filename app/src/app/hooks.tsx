@@ -9,6 +9,7 @@ import type { Store } from "~/workspace/store";
 import type { Workspace } from "~/workspace/workspace";
 import type { WorldStore } from "~/world/store";
 import type { Environment } from "./environment";
+import type { Generation } from "./generation";
 import type { LayerSource } from "./layers";
 import type { Manuscript } from "./manuscript";
 import type { WorldIndex } from "./world";
@@ -23,6 +24,7 @@ export interface AppServices {
   readonly layers: LayerStore;
   readonly layerSource: LayerSource;
   readonly environment: Environment;
+  readonly generation: Generation;
 }
 
 const ServicesContext = createContext<AppServices | null>(null);

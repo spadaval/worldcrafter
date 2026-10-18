@@ -24,7 +24,8 @@ export function Rail({
   active: string | null;
   onError: (error: CommandError) => void;
 }) {
-  const { environment, layerSource } = useServices();
+  const { environment, layerSource, generation } = useServices();
+  const profile = useStore(generation.profile);
   const [view, setView] = useState<RailView>("manuscript");
   const topics = layerSource.topics;
   return (
@@ -74,6 +75,20 @@ export function Rail({
               in the world inbox
             </>
           )}
+        </p>
+        <p className="rail-model">
+          <span>
+            {profile ? (
+              <>
+                Model · <b>{profile.name}</b>
+              </>
+            ) : (
+              "No model set up"
+            )}
+          </span>
+          <Link to="/model" className="rail-action">
+            {profile ? "Change" : "Set up"}
+          </Link>
         </p>
         {environment.storage === "memory" && (
           <p className="rail-demo">

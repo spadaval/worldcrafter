@@ -4,6 +4,7 @@ import { SseParser } from "./sse";
 import type {
   BackendProfile,
   Completion,
+  Fetch,
   InvalidRequestError,
   JsonObject,
   LlmError,
@@ -130,7 +131,7 @@ export type SendOptions = {
    */
   onDelta?: (delta: StreamDelta) => void;
   /** Defaults to the global `fetch`. */
-  fetch?: typeof fetch;
+  fetch?: Fetch;
 };
 
 /**

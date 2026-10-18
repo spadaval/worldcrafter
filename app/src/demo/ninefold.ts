@@ -8,10 +8,20 @@
  * below. Only `main.tsx` imports this, and only when the flag is set.
  */
 import type { ResultAsync } from "neverthrow";
+import { REQUEST_BUDGET } from "~/app/generation";
 import type { LayerSource } from "~/app/layers";
 import { createLayerSource } from "~/app/layers";
+import { buildContext } from "~/context/builder";
+import { gatherWorldContext } from "~/context/gather";
+import { createRequestStore } from "~/context/requests";
+import {
+  PROVENANCE_VERSION,
+  provenanceRecord,
+  samplerOf,
+} from "~/generate/provenance";
 import type { LayerMark, SceneLayers } from "~/layers/model";
 import { LAYERS } from "~/layers/model";
+import type { Fetch } from "~/llm/types";
 import { runOutlineCommand } from "~/outline/store";
 import { createMemoryStorage } from "~/storage/memory";
 import type { JsonValue, StorageAdapter } from "~/storage/types";
@@ -19,9 +29,15 @@ import { createTimelineStore } from "~/time/store";
 import { sceneEventId } from "~/time/timeline";
 import type { KeyValueStore } from "~/workspace/tabs";
 import { createWorldStore, directRenameDocument } from "~/world/store";
+import { DEMO_PROFILE, demoFetch } from "./model";
 
 export const DEMO_WORLD_NAME = "The Ninefold";
 export const DEMO_SCENE = "scene-4-2";
+
+const SEALED_DOOR_ARDELIA =
+  "“It knows what I did,” Ardelia said. The door remembered the hand that had sealed it, and that hand had been hers, in the winter Aldric took the crown. [[ does Kesh already know? ]]";
+const SEALED_DOOR_TIDE =
+  "Somewhere below them, the tide turned. She felt it in the iron before she heard it, a long and patient pull, like a breath drawn by something that had been waiting.";
 
 const p = (id: string, text: string): JsonValue => ({
   type: "p",
@@ -113,20 +129,12 @@ const SCENES: readonly SceneSeed[][] = [
           "p-kesh",
           "“Three hundred years,” said Kesh, behind her. “And it still knows you.”",
         ),
-        p(
-          "p-ardelia",
-          "“It knows what I did,” Ardelia said. The door remembered the hand that had sealed it, and that hand had been hers, in the winter Aldric took the crown. [[ does Kesh already know? ]]",
-        ),
+        p("p-ardelia", SEALED_DOOR_ARDELIA),
         {
           type: "ai_segment",
           id: "seg-tide",
           status: "ready",
-          children: [
-            p(
-              "p-tide",
-              "Somewhere below them, the tide turned. She felt it in the iron before she heard it, a long and patient pull, like a breath drawn by something that had been waiting.",
-            ),
-          ],
+          children: [p("p-tide", SEALED_DOOR_TIDE)],
         },
         p("p-lifted", "Kesh lifted the lamp"),
       ],
@@ -379,6 +387,8 @@ export interface DemoWorld {
   readonly storage: StorageAdapter;
   readonly tabStore: KeyValueStore;
   readonly layerSource: LayerSource;
+  /** The demo model (`demo/model.ts`), already set up as the world's profile. */
+  readonly fetch: Fetch;
 }
 
 export function memoryKeyValue(
@@ -393,11 +403,12 @@ export function memoryKeyValue(
 
 /**
  * Seeds the demo world. With `allLayers`, every layer starts on (Subtext
- * opted into 4.2), for looking at the full apparatus.
+ * opted into 4.2), for looking at the full apparatus; with `stall`, the
+ * demo model stops half-way through its answer and waits.
  */
 export async function seedDemoWorld(
   worldId: string,
-  options: { allLayers: boolean },
+  options: { allLayers: boolean; stall?: boolean },
 ): Promise<DemoWorld> {
   const storage = createMemoryStorage();
   const now = 1_760_000_000_000;
@@ -520,18 +531,71 @@ export async function seedDemoWorld(
     });
   }
 
+  // The segment already in 4.2 was made by the demo model, from a request
+  // assembled as Generate next would have, so its Request and Regenerate
+  // work like any other.
+  const context = await unwrap(
+    gatherWorldContext(world, timeline, DEMO_SCENE),
+    "world context",
+  );
+  const scene = SCENES.flat().find((s) => s.id === DEMO_SCENE);
+  const before = "p-ardelia";
+  const built = buildContext({
+    documentId: DEMO_SCENE,
+    content: scene?.content ?? [],
+    cursor: { blockId: before, offset: SEALED_DOOR_ARDELIA.length },
+    entries: context.entries,
+    position: context.position,
+    pins: [],
+    instruction: null,
+    profile: DEMO_PROFILE,
+    layout: "chat",
+    stream: true,
+    budget: REQUEST_BUDGET,
+  });
+  if (built.isErr()) {
+    throw new Error(
+      `Seeding the request failed: ${JSON.stringify(built.error)}`,
+    );
+  }
+  const request = await unwrap(
+    createRequestStore(storage, {
+      now: () => now,
+      newId: () => "demo-request",
+    }).save(built.value, before),
+    "request",
+  );
+  const tide = SEALED_DOOR_TIDE;
   await unwrap(
-    storage.annotations.save({
-      id: "seg-tide",
-      documentId: DEMO_SCENE,
-      kind: "ai_provenance",
-      data: { model: "llama-3.3-70b", requestId: "demo-request" },
-      updatedAt: now,
-    }),
+    storage.annotations.save(
+      provenanceRecord(
+        DEMO_SCENE,
+        "seg-tide",
+        {
+          version: PROVENANCE_VERSION,
+          requestId: request.id,
+          profile: DEMO_PROFILE.name,
+          endpoint: "chat",
+          model: DEMO_PROFILE.model ?? null,
+          sampler: samplerOf(request.request.body),
+          outcome: "complete",
+          finishReason: "stop",
+          error: null,
+          text: tide,
+          received: tide,
+          logprobs: null,
+          startedAt: now,
+          finishedAt: now,
+          replaces: null,
+        },
+        now,
+      ),
+    ),
     "provenance",
   );
 
   const tabStore = memoryKeyValue({
+    [`worldcrafter:${worldId}:backend-profile`]: JSON.stringify(DEMO_PROFILE),
     [`worldcrafter:${worldId}:tabs`]: JSON.stringify({
       open: [DEMO_SCENE, "entry-ardelia"],
       active: DEMO_SCENE,
@@ -549,6 +613,7 @@ export async function seedDemoWorld(
   return {
     storage,
     tabStore,
+    fetch: demoFetch({ stall: options.stall ?? false }),
     layerSource: createLayerSource(
       new Map([[DEMO_SCENE, sealedDoorLayers()]]),
       [

@@ -99,6 +99,7 @@ import {
 import { checkRequest, send as sendRequest } from "~/llm/client";
 import type {
   BackendProfile,
+  Fetch,
   InvalidRequestError,
   LlmError,
   LlmRequest,
@@ -236,7 +237,7 @@ export interface GeneratorOptions {
   readonly gather: () => ResultAsync<WorldContext, TimelineStoreError>;
   readonly profile: (name: string) => BackendProfile | undefined;
   /** Sends the requests. Defaults to the global `fetch`. */
-  readonly fetch?: typeof fetch;
+  readonly fetch?: Fetch;
   readonly now?: () => number;
   readonly newId?: () => string;
   /**

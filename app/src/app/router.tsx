@@ -7,6 +7,7 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import type { Workspace } from "~/workspace/workspace";
+import { ModelSettingsPage } from "./model-settings";
 import { DocumentPage, HomePage } from "./pages";
 import { Shell } from "./shell";
 
@@ -41,7 +42,14 @@ export const documentRoute = createRoute({
   component: DocumentPage,
 });
 
-const routeTree = rootRoute.addChildren([homeRoute, documentRoute]);
+/** The world's model settings. */
+const modelRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/model",
+  component: ModelSettingsPage,
+});
+
+const routeTree = rootRoute.addChildren([homeRoute, documentRoute, modelRoute]);
 
 export function createAppRouter(
   workspace: Workspace,

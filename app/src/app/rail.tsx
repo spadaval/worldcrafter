@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import { labelOf } from "~/generate/profile";
 import { speakerTints } from "~/layers/model";
 import type { CommandError } from "~/workspace/workspace";
 import { KIND_DEFINITIONS } from "~/world/kinds";
@@ -24,7 +25,8 @@ export function Rail({
   active: string | null;
   onError: (error: CommandError) => void;
 }) {
-  const { environment, layerSource } = useServices();
+  const { environment, layerSource, generation } = useServices();
+  const profile = useStore(generation.profile);
   const [view, setView] = useState<RailView>("manuscript");
   const topics = layerSource.topics;
   return (
@@ -74,6 +76,20 @@ export function Rail({
               in the world inbox
             </>
           )}
+        </p>
+        <p className="rail-model">
+          <span>
+            {profile ? (
+              <>
+                Model · <b>{labelOf(profile)}</b>
+              </>
+            ) : (
+              "No model set up"
+            )}
+          </span>
+          <Link to="/model" className="rail-action">
+            {profile ? "Change" : "Set up"}
+          </Link>
         </p>
         {environment.storage === "memory" && (
           <p className="rail-demo">

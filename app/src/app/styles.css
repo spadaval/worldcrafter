@@ -723,7 +723,9 @@ a {
   flex-direction: column;
   align-items: flex-end;
   gap: 9px;
-  width: var(--margin-width);
+  /* Within the margin, clear of the prose. */
+  width: calc(var(--margin-width) - 22px);
+  text-align: right;
 }
 
 .scene-number {
@@ -1038,27 +1040,38 @@ a {
   white-space: nowrap;
 }
 
-.ai-segment-pending {
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--ink-3);
+/* The segment's actions: one-click text actions in ink, as in the gloss. */
+.ai-segment-controls {
+  display: inline-flex;
+  gap: 14px;
 }
 
-/* Off until generation is connected: drawn like the gloss's unavailable actions. */
-.ai-segment-label button {
+.ai-segment-controls button {
   padding: 0;
   border: 0;
   background: none;
   font: inherit;
   letter-spacing: 0.04em;
   text-transform: inherit;
-  color: var(--ink-3);
-  cursor: not-allowed;
+  color: var(--ink);
+  cursor: pointer;
 }
 
-.ai-segment-label button::after {
+.ai-segment-controls button::after {
   content: " ›";
+  color: var(--ink-3);
+}
+
+.ai-segment-controls button:hover:not(:disabled) {
+  text-decoration: underline;
+  text-decoration-color: var(--ink-3);
+  text-underline-offset: 3px;
+}
+
+/* Waiting for another generation, or read-only. */
+.ai-segment-controls button:disabled {
+  color: var(--ink-3);
+  cursor: default;
 }
 
 .ai-segment[data-status="generating"] .ai-segment-source {
@@ -1203,6 +1216,470 @@ a {
 .gloss-actions button[aria-disabled] {
   color: var(--ink-3);
   cursor: default;
+}
+
+/* ── Request slip ─────────────────────────────────────────────────────── */
+
+/*
+ * The context viewer, set in the gloss column beside the block its output
+ * follows, on a leader like a note's. Apparatus throughout: the request is
+ * not AI-made text, so no vermilion.
+ */
+.request-slip {
+  position: absolute;
+  left: var(--gutter-width);
+  right: 0;
+  padding-bottom: 24px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+.request-slip-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.request-slip-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.request-slip-close,
+.context-viewer-discard {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 13px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.request-slip-close:hover,
+.context-viewer-discard:hover:not(:disabled) {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.context-viewer-discard:disabled {
+  color: var(--ink-3);
+  cursor: default;
+}
+
+.request-slip:focus {
+  outline: none;
+}
+
+.request-slip-where {
+  margin: 2px 0 12px;
+}
+
+.request-slip-stale {
+  margin: 0 0 12px;
+  padding: 7px 10px;
+  background: var(--raised);
+  color: var(--ink);
+}
+
+.request-slip-stale button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--ink-3);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.context-viewer-header p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+
+.context-viewer-header code {
+  font: inherit;
+}
+
+.context-viewer-breakdown {
+  margin: 10px 0 14px;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--rule);
+  font-variant-numeric: tabular-nums;
+}
+
+.context-viewer-breakdown p {
+  margin: 0 0 4px;
+}
+
+.context-viewer-instruction {
+  color: var(--ink);
+}
+
+.context-viewer-cards {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.context-viewer-cards li {
+  padding: 3px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.context-viewer-cards li[data-included="false"] {
+  color: var(--ink-3);
+}
+
+.context-viewer-fields {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* Each part of the request folds to a line: its name and size. */
+.context-viewer-part {
+  border-top: 1px solid var(--rule);
+}
+
+.context-viewer-part:last-of-type {
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.context-viewer-part summary {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 7px 0;
+  list-style: none;
+  cursor: pointer;
+}
+
+.context-viewer-part summary::-webkit-details-marker {
+  display: none;
+}
+
+.context-viewer-part summary::before {
+  content: "›";
+  width: 8px;
+  color: var(--ink-3);
+  transition: rotate var(--fade) var(--ease-out);
+}
+
+.context-viewer-part[open] summary::before {
+  rotate: 90deg;
+}
+
+.context-viewer-part summary:hover .context-viewer-part-label {
+  color: var(--ink);
+}
+
+.context-viewer-part summary:focus-visible {
+  outline-offset: -1px;
+}
+
+.context-viewer-part-size {
+  margin-left: auto;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+
+.context-viewer-part textarea {
+  margin-bottom: 10px;
+}
+
+.context-viewer-part .context-viewer-part-label {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.context-viewer-part-label,
+.settings-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.context-viewer textarea,
+.settings input:not([type="radio"]),
+.settings textarea {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--rail);
+  font: 400 13.5px / 1.5 var(--font-apparatus);
+  color: var(--ink);
+  caret-color: var(--ink);
+  scrollbar-width: thin;
+}
+
+.context-viewer textarea {
+  field-sizing: content;
+  min-height: 3lh;
+  max-height: 16lh;
+  resize: vertical;
+}
+
+.context-viewer-code,
+.settings-code {
+  font:
+    400 12.5px / 1.5 ui-monospace,
+    "SF Mono",
+    Menlo,
+    Consolas,
+    monospace;
+}
+
+.context-viewer textarea:hover,
+.settings input:not([type="radio"]):hover,
+.settings textarea:hover {
+  border-color: var(--rule-strong);
+}
+
+.context-viewer textarea:focus-visible,
+.settings input:focus-visible,
+.settings textarea:focus-visible {
+  border-color: var(--rule-strong);
+  outline-offset: 1px;
+}
+
+.context-viewer textarea:disabled {
+  color: var(--ink-2);
+}
+
+::placeholder {
+  color: var(--ink-3);
+  opacity: 1;
+}
+
+.context-viewer-note {
+  margin: 0 0 12px;
+  color: var(--ink-3);
+}
+
+.context-viewer-problem,
+.settings-problem {
+  margin: 0 0 12px;
+  padding: 7px 10px;
+  background: var(--raised);
+  color: var(--ink);
+}
+
+.context-viewer-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.context-viewer-sending {
+  color: var(--ink-3);
+}
+
+/* Send is the slip's one primary action, filled like Generate next. */
+.context-viewer-send,
+.context-viewer-stop {
+  padding: 7px 14px;
+  border: 1px solid var(--ink);
+  border-radius: 5px;
+  background: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--ground);
+  cursor: pointer;
+}
+
+.context-viewer-send:hover:not(:disabled) {
+  border-color: #f3eee2;
+  background: #f3eee2;
+}
+
+.context-viewer-send:disabled {
+  border-color: var(--rule);
+  background: none;
+  color: var(--ink-3);
+  cursor: default;
+}
+
+.context-viewer-stop {
+  border-color: var(--rule);
+  background: none;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.context-viewer-stop:hover {
+  border-color: var(--rule-strong);
+}
+
+/* ── Model settings ───────────────────────────────────────────────────── */
+
+.settings-sheet {
+  padding: 52px 24px 160px var(--margin-width);
+}
+
+.settings {
+  max-width: 560px;
+}
+
+.settings-title {
+  margin: 0 0 6px;
+  font-size: 21px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.settings-lede {
+  margin: 0 0 28px;
+  max-width: 60ch;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.settings-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.settings-field {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.settings-kind legend {
+  padding: 0;
+}
+
+.settings-hint {
+  display: block;
+  margin-top: 5px;
+  max-width: 60ch;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
+/* The server kind: the view switch's strip, the choice inverted. */
+.settings-switch {
+  display: inline-flex;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.settings-switch label {
+  position: relative;
+  padding: 6px 12px;
+  border-right: 1px solid var(--rule);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.settings-switch label:last-child {
+  border-right: 0;
+}
+
+.settings-switch label:hover {
+  color: var(--ink);
+}
+
+.settings-switch label[data-checked="true"] {
+  background: var(--ink);
+  color: var(--ground);
+}
+
+.settings-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.settings-switch label:has(:focus-visible) {
+  outline: 1px solid var(--ink-2);
+  outline-offset: -3px;
+}
+
+.settings-key {
+  display: flex;
+  gap: 10px;
+}
+
+.settings-reveal {
+  flex: none;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  font-size: 13px;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.settings-reveal:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  margin-top: 28px;
+}
+
+.settings-outcome {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+
+.settings-actions .settings-problem {
+  margin: 0;
+}
+
+.settings fieldset:disabled input,
+.settings fieldset:disabled textarea {
+  color: var(--ink-3);
+}
+
+.rail-foot .rail-model {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1409,6 +1886,14 @@ a {
 
   .gloss-note[data-visible="false"] {
     display: none;
+  }
+
+  .request-slip {
+    position: static;
+  }
+
+  .settings-sheet {
+    padding: 32px 20px 96px;
   }
 
   .page-empty {

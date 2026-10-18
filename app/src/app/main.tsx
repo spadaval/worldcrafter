@@ -2,7 +2,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import { okAsync } from "neverthrow";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { createLayerStore } from "~/layers/state";
+import type { Fetch } from "~/llm/types";
 import { openIndexedDbStorage } from "~/storage/indexeddb";
 import type { StorageAdapter } from "~/storage/types";
 import { createStorageConnection } from "~/workspace/connection";
@@ -11,11 +11,10 @@ import type { KeyValueStore } from "~/workspace/tabs";
 import { createWorkspace } from "~/workspace/workspace";
 import { acquireWriterLock } from "~/workspace/writer-lock";
 import type { Environment } from "./environment";
-import { AppProviders, type AppServices } from "./hooks";
+import { AppProviders } from "./hooks";
 import { createLayerSource, type LayerSource } from "./layers";
-import { createAppManuscript } from "./manuscript";
 import { createAppRouter } from "./router";
-import { createAppWorldStore, createWorldIndex } from "./world";
+import { createAppServices } from "./services";
 import "./fonts";
 import "./styles.css";
 
@@ -28,6 +27,8 @@ interface Opened {
   readonly keyValue: KeyValueStore;
   readonly layerSource: LayerSource;
   readonly environment: Environment;
+  /** The demo's canned model; the real world uses the global `fetch`. */
+  readonly fetch?: Fetch;
 }
 
 async function openWorld(root: HTMLElement): Promise<Opened | null> {
@@ -53,18 +54,22 @@ async function openWorld(root: HTMLElement): Promise<Opened | null> {
 /**
  * `?demo` opens the synthetic demo world in memory instead of the real one
  * (`?demo&layers=all` with every layer on, `&measure` to time the layer
- * toggles). Its code is loaded only then.
+ * toggles, `&generate=request|send` to press Generate next (and Send) with
+ * the demo's canned model, `&stall` to stop that model half-way). Its code
+ * is loaded only then.
  */
 async function openDemo(params: URLSearchParams): Promise<Opened> {
   const demo = await import("~/demo/ninefold");
   const world = await demo.seedDemoWorld(WORLD_ID, {
     allLayers: params.get("layers") === "all",
+    stall: params.has("stall"),
   });
   return {
     storage: world.storage,
     reopen: () => okAsync(world.storage),
     keyValue: world.tabStore,
     layerSource: world.layerSource,
+    fetch: world.fetch,
     environment: {
       role: "writer",
       persistence: "granted",
@@ -88,22 +93,15 @@ async function start(root: HTMLElement) {
     readOnly: environment.role === "reader",
   });
   await workspace.refreshDocuments();
-  const world = createAppWorldStore(workspace);
-  const worldIndex = createWorldIndex(world);
-  const manuscript = createAppManuscript(workspace, world);
-  await Promise.all([worldIndex.refresh(), manuscript.refresh()]);
-  // Titles and kinds change with the documents; so may the outline's view.
-  workspace.documents.subscribe(() => void worldIndex.refresh());
-
-  const services: AppServices = {
+  const services = await createAppServices({
     workspace,
-    world,
-    worldIndex,
-    manuscript,
-    layers: createLayerStore(opened.keyValue, WORLD_ID),
+    keyValue: opened.keyValue,
     layerSource: opened.layerSource,
     environment,
-  };
+    ...(opened.fetch ? { fetch: opened.fetch } : {}),
+  });
+  // Titles and kinds change with the documents; so may the outline's view.
+  workspace.documents.subscribe(() => void services.worldIndex.refresh());
 
   // Save what can be saved before the tab goes away, and ask the browser to
   // warn the writer if something is still unsaved.
@@ -124,6 +122,11 @@ async function start(root: HTMLElement) {
       </AppProviders>
     </StrictMode>,
   );
+
+  if (params.has("demo") && params.has("generate")) {
+    const { driveGeneration } = await import("~/demo/generate");
+    void driveGeneration(params.get("generate") ?? "request");
+  }
 
   if (params.has("demo") && params.has("measure")) {
     const { measureLayerToggles } = await import("~/demo/measure");

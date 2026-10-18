@@ -4,13 +4,11 @@ import { okAsync } from "neverthrow";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { DEMO_SCENE, seedDemoWorld } from "~/demo/ninefold";
-import { createLayerStore } from "~/layers/state";
 import { createStorageConnection } from "~/workspace/connection";
 import { createWorkspace } from "~/workspace/workspace";
-import { AppProviders, type AppServices } from "./hooks";
-import { createAppManuscript } from "./manuscript";
+import { AppProviders } from "./hooks";
 import { createAppRouter } from "./router";
-import { createAppWorldStore, createWorldIndex } from "./world";
+import { createAppServices } from "./services";
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean;
@@ -39,16 +37,9 @@ async function renderDemo(allLayers = false) {
     saveDelayMs: 60_000,
   });
   (await workspace.refreshDocuments())._unsafeUnwrap();
-  const world = createAppWorldStore(workspace);
-  const worldIndex = createWorldIndex(world);
-  const manuscript = createAppManuscript(workspace, world);
-  await Promise.all([worldIndex.refresh(), manuscript.refresh()]);
-  const services: AppServices = {
+  const services = await createAppServices({
     workspace,
-    world,
-    worldIndex,
-    manuscript,
-    layers: createLayerStore(demo.tabStore, "w"),
+    keyValue: demo.tabStore,
     layerSource: demo.layerSource,
     environment: {
       role: "writer",
@@ -56,7 +47,7 @@ async function renderDemo(allLayers = false) {
       storage: "memory",
       worldName: "The Ninefold",
     },
-  };
+  });
   const router = createAppRouter(
     workspace,
     createMemoryHistory({ initialEntries: [`/doc/${DEMO_SCENE}`] }),

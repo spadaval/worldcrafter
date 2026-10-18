@@ -23,12 +23,16 @@ import {
   createSlatePlugin,
   type Descendant,
   ElementApi,
+  type Location,
   NodeApi,
+  PathApi,
   type Point,
+  PointApi,
   RangeApi,
   type SlateEditor,
   type TElement,
   TextApi,
+  type TRange,
 } from "platejs";
 import type { GeneratedParagraph } from "~/content/generated-text";
 import { type Inline, sameMarks } from "~/content/schema";
@@ -363,19 +367,28 @@ interface LiveGeneration {
 /**
  * Stops every live generation whose segment the writer's next edit touches,
  * so the edit lands on a ready segment and no render overwrites it. The
- * edit's reach is the selection, plus the neighbouring block for a
- * collapsed Backspace at the start of a block or Delete at the end (they
- * merge into it). That includes a selection covering the whole segment:
- * Slate may keep the segment (a selection starting at its first character),
- * so it is stopped first in every case.
+ * edit's reach is `at` (by default the selection), plus the neighbouring
+ * block for a collapsed Backspace at the start of a block or Delete at the
+ * end (they merge into it). That includes a range covering the whole
+ * segment: Slate may keep the segment (a range starting at its first
+ * character), so it is stopped first in every case.
  */
 function stopTouched(
   editor: SlateEditor,
   live: ReadonlyMap<string, LiveGeneration>,
   reach?: "backward" | "forward",
+  at?: Location,
 ): void {
-  const { selection } = editor;
-  if (!selection || live.size === 0) return;
+  if (live.size === 0) return;
+  const selection: TRange | null | undefined =
+    at === undefined
+      ? editor.selection
+      : PathApi.isPath(at)
+        ? editor.api.range(at)
+        : PointApi.isPoint(at)
+          ? { anchor: at, focus: at }
+          : at;
+  if (!selection) return;
   const [start, end] = RangeApi.edges(selection);
   const collapsed = RangeApi.isCollapsed(selection);
   let first = start.path[0] ?? 0;
@@ -413,7 +426,14 @@ function stopTouched(
  *   overwrites the writer's edits, and history stays consistent: the
  *   generation's undo step places the segment as it was when stopped. This
  *   holds for an edit covering the whole segment too, whether or not Slate
- *   then removes it. The transforms above are not affected.
+ *   then removes it. A delete at an explicit range counts too: dropping
+ *   text dragged out of a segment deletes it there (slate-react's onDrop).
+ *   The transforms above are not affected.
+ * - Block transforms with an explicit location (setNodes, insertNodes,
+ *   moveNodes) are not intercepted: they can't stop a generation, so no UI
+ *   may offer them inside a generating segment. The workspace offers none
+ *   (no toolbar, slash commands or block drag-and-drop); the shortcuts that
+ *   use them (autoformat) run inside an intercepted insertText.
  * - Undoing a live generation's own step stops it first, so redo brings
  *   back the segment as shown (and a caret inside it stays valid).
  */
@@ -440,6 +460,7 @@ export const GeneratingSegmentPlugin = createSlatePlugin({
       deleteBackward,
       deleteForward,
       deleteFragment,
+      delete: remove,
       insertFragment,
       insertData,
       addMark,
@@ -497,6 +518,29 @@ export const GeneratingSegmentPlugin = createSlatePlugin({
         deleteBackward: stopping(deleteBackward, "backward"),
         deleteForward: stopping(deleteForward, "forward"),
         deleteFragment: stopping(deleteFragment),
+        delete(options) {
+          const at = options?.at;
+          // A node (rather than a location) is found by its path.
+          const location: Location | undefined =
+            at === undefined ||
+            PathApi.isPath(at) ||
+            PointApi.isPoint(at) ||
+            RangeApi.isRange(at)
+              ? at
+              : editor.api.findPath(at);
+          const collapsed =
+            location === undefined
+              ? editor.selection !== null &&
+                RangeApi.isCollapsed(editor.selection)
+              : !RangeApi.isRange(location) || RangeApi.isCollapsed(location);
+          stopTouched(
+            editor,
+            getOptions().live,
+            collapsed ? (options?.reverse ? "backward" : "forward") : undefined,
+            location,
+          );
+          remove(options);
+        },
         insertFragment: stopping(insertFragment),
         insertData: stopping(insertData),
         addMark: stopping(addMark),

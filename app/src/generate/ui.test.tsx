@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import type { AssembledRecord, RevisionRecord } from "~/context/requests";
 import type { LlmRequest } from "~/llm/types";
 import { ContextViewer } from "./context-viewer";
+import { describeGenerationResult } from "./describe";
 import { draftOf, requestFromDraft } from "./draft";
 import { SegmentControls } from "./segment-controls";
 
@@ -32,6 +33,7 @@ const assembled: AssembledRecord = {
   documentId: "doc1",
   createdAt: 1,
   request: chat,
+  after: null,
   origin: "assembled",
   breakdown: {
     layout: "chat",
@@ -230,6 +232,7 @@ describe("context viewer", () => {
       documentId: "doc1",
       createdAt: 2,
       request: chat,
+      after: null,
       origin: "revision",
       parentId: "r1",
       assembledFrom: "r1",
@@ -261,16 +264,60 @@ describe("segment controls", () => {
     click(view.querySelector("button"));
     act(() => root?.unmount());
 
-    view = render(<SegmentControls status="ready" {...handlers} />);
-    const [accept, regenerate] = [...view.querySelectorAll("button")];
+    view = render(
+      <SegmentControls
+        status="ready"
+        {...handlers}
+        onShowRequest={() => calls.push("request")}
+      />,
+    );
+    const [request, regenerate, accept] = [...view.querySelectorAll("button")];
+    expect(
+      [...view.querySelectorAll("button")].map((b) => b.textContent),
+    ).toEqual(["Request", "Regenerate", "Accept"]);
     click(accept);
     click(regenerate);
-    expect(calls).toEqual(["stop", "accept", "regenerate"]);
+    click(request);
+    expect(calls).toEqual(["stop", "accept", "regenerate", "request"]);
 
     act(() => root?.unmount());
     view = render(<SegmentControls status="ready" disabled {...handlers} />);
     expect([...view.querySelectorAll("button")].every((b) => b.disabled)).toBe(
       true,
     );
+  });
+});
+
+describe("generation messages", () => {
+  test("a request that never reached the server says what to check", () => {
+    const text = describeGenerationResult({
+      outcome: "failed",
+      segmentId: null,
+      requestId: "r1",
+      save: { kind: "saved" },
+      error: {
+        kind: "network",
+        url: chat.url,
+        message: `Request to ${chat.url} failed: Failed to fetch`,
+        cause: null,
+      },
+    });
+    expect(text).toBe(
+      `Generation failed: Request to ${chat.url} failed: Failed to fetch. Is the server running, and does it accept requests from this page (CORS)?`,
+    );
+    expect(
+      describeGenerationResult({
+        outcome: "failed",
+        segmentId: null,
+        requestId: "r1",
+        save: { kind: "saved" },
+        error: {
+          kind: "http",
+          url: chat.url,
+          status: 503,
+          message: "503 busy",
+        },
+      }),
+    ).toBe("Generation failed: 503 busy");
   });
 });

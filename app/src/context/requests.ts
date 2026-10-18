@@ -32,6 +32,12 @@ type RequestCommon = {
   createdAt: number;
   /** The exact request to send. */
   request: LlmRequest;
+  /**
+   * The top-level block the output goes after, where the request's story
+   * window ends; `null` is the end of the document. Sending puts the output
+   * there unless told otherwise. A revision keeps its parent's.
+   */
+  after: string | null;
 };
 
 /** A request as the builder assembled it. */
@@ -57,9 +63,10 @@ export type RequestStoreError =
   | { kind: "invalid_request_record"; id: string; reason: string };
 
 export interface RequestStore {
-  /** Stores an assembled request under a new ID. */
+  /** Stores an assembled request, continuing after block `after`, under a new ID. */
   save(
     assembled: AssembledRequest,
+    after: string | null,
   ): ResultAsync<AssembledRecord, RequestStoreError>;
   load(id: string): ResultAsync<ContextRequest, RequestStoreError>;
   /**
@@ -78,14 +85,16 @@ export interface RequestStoreOptions {
 }
 
 /**
- * Version of the `request` JSON this module writes. Version 1 (revisions
- * copied their parent's breakdown) was never released, so it isn't read.
+ * Version of the `request` JSON this module writes. Versions 1 (revisions
+ * copied their parent's breakdown) and 2 (no `after`) were never released:
+ * nothing stored requests before generation was wired into the app. So
+ * they aren't read.
  */
-export const REQUEST_RECORD_VERSION = 2;
+export const REQUEST_RECORD_VERSION = 3;
 
 type Body =
-  | Omit<AssembledRecord, keyof RequestCommon | "request">
-  | Omit<RevisionRecord, keyof RequestCommon | "request">;
+  | Omit<AssembledRecord, Exclude<keyof RequestCommon, "after">>
+  | Omit<RevisionRecord, Exclude<keyof RequestCommon, "after">>;
 
 export function createRequestStore(
   storage: StorageAdapter,
@@ -130,12 +139,13 @@ export function createRequestStore(
     });
 
   return {
-    save: ({ documentId, request, breakdown }) =>
+    save: ({ documentId, request, breakdown }, after) =>
       store<AssembledRecord>({
         id: newId(),
         documentId,
         createdAt: now(),
         request,
+        after,
         origin: "assembled",
         breakdown,
       }),
@@ -147,6 +157,7 @@ export function createRequestStore(
           documentId: parent.documentId,
           createdAt: now(),
           request,
+          after: parent.after,
           origin: "revision",
           parentId,
           assembledFrom:
@@ -186,11 +197,15 @@ function parseRecordBody(
   if (value.version !== REQUEST_RECORD_VERSION) {
     return err(`unsupported request version ${JSON.stringify(value.version)}`);
   }
+  const { after } = value;
+  if (after !== null && !isString(after)) {
+    return err("request record must have after, a block ID or null");
+  }
   return parseLlmRequest(value.request).andThen((request) => {
     if (value.origin === "assembled") {
       return parseBreakdown(value.breakdown).map((breakdown) => ({
         request,
-        body: { origin: "assembled" as const, breakdown },
+        body: { after, origin: "assembled" as const, breakdown },
       }));
     }
     if (
@@ -201,6 +216,7 @@ function parseRecordBody(
       return ok({
         request,
         body: {
+          after,
           origin: "revision" as const,
           parentId: value.parentId,
           assembledFrom: value.assembledFrom,

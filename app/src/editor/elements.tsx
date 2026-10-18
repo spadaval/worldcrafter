@@ -1,10 +1,19 @@
 import { PlateElement, type PlateElementProps } from "platejs/react";
-import { createContext, useContext } from "react";
+import { createContext, type ReactNode, useContext } from "react";
+import type { AiSegmentStatus } from "~/content/schema";
 
 /** The model that wrote each AI segment, by segment ID (from its provenance). */
 export const SegmentModelsContext = createContext<ReadonlyMap<string, string>>(
   new Map(),
 );
+
+/**
+ * Renders an AI segment's actions (accept, regenerate, stop) into its
+ * caption. The app supplies them; the editor knows nothing of generation.
+ */
+export const SegmentActionsContext = createContext<
+  (segment: { id: string; status: AiSegmentStatus }) => ReactNode
+>(() => null);
 
 /**
  * Element renderers for the restricted schema. Styling lives in the app's
@@ -34,14 +43,14 @@ export function LinkElement(props: PlateElementProps) {
 
 /**
  * AI-made text: the "double-ruled plate". The caption says what made it and
- * whether it is still arriving; provenance lives in the sidecar, not here.
- * Accept and regenerate arrive with generation, so they show but are off.
+ * whether it is still arriving, with the segment's actions; provenance
+ * lives in the sidecar, not here.
  */
 export function AiSegmentElement(props: PlateElementProps) {
   const generating = props.element.status === "generating";
   const id = String(props.element.id ?? "");
   const model = useContext(SegmentModelsContext).get(id);
-  const unavailable = "Accept and regenerate aren't in this build yet.";
+  const actions = useContext(SegmentActionsContext);
   return (
     <PlateElement
       {...props}
@@ -61,13 +70,7 @@ export function AiSegmentElement(props: PlateElementProps) {
           {model && <span className="ai-segment-model"> · {model}</span>}
         </span>
         <span className="ai-segment-actions">
-          <span className="ai-segment-pending">Not connected yet</span>
-          <button type="button" disabled title={unavailable}>
-            Regenerate
-          </button>
-          <button type="button" disabled title={unavailable}>
-            Accept
-          </button>
+          {actions({ id, status: generating ? "generating" : "ready" })}
         </span>
       </span>
       {props.children}

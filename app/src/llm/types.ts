@@ -50,7 +50,10 @@ export type Sampler = {
 export type BackendKind = "llamacpp" | "openrouter" | "generic";
 
 export type BackendProfile = {
+  /** Identifies the profile in the requests made with it; never changes. */
   name: string;
+  /** What the writer calls it; `name` when absent. */
+  label?: string;
   kind: BackendKind;
   /** Base URL including the version segment, e.g. `http://localhost:8080/v1`. */
   baseUrl: string;
@@ -128,3 +131,6 @@ export type LlmError =
   | { kind: "malformed"; url: string; message: string }
   /** The caller's `onDelta` threw; the stream was cancelled. */
   | { kind: "callback"; url: string; message: string; cause: unknown };
+
+/** What sending needs of `fetch`; the global `fetch` is one. */
+export type Fetch = (url: string, init: RequestInit) => Promise<Response>;

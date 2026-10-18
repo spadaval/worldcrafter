@@ -5,7 +5,6 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { parseGeneratedText } from "~/content/generated-text";
 import { startGeneration } from "~/editor/ai-segment";
-import { createLayerStore } from "~/layers/state";
 import { createMemoryStorage } from "~/storage/memory";
 import type { JsonValue, StorageAdapter } from "~/storage/types";
 import { createStorageConnection } from "~/workspace/connection";
@@ -14,9 +13,8 @@ import { createWorkspace, type Workspace } from "~/workspace/workspace";
 import type { Environment } from "./environment";
 import { AppProviders, type AppServices } from "./hooks";
 import { createLayerSource, type LayerSource } from "./layers";
-import { createAppManuscript } from "./manuscript";
 import { createAppRouter } from "./router";
-import { createAppWorldStore, createWorldIndex } from "./world";
+import { createAppServices } from "./services";
 
 declare global {
   var IS_REACT_ACT_ENVIRONMENT: boolean;
@@ -69,25 +67,17 @@ const WRITER: Environment = {
   worldName: null,
 };
 
-export async function services(
+export const services = (
   workspace: Workspace,
   environment: Environment = WRITER,
   layerSource: LayerSource = createLayerSource(),
-): Promise<AppServices> {
-  const world = createAppWorldStore(workspace);
-  const worldIndex = createWorldIndex(world);
-  const manuscript = createAppManuscript(workspace, world);
-  await Promise.all([worldIndex.refresh(), manuscript.refresh()]);
-  return {
+): Promise<AppServices> =>
+  createAppServices({
     workspace,
-    world,
-    worldIndex,
-    manuscript,
-    layers: createLayerStore(tabStore(), workspace.worldId),
+    keyValue: tabStore(),
     layerSource,
     environment,
-  };
-}
+  });
 
 async function render(
   workspace: Workspace,

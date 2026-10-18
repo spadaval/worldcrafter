@@ -16,7 +16,8 @@
  *    revision. Nothing is sent until `send`, and what is sent is exactly the
  *    stored request named.
  * 3. `send` checks the request against its profile (`checkRequest`), puts a
- *    generating segment after the chosen block, streams text into it through
+ *    generating segment after the block the request continues from (or
+ *    where the caller says), streams text into it through
  *    the output grammar (`content/generated-text.ts`), then marks it ready
  *    and saves its provenance with it.
  * 4. `accept` unwraps the segment, archives its provenance and snapshots the
@@ -53,7 +54,9 @@
  * - Streamed text is shown at most once per frame (`scheduleRender`), and
  *   only the line still arriving is parsed again, so a long output costs
  *   about as much as its length.
- * - One generation runs at a time per document.
+ * - One generation runs at a time per document, from `send` until it
+ *   ends; `active` says which, with a null segment while the request is
+ *   still loading. `cancel` then stops it before anything is sent.
  */
 
 import {
@@ -81,6 +84,7 @@ import {
 import type { WorldContext } from "~/context/gather";
 import type {
   AssembledRecord,
+  ContextRequest,
   RequestStore,
   RequestStoreError,
   RevisionRecord,
@@ -92,9 +96,15 @@ import {
   startGeneration,
   unwrapSegment,
 } from "~/editor/ai-segment";
-import { checkRequest, send as sendRequest } from "~/llm/client";
+import {
+  addressedTo,
+  checkRequest,
+  retarget,
+  send as sendRequest,
+} from "~/llm/client";
 import type {
   BackendProfile,
+  Fetch,
   InvalidRequestError,
   LlmError,
   LlmRequest,
@@ -130,8 +140,8 @@ export type GenerateError =
   | InvalidRequestError
   | { kind: "world_context_failed"; error: TimelineStoreError }
   | { kind: "read_only"; documentId: string }
-  /** A generation is already running in this document. */
-  | { kind: "busy"; documentId: string; segmentId: string }
+  /** A generation is already running in this document (its segment is null while it loads). */
+  | { kind: "busy"; documentId: string; segmentId: string | null }
   | { kind: "unknown_profile"; profile: string }
   | { kind: "block_not_found"; documentId: string; blockId: string }
   | { kind: "segment_not_found"; documentId: string; segmentId: string }
@@ -181,10 +191,22 @@ export type AcceptResult = {
   save: SaveStatus;
 };
 
+/** A stored request as it would be sent now. */
+export type CurrentRequest = {
+  record: ContextRequest;
+  /**
+   * True when the request was made for a server the profile has since left:
+   * `record` is then a new revision addressed to the profile as it is.
+   */
+  retargeted: boolean;
+};
+
 /** The generation in progress, for the segment controls. */
 export type ActiveGeneration = {
-  segmentId: string;
-  requestId: string;
+  /** Null while the request is loading, before the segment is placed. */
+  segmentId: string | null;
+  /** Null while it is being found (loaded, stored or retargeted). */
+  requestId: string | null;
   /** The raw text so far. */
   text: string;
 };
@@ -200,19 +222,36 @@ export interface Generator {
   ): ResultAsync<RevisionRecord, GenerateError>;
   /**
    * Sends stored request `requestId` and streams the output into a new
-   * segment. Resolves when the generation ends, however it ends; LLM failures
-   * are reported in the result (with the partial output kept), not as Err.
+   * segment, by default after the block the request continues from
+   * (`ContextRequest.after`). Resolves when the generation ends, however it
+   * ends; LLM failures are reported in the result (with the partial output
+   * kept), not as Err. Cancelled before it was sent, it resolves
+   * `cancelled` with no segment.
    */
   send(
     requestId: string,
-    target: GenerationTarget,
+    target?: GenerationTarget,
   ): ResultAsync<GenerationResult, GenerateError>;
   /** Replaces a ready segment with new output from `requestId`, by default the request that made it. */
   regenerate(
     segmentId: string,
     requestId?: string,
   ): ResultAsync<GenerationResult, GenerateError>;
-  /** Stops the running generation, keeping what arrived. */
+  /**
+   * Stores the writer's edit of request `parentId` as a revision and sends
+   * it, as `send` does; busy (and stoppable) from the call on.
+   */
+  sendEdited(
+    parentId: string,
+    request: LlmRequest,
+    target?: GenerationTarget,
+  ): ResultAsync<GenerationResult, GenerateError>;
+  /**
+   * The stored request that made a segment's output, as it would be sent
+   * again (retargeted if the profile has moved since).
+   */
+  segmentRequest(segmentId: string): ResultAsync<CurrentRequest, GenerateError>;
+  /** Stops the running generation, keeping what arrived; before sending, it isn't sent. */
   cancel(): void;
   accept(segmentId: string): ResultAsync<AcceptResult, GenerateError>;
 }
@@ -225,6 +264,8 @@ export interface GeneratorOptions {
   /** The world entries and story position of the session's document. */
   readonly gather: () => ResultAsync<WorldContext, TimelineStoreError>;
   readonly profile: (name: string) => BackendProfile | undefined;
+  /** Sends the requests. Defaults to the global `fetch`. */
+  readonly fetch?: Fetch;
   readonly now?: () => number;
   readonly newId?: () => string;
   /**
@@ -302,6 +343,34 @@ export function createGenerator(options: GeneratorOptions): Generator {
     });
   };
 
+  const load = (id: string): ResultAsync<ContextRequest, GenerateError> =>
+    requests.load(id).mapErr((e): GenerateError => e);
+
+  /**
+   * `record` as it can be sent now: as stored, or, when its profile has
+   * since moved to another server, a revision of it addressed to the
+   * profile as it is (`retarget`), so regenerating still works.
+   */
+  const current = (
+    record: ContextRequest,
+  ): ResultAsync<CurrentRequest, GenerateError> => {
+    const profile = options.profile(record.request.profile);
+    if (!profile || addressedTo(profile, record.request)) {
+      return okAsync({ record, retargeted: false });
+    }
+    return requests
+      .revise(record.id, retarget(profile, record.request))
+      .mapErr((e): GenerateError => e)
+      .map((revision) => ({ record: revision, retargeted: true }));
+  };
+
+  const requestIdOf = (segmentId: string): ResultAsync<string, GenerateError> =>
+    loadProvenance(segmentId).andThen((stored) =>
+      stored?.requestId
+        ? okAsync(stored.requestId)
+        : errAsync({ kind: "no_provenance" as const, documentId, segmentId }),
+    );
+
   /** Checks a segment can be accepted or replaced: present and ready. */
   const readySegment = (segmentId: string): Result<number, GenerateError> => {
     const index = segmentIndex(editor, segmentId);
@@ -347,51 +416,73 @@ export function createGenerator(options: GeneratorOptions): Generator {
         });
         if (built.isErr())
           return errAsync<AssembledRecord, GenerateError>(built.error);
-        return requests.save(built.value);
+        return requests.save(built.value, input.after);
       });
   }
 
-  function send(
-    requestId: string,
-    target: GenerationTarget,
+  /**
+   * Sends the request `resolve` finds (loads, revises or retargets). The
+   * generator is busy from the call on, so Stop (and closing the document)
+   * is honoured while it resolves: the request is then not sent.
+   */
+  function sendWith(
+    resolve: () => ResultAsync<ContextRequest, GenerateError>,
+    target: GenerationTarget | undefined,
+    /** The request's ID, when it is known before resolving. */
+    known: string | null = null,
   ): ResultAsync<GenerationResult, GenerateError> {
     const refused = refuse();
     if (refused) return errAsync(refused);
-    return requests
-      .load(requestId)
-      .mapErr((error): GenerateError => error)
+    const abort = new AbortController();
+    controller = abort;
+    active.set({ segmentId: null, requestId: known, text: "" });
+    const release = () => {
+      if (controller === abort) controller = null;
+      active.set(null);
+    };
+    const refuseWith = <T = GenerationResult>(error: GenerateError) => {
+      release();
+      return errAsync<T, GenerateError>(error);
+    };
+    return resolve()
+      .orElse((error) => refuseWith<ContextRequest>(error))
       .andThen((record) => {
+        const requestId = record.id;
+        if (abort.signal.aborted) {
+          release();
+          return okAsync<GenerationResult, GenerateError>({
+            outcome: "cancelled",
+            segmentId: null,
+            requestId,
+            save: session.status.get(),
+          });
+        }
+        active.set({ segmentId: null, requestId, text: "" });
         const { request } = record;
         const profile = options.profile(request.profile);
         if (!profile) {
-          return errAsync<GenerationResult, GenerateError>({
+          return refuseWith({
             kind: "unknown_profile",
             profile: request.profile,
           });
         }
         const checked = checkRequest(profile, request);
-        if (checked.isErr()) {
-          return errAsync<GenerationResult, GenerateError>(checked.error);
-        }
-        // Checked again: the document may have changed while loading.
-        const again = refuse();
-        if (again) return errAsync<GenerationResult, GenerateError>(again);
-        const placed = place(target);
-        if (placed.isErr()) {
-          return errAsync<GenerationResult, GenerateError>(placed.error);
-        }
+        if (checked.isErr()) return refuseWith(checked.error);
+        const placed = place(
+          target ?? { kind: "after", blockId: record.after },
+        );
+        if (placed.isErr()) return refuseWith(placed.error);
         const placement = placed.value;
         return ResultAsync.fromPromise(
-          stream(profile, requestId, request, placement),
+          stream(profile, requestId, request, placement, abort),
           (cause): GenerateError => {
             // A bug, not an LLM failure: still end the generation, so neither
             // the segment nor this generator stays locked.
-            controller?.abort();
-            controller = null;
+            abort.abort();
             try {
               placement.generation.abandon();
             } finally {
-              active.set(null);
+              release();
             }
             return {
               kind: "generation_failed",
@@ -452,10 +543,9 @@ export function createGenerator(options: GeneratorOptions): Generator {
     requestId: string,
     request: LlmRequest,
     { segmentId, generation, replaced }: Placement,
+    abort: AbortController,
   ): Promise<GenerationResult> {
     const startedAt = now();
-    const abort = new AbortController();
-    controller = abort;
     let text = "";
     /** The raw text the segment shows: `text` as of the last render. */
     let shownText = "";
@@ -498,6 +588,7 @@ export function createGenerator(options: GeneratorOptions): Generator {
     };
     const result = await sendRequest(profile, request, {
       signal: abort.signal,
+      ...(options.fetch ? { fetch: options.fetch } : {}),
       onDelta: (delta) => {
         text += delta.text;
         parser.push(delta.text);
@@ -505,7 +596,7 @@ export function createGenerator(options: GeneratorOptions): Generator {
         cancelRender ??= scheduleRender(render);
       },
     });
-    controller = null;
+    if (controller === abort) controller = null;
     (cancelRender as (() => void) | null)?.();
     generation.onStop = null;
 
@@ -660,25 +751,32 @@ export function createGenerator(options: GeneratorOptions): Generator {
     prepare,
     revise: (requestId, request) =>
       requests.revise(requestId, request).mapErr((e): GenerateError => e),
-    send,
+    send: (requestId, target) =>
+      sendWith(() => load(requestId), target, requestId),
+    sendEdited: (parentId, request, target) =>
+      sendWith(
+        () =>
+          requests.revise(parentId, request).mapErr((e): GenerateError => e),
+        target,
+      ),
     regenerate(segmentId, requestId) {
       const refused = refuse();
       if (refused) return errAsync(refused);
       const ready = readySegment(segmentId);
       if (ready.isErr()) return errAsync(ready.error);
-      const request: ResultAsync<string, GenerateError> = requestId
-        ? okAsync(requestId)
-        : loadProvenance(segmentId).andThen((stored) =>
-            stored?.requestId
-              ? okAsync(stored.requestId)
-              : errAsync({
-                  kind: "no_provenance" as const,
-                  documentId,
-                  segmentId,
-                }),
-          );
-      return request.andThen((id) => send(id, { kind: "replace", segmentId }));
+      return sendWith(
+        () =>
+          requestId
+            ? load(requestId)
+            : requestIdOf(segmentId)
+                .andThen(load)
+                .andThen(current)
+                .map(({ record }) => record),
+        { kind: "replace", segmentId },
+      );
     },
+    segmentRequest: (segmentId) =>
+      requestIdOf(segmentId).andThen(load).andThen(current),
     cancel() {
       controller?.abort();
     },

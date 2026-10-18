@@ -22,6 +22,14 @@ export interface ContextViewerProps {
   readonly onSend: (edited: LlmRequest | null) => void;
   /** Disables sending, e.g. while a generation runs. */
   readonly disabled?: boolean;
+  /**
+   * Sent and not yet answered: the request can't be edited, and Stop
+   * (`onStop`) takes Send's place.
+   */
+  readonly sending?: boolean;
+  readonly onStop?: () => void;
+  /** What the writer calls the request's profile; its identifier otherwise. */
+  readonly profileLabel?: string;
 }
 
 /**
@@ -35,6 +43,9 @@ export function ContextViewer({
   breakdown = record.origin === "assembled" ? record.breakdown : null,
   onSend,
   disabled = false,
+  sending = false,
+  onStop,
+  profileLabel,
 }: ContextViewerProps) {
   const [draft, setDraft] = useState<RequestDraft>(() =>
     draftOf(record.request),
@@ -65,8 +76,9 @@ export function ContextViewer({
   return (
     <section className="context-viewer" aria-label="Request to the model">
       <header className="context-viewer-header">
-        <p>
-          {request.profile} · {request.endpoint} · <code>{request.url}</code>
+        <p className="context-viewer-target">
+          {profileLabel ?? request.profile} · {request.endpoint} ·{" "}
+          <code>{request.url}</code>
         </p>
         {record.origin === "revision" ? (
           <p className="context-viewer-origin">
@@ -81,60 +93,51 @@ export function ContextViewer({
         className="context-viewer-form"
         onSubmit={(event) => {
           event.preventDefault();
-          if (disabled || built.isErr()) return;
+          if (disabled || sending || built.isErr()) return;
           onSend(edited ? built.value : null);
         }}
       >
-        {draft.input?.kind === "chat"
-          ? draft.input.messages.map((message, index) => (
-              <label
-                // Messages are edited in place, never reordered.
-                // biome-ignore lint/suspicious/noArrayIndexKey: position is the identity
-                key={index}
-                className="context-viewer-message"
-                data-role={message.role}
-              >
-                <span>{message.role}</span>
-                <textarea
+        <fieldset className="context-viewer-fields" disabled={sending}>
+          {draft.input?.kind === "chat"
+            ? draft.input.messages.map((message, index) => (
+                <Part
+                  // Messages are edited in place, never reordered.
+                  // biome-ignore lint/suspicious/noArrayIndexKey: position is the identity
+                  key={index}
+                  label={`${ROLE_LABELS[message.role]} message`}
+                  kind={message.role}
                   value={message.content}
-                  onChange={(event) => setMessage(index, event.target.value)}
-                  rows={Math.min(20, message.content.split("\n").length + 1)}
+                  original={originalMessage(request, index)}
+                  onChange={(content) => setMessage(index, content)}
                 />
-              </label>
-            ))
-          : null}
-        {draft.input?.kind === "completion" ? (
-          <label className="context-viewer-message" data-role="prompt">
-            <span>prompt</span>
-            <textarea
+              ))
+            : null}
+          {draft.input?.kind === "completion" ? (
+            <Part
+              label="Prompt"
+              kind="prompt"
               value={draft.input.prompt}
-              onChange={(event) =>
-                setDraft({
-                  ...draft,
-                  input: { kind: "completion", prompt: event.target.value },
-                })
+              original={originalPrompt(request)}
+              onChange={(prompt) =>
+                setDraft({ ...draft, input: { kind: "completion", prompt } })
               }
-              rows={Math.min(20, draft.input.prompt.split("\n").length + 1)}
             />
-          </label>
-        ) : null}
-        {draft.input === null ? (
-          <p className="context-viewer-note">
-            The input isn't in the shape the {request.endpoint} endpoint reads;
-            it is shown with the parameters below.
-          </p>
-        ) : null}
-        <label className="context-viewer-parameters">
-          <span>Parameters (JSON)</span>
-          <textarea
+          ) : null}
+          {draft.input === null ? (
+            <p className="context-viewer-note">
+              The input isn't in the shape the {request.endpoint} endpoint
+              reads; it is shown with the parameters below.
+            </p>
+          ) : null}
+          <Part
+            label="Parameters (JSON)"
+            kind="parameters"
             value={draft.parameters}
-            onChange={(event) =>
-              setDraft({ ...draft, parameters: event.target.value })
-            }
-            rows={Math.min(20, draft.parameters.split("\n").length + 1)}
-            spellCheck={false}
+            original={draftOf(request).parameters}
+            onChange={(parameters) => setDraft({ ...draft, parameters })}
+            code
           />
-        </label>
+        </fieldset>
         {problem ? (
           <p className="context-viewer-problem" role="alert">
             {problem}
@@ -143,17 +146,91 @@ export function ContextViewer({
         <div className="context-viewer-actions">
           <button
             type="button"
-            disabled={!edited}
+            className="context-viewer-discard"
+            disabled={!edited || sending}
             onClick={() => setDraft(draftOf(request))}
           >
             Discard edits
           </button>
-          <button type="submit" disabled={disabled || problem !== null}>
-            {edited ? "Send edited request" : "Send"}
-          </button>
+          {sending ? (
+            <>
+              <output className="context-viewer-sending">Sending…</output>
+              <button
+                type="button"
+                className="context-viewer-stop"
+                onClick={onStop}
+              >
+                Stop
+              </button>
+            </>
+          ) : (
+            <button
+              type="submit"
+              className="context-viewer-send"
+              disabled={disabled || problem !== null}
+            >
+              {edited ? "Send edited request" : "Send"}
+            </button>
+          )}
         </div>
       </form>
     </section>
+  );
+}
+
+const ROLE_LABELS = {
+  system: "System",
+  user: "User",
+  assistant: "Assistant",
+} as const;
+
+const originalMessage = (request: LlmRequest, index: number) => {
+  const input = draftOf(request).input;
+  return input?.kind === "chat" ? (input.messages[index]?.content ?? "") : "";
+};
+
+const originalPrompt = (request: LlmRequest) => {
+  const input = draftOf(request).input;
+  return input?.kind === "completion" ? input.prompt : "";
+};
+
+/**
+ * One part of the request, folded to a line with its size until the writer
+ * opens it: the exact text is there to read and edit, not in the way.
+ */
+function Part({
+  label,
+  kind,
+  value,
+  original,
+  onChange,
+  code = false,
+}: {
+  label: string;
+  kind: string;
+  value: string;
+  original: string;
+  onChange: (value: string) => void;
+  code?: boolean;
+}) {
+  return (
+    <details className="context-viewer-part" data-role={kind}>
+      <summary>
+        <span className="context-viewer-part-label">{label}</span>
+        <span className="context-viewer-part-size">
+          {value === original ? "" : "edited · "}
+          {count(value.length)} characters
+        </span>
+      </summary>
+      <textarea
+        aria-label={label}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        rows={Math.min(20, value.split("\n").length + 1)}
+        spellCheck={!code}
+        className={code ? "context-viewer-code" : undefined}
+      />
+    </details>
   );
 }
 
@@ -162,8 +239,8 @@ function Breakdown({ breakdown }: { breakdown: ContextBreakdown }) {
   return (
     <div className="context-viewer-breakdown">
       <p className="context-viewer-window">
-        Story window: {window.text.length} of {window.available} characters
-        before the cursor
+        Story window: {count(window.text.length)} of {count(window.available)}{" "}
+        characters before the cursor
         {window.truncated
           ? ` (earlier text left out: ${limitReason(window.limitedBy)})`
           : ""}
@@ -173,7 +250,7 @@ function Breakdown({ breakdown }: { breakdown: ContextBreakdown }) {
           : ""}
       </p>
       <p className="context-viewer-budget">
-        Budget: {budget.used} of {budget.limit} {budget.unit}.
+        Budget: {count(budget.used)} of {count(budget.limit)} {budget.unit}.
         {breakdown.position.kind === "scene"
           ? " Facts as of this scene."
           : " Not a scene: facts as at the start of the story."}
@@ -191,7 +268,7 @@ function Breakdown({ breakdown }: { breakdown: ContextBreakdown }) {
               data-included={String(card.included)}
               title={card.text}
             >
-              {card.title} · {card.reasons.join(", ")} · {card.size}{" "}
+              {card.title} · {card.reasons.join(", ")} · {count(card.size)}{" "}
               {budget.unit}
               {card.included ? "" : " · left out to fit the budget"}
             </li>
@@ -203,6 +280,8 @@ function Breakdown({ breakdown }: { breakdown: ContextBreakdown }) {
     </div>
   );
 }
+
+const count = (n: number) => n.toLocaleString("en");
 
 function limitReason(limit: ContextBreakdown["window"]["limitedBy"]): string {
   switch (limit) {

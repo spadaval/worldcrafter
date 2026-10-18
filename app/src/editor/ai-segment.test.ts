@@ -354,6 +354,24 @@ describe("writer edits touching a generating segment", () => {
     roundTrip(editor, 1);
   });
 
+  test("dragging text out of it (a delete at the dragged range) stops it first", async () => {
+    const { editor, generation, stops } = await streaming();
+    // slate-react's drop: the caret moves to the drop point, then the
+    // dragged range is deleted there and the fragment inserted.
+    const dragged = {
+      anchor: { path: [1, 1, 0], offset: 0 },
+      focus: { path: [1, 1, 0], offset: 3 },
+    };
+    const fragment = editor.api.fragment(dragged);
+    editor.tf.select({ path: [2, 0], offset: 0 });
+    editor.tf.delete({ at: dragged });
+    expect(stops).toEqual(["stopped"]);
+    editor.tf.insertFragment(fragment);
+    expect(texts(segment(editor, 1))).toEqual(["Hello", "ld"]);
+    expect(show(generation, "Hello\nworld wide")).toBe(false);
+    expect(texts(segment(editor, 1))).toEqual(["Hello", "ld"]);
+  });
+
   test("typing over a selection reaching out of the segment stops it first", async () => {
     const { editor, generation } = await streaming();
     editor.tf.select({

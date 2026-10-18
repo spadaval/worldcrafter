@@ -1,3 +1,4 @@
+import { ElementApi } from "platejs";
 import {
   PlateContent,
   useEditorRef,
@@ -9,13 +10,16 @@ import {
   type CSSProperties,
   memo,
   type ReactNode,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { SegmentModelsContext } from "~/editor/elements";
+import type { AiSegmentStatus } from "~/content/schema";
+import type { DocumentEditor } from "~/editor/document-editor";
+import { SegmentActionsContext, SegmentModelsContext } from "~/editor/elements";
 import { assignKeys, LayerPlugin, type NoteKey } from "~/editor/layer-plugin";
 import {
   type GlossNote,
@@ -26,12 +30,17 @@ import {
   stackNotes,
 } from "~/layers/model";
 import type { DocumentSession } from "~/workspace/document-session";
+import type { Slip } from "./generation";
+import { RequestSlip, SegmentActions } from "./generation-ui";
 import { useServices, useStore } from "./hooks";
 import type { NoteResolution } from "./layers";
 import { entryNames } from "./world";
 
 /** Space between stacked notes in the gloss column. */
 const NOTE_GAP = 14;
+
+/** One line of prose (19px at 1.62), to align the slip with a block's last line. */
+const PROSE_LINE = 31;
 
 const sameKeys = (
   a: ReadonlyMap<string, NoteKey>,
@@ -49,6 +58,9 @@ const sameKeys = (
  *
  * Layer toggles reach the prose only as `data-layer-*` attributes on this
  * element; the prose itself is memoised and never re-renders for a toggle.
+ *
+ * The request slip, when open for this document, takes the gloss column's
+ * place beside the block its output follows (or the segment it made).
  */
 export function Sheet({
   session,
@@ -57,7 +69,7 @@ export function Sheet({
   session: DocumentSession;
   head: ReactNode;
 }) {
-  const { layers, layerSource, worldIndex, workspace, manuscript } =
+  const { layers, layerSource, worldIndex, workspace, manuscript, generation } =
     useServices();
   const editor = useEditorRef();
   const state = useStore(layers);
@@ -101,8 +113,29 @@ export function Sheet({
     redecorate();
   }, [editor, redecorate, sceneLayers, names, keys, dismissed]);
 
-  const [models, setModels] = useState<ReadonlyMap<string, string>>(new Map());
+  const openSlip = useStore(generation.slip);
+  const slip = openSlip?.documentId === documentId ? openSlip : null;
+  // When the slip goes (its output placed, say) with focus in it, focus
+  // would fall to the page: give it back to the text.
+  const hadSlip = useRef(false);
   useEffect(() => {
+    if (hadSlip.current && !slip && document.activeElement === document.body) {
+      session.editor.tf.focus();
+    }
+    hadSlip.current = slip !== null;
+  }, [slip, session]);
+  const idle = useStore(generation.active(documentId)) === null;
+  const segmentActions = useCallback(
+    (segment: { id: string; status: AiSegmentStatus }) => (
+      <SegmentActions documentId={documentId} {...segment} />
+    ),
+    [documentId],
+  );
+
+  const [models, setModels] = useState<ReadonlyMap<string, string>>(new Map());
+  // Read again when a generation ends: it may have made a segment.
+  useEffect(() => {
+    if (!idle) return;
     let current = true;
     void manuscript.segmentModels(documentId).then((result) => {
       if (current && result.isOk()) setModels(result.value);
@@ -110,7 +143,7 @@ export function Sheet({
     return () => {
       current = false;
     };
-  }, [manuscript, documentId]);
+  }, [manuscript, documentId, idle]);
 
   const sheetRef = useRef<HTMLDivElement>(null);
   const layerAttributes = Object.fromEntries(
@@ -118,23 +151,31 @@ export function Sheet({
   );
   return (
     <SegmentModelsContext value={models}>
-      <div className="sheet" ref={sheetRef} {...layerAttributes}>
-        <div className="sheet-head">{head}</div>
-        <Prose readOnly={session.readOnly} />
-        <Gloss
-          sheetRef={sheetRef}
-          notes={sceneLayers.notes}
-          marked={
-            sceneLayers.notes.length > 0 ||
-            sceneLayers.marks.length > 0 ||
-            sceneLayers.speakers.length > 0
-          }
-          keys={keys}
-          on={on}
-          resolutions={resolutions}
-          onResolve={layerSource.resolve}
-        />
-      </div>
+      <SegmentActionsContext value={segmentActions}>
+        <div className="sheet" ref={sheetRef} {...layerAttributes}>
+          <div className="sheet-head">{head}</div>
+          <Prose readOnly={session.readOnly} />
+          <Gloss
+            sheetRef={sheetRef}
+            editor={session.editor}
+            slip={slip}
+            onCloseSlip={() => {
+              generation.closeSlip();
+              session.editor.tf.focus();
+            }}
+            notes={sceneLayers.notes}
+            marked={
+              sceneLayers.notes.length > 0 ||
+              sceneLayers.marks.length > 0 ||
+              sceneLayers.speakers.length > 0
+            }
+            keys={keys}
+            on={on}
+            resolutions={resolutions}
+            onResolve={layerSource.resolve}
+          />
+        </div>
+      </SegmentActionsContext>
     </SegmentModelsContext>
   );
 }
@@ -153,9 +194,39 @@ const Prose = memo(function Prose({ readOnly }: { readOnly: boolean }) {
 interface Layout {
   readonly tops: ReadonlyMap<string, number>;
   readonly height: number;
+  /** Where the request slip sits, when it is open. */
+  readonly slip: number | null;
 }
 
-const EMPTY_LAYOUT: Layout = { tops: new Map(), height: 0 };
+const EMPTY_LAYOUT: Layout = { tops: new Map(), height: 0, slip: null };
+
+/**
+ * The block a slip is beside: the segment it regenerates, else the block
+ * its output follows, else the last block. With where to line up: a
+ * segment's top, or a block's last line.
+ */
+function slipAnchor(
+  editor: DocumentEditor,
+  slip: Slip,
+): { element: HTMLElement; edge: "top" | "last-line" } | undefined {
+  const id = slip.replaces ?? slip.record.after;
+  const node =
+    id === null
+      ? editor.children.at(-1)
+      : editor.children.find(
+          (block) => ElementApi.isElement(block) && block.id === id,
+        );
+  if (!node) return undefined;
+  try {
+    const element = editor.api.toDOMNode(node);
+    return element
+      ? { element, edge: slip.replaces ? "top" : "last-line" }
+      : undefined;
+  } catch {
+    // Not rendered (yet).
+    return undefined;
+  }
+}
 
 /**
  * Lettered notes beside the words they are about, each on a leader line from
@@ -165,6 +236,9 @@ const EMPTY_LAYOUT: Layout = { tops: new Map(), height: 0 };
  */
 function Gloss({
   sheetRef,
+  editor,
+  slip,
+  onCloseSlip,
   notes,
   marked,
   keys,
@@ -173,6 +247,9 @@ function Gloss({
   onResolve,
 }: {
   sheetRef: React.RefObject<HTMLDivElement | null>;
+  editor: DocumentEditor;
+  slip: Slip | null;
+  onCloseSlip: () => void;
   notes: readonly GlossNote[];
   /** Whether the bookkeeping has marked this document at all. */
   marked: boolean;
@@ -183,6 +260,7 @@ function Gloss({
 }) {
   const glossRef = useRef<HTMLDivElement>(null);
   const noteRefs = useRef(new Map<string, HTMLElement>());
+  const slipRef = useRef<HTMLElement>(null);
   const [layout, setLayout] = useState<Layout>(EMPTY_LAYOUT);
   const version = useEditorVersion();
 
@@ -199,8 +277,11 @@ function Gloss({
         },
       ),
     );
+  // The slip has the column to itself while it is open.
   const visible = new Set(
-    keyed.filter((note) => on.has(note.layer)).map((note) => note.id),
+    slip
+      ? []
+      : keyed.filter((note) => on.has(note.layer)).map((note) => note.id),
   );
   const visibleKey = [...visible].join(" ");
   const keyedKey = keyed.map((note) => note.id).join(" ");
@@ -241,15 +322,52 @@ function Gloss({
         top + (noteRefs.current.get(id)?.offsetHeight ?? 0),
       );
     }
-    setLayout((previous) =>
-      sameLayout(previous, { tops, height }) ? previous : { tops, height },
-    );
+    let slipTop: number | null = null;
+    if (slip && slipRef.current) {
+      const anchor = slipAnchor(editor, slip);
+      const rect = anchor?.element.getBoundingClientRect();
+      slipTop =
+        anchor && rect
+          ? Math.max(
+              0,
+              Math.round(
+                (anchor.edge === "top" ? rect.top : rect.bottom - PROSE_LINE) -
+                  base,
+              ),
+            )
+          : 0;
+      height = Math.max(height, slipTop + slipRef.current.offsetHeight);
+    }
+    const next = { tops, height, slip: slipTop };
+    setLayout((previous) => (sameLayout(previous, next) ? previous : next));
   };
 
   // Layer toggles and note changes: place before paint, so a note appears
   // where it belongs in the same frame as its marks.
+  const slipKey = slip ? `${slip.record.id} ${slip.sending}` : "";
   // biome-ignore lint/correctness/useExhaustiveDependencies: these keys are what changes the layout
-  useLayoutEffect(() => measure.current(), [visibleKey, keyedKey]);
+  useLayoutEffect(() => measure.current(), [visibleKey, keyedKey, slipKey]);
+
+  // A new slip: bring it into view, ready to send, and follow its size.
+  const slipId = slip?.record.id;
+  useEffect(() => {
+    const element = slipRef.current;
+    if (!slipId || !element) return;
+    const frame = requestAnimationFrame(() => {
+      element.scrollIntoView?.({ block: "nearest" });
+      // Ready to send with Enter, but only if Send can be seen.
+      const send = element.querySelector<HTMLElement>(".context-viewer-send");
+      const box = send?.getBoundingClientRect();
+      const seen = box && box.top >= 0 && box.bottom <= window.innerHeight;
+      (seen && send ? send : element).focus({ preventScroll: true });
+    });
+    const observer = new ResizeObserver(() => measure.current());
+    observer.observe(element);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [slipId]);
 
   // Edits move words; measure once they've laid out.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the editor version is the trigger
@@ -268,9 +386,11 @@ function Gloss({
   }, [sheetRef]);
 
   const shown = [...visible].filter((id) => layout.tops.has(id)).length;
-  const hint = marked
-    ? glossHint(on, shown)
-    : "No notes in this document yet. Notes attach to the words they're about.";
+  const hint = slip
+    ? null
+    : marked
+      ? glossHint(on, shown)
+      : "No notes in this document yet. Notes attach to the words they're about.";
   return (
     <aside
       className="gloss-column"
@@ -299,7 +419,26 @@ function Gloss({
             />
           );
         })}
+        {slip && layout.slip !== null && (
+          <line
+            className="leader"
+            data-visible="true"
+            pathLength={1}
+            x1={8}
+            x2={34}
+            y1={layout.slip + 9.5}
+            y2={layout.slip + 9.5}
+          />
+        )}
       </svg>
+      {slip && (
+        <RequestSlip
+          ref={slipRef}
+          slip={slip}
+          style={layout.slip === null ? undefined : { top: layout.slip }}
+          onClose={onCloseSlip}
+        />
+      )}
       {hint && <p className="gloss-hint">{hint}</p>}
       {keyed.map((note) => {
         const key = keys.get(note.id);
@@ -329,7 +468,7 @@ function sameLayout(a: Layout, b: Layout) {
     x: ReadonlyMap<string, number>,
     y: ReadonlyMap<string, number>,
   ) => x.size === y.size && [...x].every(([id, value]) => y.get(id) === value);
-  return a.height === b.height && same(a.tops, b.tops);
+  return a.height === b.height && a.slip === b.slip && same(a.tops, b.tops);
 }
 
 function glossHint(on: ReadonlySet<LayerId>, shown: number): ReactNode {

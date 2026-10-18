@@ -14,6 +14,13 @@ function alternative(token: string, entry: Obj): TokenAlternative {
   const out: TokenAlternative = { token };
   const logprob = num(entry.logprob);
   const prob = num(entry.prob);
+  const { bytes } = entry;
+  if (
+    Array.isArray(bytes) &&
+    bytes.every((b) => Number.isInteger(b) && b >= 0 && b <= 255)
+  ) {
+    out.bytes = bytes;
+  }
   if (logprob !== undefined) out.logprob = logprob;
   if (prob !== undefined) out.prob = prob;
   return out;

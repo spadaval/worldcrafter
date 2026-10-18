@@ -4,6 +4,7 @@ import { SseParser } from "./sse";
 import type {
   BackendProfile,
   Completion,
+  InvalidRequestError,
   JsonObject,
   LlmError,
   LlmInput,
@@ -44,10 +45,80 @@ export function buildRequest(
   else body.prompt = input.prompt;
   body.stream = options.stream;
 
-  const base = profile.baseUrl.replace(/\/+$/, "");
   const endpoint = input.kind;
-  const path = endpoint === "chat" ? "/chat/completions" : "/completions";
-  return { profile: profile.name, endpoint, url: base + path, body };
+  return {
+    profile: profile.name,
+    endpoint,
+    url: endpointUrl(profile, endpoint),
+    body,
+  };
+}
+
+function endpointUrl(
+  profile: BackendProfile,
+  endpoint: LlmRequest["endpoint"],
+): string {
+  const base = profile.baseUrl.replace(/\/+$/, "");
+  return base + (endpoint === "chat" ? "/chat/completions" : "/completions");
+}
+
+const ROLES = new Set(["system", "user", "assistant"]);
+
+/**
+ * Checks that `request` can be sent with `profile`: it names the profile, its
+ * URL is the profile's endpoint (so an edited URL can't carry the profile's
+ * key to another host), and its body has the input its endpoint reads
+ * (`messages` for chat, `prompt` for completions) and not the other one.
+ */
+export function checkRequest(
+  profile: BackendProfile,
+  request: LlmRequest,
+): Result<void, InvalidRequestError> {
+  const { url, body, endpoint } = request;
+  const invalid = (message: string) =>
+    err<void, InvalidRequestError>({ kind: "invalid_request", url, message });
+  if (request.profile !== profile.name) {
+    return invalid(
+      `The request is for profile "${request.profile}", not "${profile.name}"`,
+    );
+  }
+  const expected = endpointUrl(profile, endpoint);
+  if (url !== expected) {
+    return invalid(
+      `The request URL ${url} is not profile "${profile.name}"'s ${endpoint} endpoint ${expected}`,
+    );
+  }
+  if (endpoint === "chat") {
+    const { messages } = body;
+    const valid =
+      Array.isArray(messages) &&
+      messages.every(
+        (m) =>
+          isRecord(m) &&
+          typeof m.role === "string" &&
+          ROLES.has(m.role) &&
+          typeof m.content === "string",
+      );
+    if (!valid) {
+      return invalid(
+        "A chat request needs messages, each with a role (system, user or assistant) and text content",
+      );
+    }
+    if (body.prompt !== undefined) {
+      return invalid("A chat request can't have a prompt; use messages");
+    }
+  } else {
+    if (typeof body.prompt !== "string") {
+      return invalid("A completion request needs a text prompt");
+    }
+    if (body.messages !== undefined) {
+      return invalid("A completion request can't have messages; use prompt");
+    }
+  }
+  if (body.stream !== undefined && typeof body.stream !== "boolean") {
+    return invalid("stream must be true or false");
+  }
+  return ok(undefined);
 }
 
 export type SendOptions = {
@@ -62,8 +133,9 @@ export type SendOptions = {
 
 /**
  * Sends `request` with `profile`'s credentials. Streams when
- * `request.body.stream` is true. Every failure, including aborts, resolves as
- * an `Err`; the returned promise never rejects.
+ * `request.body.stream` is true. A request that fails `checkRequest` is not
+ * sent. Every failure, including aborts, resolves as an `Err`; the returned
+ * promise never rejects.
  */
 export function send(
   profile: BackendProfile,
@@ -85,6 +157,8 @@ async function sendAsync(
   request: LlmRequest,
   options: SendOptions,
 ): Promise<Result<Completion, LlmError>> {
+  const checked = checkRequest(profile, request);
+  if (checked.isErr()) return err(checked.error);
   const { url } = request;
   const { signal } = options;
   const aborted: LlmError = {

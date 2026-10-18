@@ -1,4 +1,5 @@
 import type {
+  BatchWrite,
   CollectionName,
   NotFoundError,
   Snapshot,
@@ -48,4 +49,30 @@ export function snapshotInfo(snapshot: Snapshot): SnapshotInfo {
     reason: snapshot.reason,
     createdAt: snapshot.createdAt,
   };
+}
+
+/** Where a batch failure is reported: its first write's collection and key. */
+export function batchContext(writes: readonly BatchWrite[]): FailureContext {
+  const first = writes[0];
+  if (first === undefined) return { operation: "save" };
+  switch (first.kind) {
+    case "saveDocument":
+      return {
+        operation: "save",
+        collection: "documents",
+        id: first.record.id,
+      };
+    case "saveAnnotation":
+      return {
+        operation: "save",
+        collection: "annotations",
+        id: first.record.id,
+      };
+    case "saveSnapshot":
+      return {
+        operation: "save",
+        collection: "snapshots",
+        id: first.snapshot.documentId,
+      };
+  }
 }

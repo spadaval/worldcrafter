@@ -191,6 +191,16 @@ export interface SnapshotCollection {
 }
 
 /**
+ * One write in a `StorageAdapter.batch`. The kinds are the ones accepting an
+ * AI segment needs together (the document, its provenance record, and the
+ * revision snapshot); add a kind when another flow needs one.
+ */
+export type BatchWrite =
+  | { readonly kind: "saveDocument"; readonly record: StoredDocument }
+  | { readonly kind: "saveAnnotation"; readonly record: AnnotationRecord }
+  | { readonly kind: "saveSnapshot"; readonly snapshot: NewSnapshot };
+
+/**
  * The only way the app persists data. Deleting a document does not delete its
  * world entry, annotations or requests; callers delete those explicitly. Its
  * snapshots are never deleted (see `SnapshotCollection`).
@@ -206,6 +216,14 @@ export interface StorageAdapter {
   readonly outlines: Collection<StoredOutline>;
   /** Keyed by `id`. A world has one timeline, saved and loaded whole. */
   readonly timelines: Collection<StoredTimeline>;
+  /**
+   * Applies `writes` in order as one atomic step: either all take effect or
+   * none does. Resolves with the info of each snapshot saved, in order. A
+   * failure names the first write's collection.
+   */
+  batch(
+    writes: readonly BatchWrite[],
+  ): ResultAsync<SnapshotInfo[], StorageError>;
   /** Releases the store. Later operations fail with a `StorageFailure`. */
   close(): void;
 }

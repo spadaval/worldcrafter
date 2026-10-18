@@ -332,6 +332,83 @@ describe("document session", () => {
       expect(await contents(storage)).toHaveLength(3);
     });
 
+    test("saveWith writes the document, its records and a snapshot in one batch", async () => {
+      const storage = createMemoryStorage();
+      (await storage.documents.save(document()))._unsafeUnwrap();
+      let failBatch = true;
+      const flaky: StorageAdapter = {
+        ...storage,
+        batch: (writes) =>
+          failBatch
+            ? errAsync({
+                kind: "failure",
+                operation: "save",
+                collection: "documents",
+                message: "Storage save documents failed: disk full",
+                cause: null,
+              })
+            : storage.batch(writes),
+        // The connection closes a failing adapter before trying to reopen.
+        close: () => undefined,
+      };
+      const session = await open(sessionOptions(flaky));
+      const record = {
+        id: "seg",
+        documentId: "doc1",
+        kind: "ai_provenance_archived",
+        data: { requestId: "r1" },
+        updatedAt: 100,
+      };
+      session.editor.tf.unwrapNodes({ at: [5] });
+      await tick();
+
+      // A failed batch writes nothing and keeps everything for the retry.
+      expect(
+        await session.saveWith({
+          annotations: [record],
+          snapshot: "accepted_ai_change",
+        }),
+      ).toMatchObject({ kind: "failed" });
+      expect(session.hasUnsavedChanges()).toBe(true);
+      expect(
+        (await storage.documents.load("doc1"))._unsafeUnwrap().content,
+      ).toEqual(STORED);
+      expect((await storage.annotations.list())._unsafeUnwrap()).toEqual([]);
+      expect(await contents(storage)).toHaveLength(1);
+
+      failBatch = false;
+      expect(await session.flush()).toEqual({ kind: "saved" });
+      expect(session.hasUnsavedChanges()).toBe(false);
+      const saved = (await storage.documents.load("doc1"))._unsafeUnwrap();
+      expect(JSON.stringify(saved.content)).not.toContain("ai_segment");
+      expect((await storage.annotations.load("seg"))._unsafeUnwrap()).toEqual(
+        record,
+      );
+      expect((await contents(storage)).at(-1)).toEqual({
+        reason: "accepted_ai_change",
+        content: saved.content,
+      });
+    });
+
+    test("saveWith with no content change still writes its records", async () => {
+      const storage = createMemoryStorage();
+      (await storage.documents.save(document()))._unsafeUnwrap();
+      const session = await open(sessionOptions(storage));
+      const record = {
+        id: "seg",
+        documentId: "doc1",
+        kind: "ai_provenance",
+        data: {},
+        updatedAt: 100,
+      };
+      expect(await session.saveWith({ annotations: [record] })).toEqual({
+        kind: "saved",
+      });
+      expect((await storage.annotations.load("seg"))._unsafeUnwrap()).toEqual(
+        record,
+      );
+    });
+
     test("a read-only session takes no snapshots", async () => {
       const storage = createMemoryStorage();
       (await storage.documents.save(document()))._unsafeUnwrap();

@@ -1,11 +1,12 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import type { Result } from "neverthrow";
-import { buildRequest, send } from "./client";
+import { buildRequest, checkRequest, send } from "./client";
 import { SseParser } from "./sse";
 import type {
   BackendProfile,
   Completion,
   LlmError,
+  LlmRequest,
   StreamDelta,
 } from "./types";
 
@@ -156,6 +157,15 @@ describe("non-streaming", () => {
                     { token: "A", logprob: -2.5 },
                   ],
                 },
+                // Half of "é": the token text can't show it, the bytes can.
+                {
+                  token: "\ufffd",
+                  bytes: [195],
+                  logprob: -0.4,
+                  top_logprobs: [
+                    { token: "\ufffd", bytes: [195], logprob: -0.4 },
+                  ],
+                },
               ],
             },
           },
@@ -180,6 +190,12 @@ describe("non-streaming", () => {
             { token: "The", logprob: -0.1 },
             { token: "A", logprob: -2.5 },
           ],
+        },
+        {
+          token: "\ufffd",
+          bytes: [195],
+          logprob: -0.4,
+          top: [{ token: "\ufffd", bytes: [195], logprob: -0.4 }],
         },
       ],
     });
@@ -514,6 +530,89 @@ describe("streaming", () => {
   });
 });
 
+describe("checking a request before sending", () => {
+  const chat = () =>
+    buildRequest(
+      profile,
+      { kind: "chat", messages: [{ role: "user", content: "Go on." }] },
+      { stream: true },
+    );
+  const completion = () =>
+    buildRequest(
+      profile,
+      { kind: "completion", prompt: "Once" },
+      { stream: true },
+    );
+
+  test.each<[string, () => LlmRequest, string]>([
+    [
+      "a URL edited to another host",
+      () => ({
+        ...chat(),
+        url: "https://elsewhere.example/v1/chat/completions",
+      }),
+      "is not profile",
+    ],
+    [
+      "a URL for the other endpoint",
+      () => ({ ...chat(), url: completion().url }),
+      "is not profile",
+    ],
+    [
+      "another profile's request",
+      () => ({ ...chat(), profile: "openrouter" }),
+      'for profile "openrouter"',
+    ],
+    [
+      "a chat body with a prompt instead of messages",
+      () => ({ ...chat(), body: { prompt: "Once", stream: true } }),
+      "needs messages",
+    ],
+    [
+      "a chat body with a prompt as well",
+      () => ({ ...chat(), body: { ...chat().body, prompt: "Once" } }),
+      "can't have a prompt",
+    ],
+    [
+      "a chat message with an unknown role",
+      () => ({
+        ...chat(),
+        body: { messages: [{ role: "tool", content: "x" }] },
+      }),
+      "needs messages",
+    ],
+    [
+      "a completion body with messages instead of a prompt",
+      () => ({ ...completion(), body: { messages: [] } }),
+      "needs a text prompt",
+    ],
+    [
+      "a completion body with messages as well",
+      () => ({ ...completion(), body: { ...completion().body, messages: [] } }),
+      "can't have messages",
+    ],
+    [
+      "a stream flag that isn't a boolean",
+      () => ({ ...completion(), body: { prompt: "x", stream: "yes" } }),
+      "stream must be",
+    ],
+  ])("refuses %s without sending it", async (_, make, reason) => {
+    const request = make();
+    expect(checkRequest(profile, request)._unsafeUnwrapErr()).toMatchObject({
+      kind: "invalid_request",
+      url: request.url,
+    });
+    const error = expectErr(await send(profile, request), "invalid_request");
+    expect(error.message).toContain(reason);
+    expect(received).toHaveLength(0);
+  });
+
+  test("accepts what buildRequest assembles", () => {
+    expect(checkRequest(profile, chat()).isOk()).toBe(true);
+    expect(checkRequest(profile, completion()).isOk()).toBe(true);
+  });
+});
+
 describe("failures", () => {
   test.each([
     400, 503,
@@ -557,12 +656,13 @@ describe("failures", () => {
     const closed = Bun.serve({ port: 0, fetch: () => new Response() });
     const port = closed.port;
     await closed.stop(true);
+    const unreachable = { ...profile, baseUrl: `http://localhost:${port}/v1` };
     const request = buildRequest(
-      { ...profile, baseUrl: `http://localhost:${port}/v1` },
+      unreachable,
       { kind: "chat", messages: [] },
       { stream: true },
     );
-    const error = expectErr(await send(profile, request), "network");
+    const error = expectErr(await send(unreachable, request), "network");
     expect(error.url).toBe(`http://localhost:${port}/v1/chat/completions`);
   });
 

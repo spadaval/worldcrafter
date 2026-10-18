@@ -3,6 +3,8 @@ import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { errAsync, okAsync } from "neverthrow";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import { parseGeneratedText } from "~/content/generated-text";
+import { startGeneration } from "~/editor/ai-segment";
 import { createLayerStore } from "~/layers/state";
 import { createMemoryStorage } from "~/storage/memory";
 import type { JsonValue, StorageAdapter } from "~/storage/types";
@@ -39,8 +41,8 @@ const CONTENT: JsonValue = [
   {
     type: "ai_segment",
     id: "seg",
-    status: "generating",
-    children: [{ type: "p", id: "s1", children: [{ text: "Arriving" }] }],
+    status: "ready",
+    children: [{ type: "p", id: "s1", children: [{ text: "Arrived" }] }],
   },
   { type: "placeholder", id: "ph", children: [{ text: "Describe it" }] },
 ];
@@ -173,11 +175,24 @@ test("links render with safe hrefs only", async () => {
 });
 
 test("AI segments, placeholders and rules render", async () => {
-  const view = await render(await setup(), "/doc/doc1");
+  const workspace = await setup();
+  const view = await render(workspace, "/doc/doc1");
   const segment = view.querySelector('section[data-ai-segment="seg"]');
-  expect(segment?.getAttribute("data-status")).toBe("generating");
-  expect(segment?.getAttribute("aria-busy")).toBe("true");
-  expect(segment?.textContent).toContain("Arriving");
+  expect(segment?.getAttribute("data-status")).toBe("ready");
+  expect(segment?.textContent).toContain("Arrived");
+  // Only a live generation is "generating" (a stored one loads ready).
+  const editor = workspace.session("doc1")?.editor;
+  if (!editor) throw new Error("expected the session");
+  await act(async () => {
+    startGeneration(editor, "live", {
+      kind: "insert",
+      index: 3,
+    })?.generation.render(parseGeneratedText("Arriving"), 0);
+  });
+  const live = view.querySelector('section[data-ai-segment="live"]');
+  expect(live?.getAttribute("data-status")).toBe("generating");
+  expect(live?.getAttribute("aria-busy")).toBe("true");
+  expect(live?.textContent).toContain("Arriving");
   expect(view.querySelector("[data-placeholder]")?.textContent).toBe(
     "Describe it",
   );

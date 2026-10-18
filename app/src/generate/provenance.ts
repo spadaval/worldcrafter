@@ -9,7 +9,11 @@
  *   blocks, listed in `blocks`) or `replaced` (regenerated; `by` is the new
  *   segment, whose record keeps the replaced segment's blocks as they were
  *   in `replaces.content`, so regenerating never loses text, including the
- *   writer's edits).
+ *   writer's edits). When the replacement wasn't kept (the writer deleted it
+ *   mid-stream), `by` is null and the archive itself keeps the blocks in
+ *   `content`. A replaced segment with no record of its own (made before
+ *   provenance, or never saved) gets an archived record with a null
+ *   `requestId`, so its blocks are still kept.
  *
  * Records are never deleted. A segment ID names one output: regenerating
  * mints a new segment ID, so a record's key always means the same output.
@@ -60,7 +64,12 @@ export type Provenance = {
 
 export type Archive =
   | { reason: "accepted"; at: number; blocks: string[] }
-  | { reason: "replaced"; at: number; by: string };
+  | {
+      reason: "replaced";
+      at: number;
+      by: string | null;
+      content?: JsonValue;
+    };
 
 const INPUT_KEYS = new Set(["messages", "prompt", "model", "stream"]);
 
@@ -92,7 +101,8 @@ export function provenanceRecord(
 export type StoredProvenance = {
   record: AnnotationRecord;
   data: { [key: string]: JsonValue };
-  requestId: string;
+  /** Null only for an archive of output that had no record. */
+  requestId: string | null;
   archived: boolean;
 };
 
@@ -108,7 +118,10 @@ export function readProvenance(
     data === null ||
     Array.isArray(data) ||
     data.version !== PROVENANCE_VERSION ||
-    typeof data.requestId !== "string"
+    !(
+      typeof data.requestId === "string" ||
+      (data.requestId === null && record.kind === ARCHIVED_PROVENANCE)
+    )
   ) {
     return err(
       `provenance ${record.id} must be a version ${PROVENANCE_VERSION} object with a requestId`,
@@ -122,7 +135,22 @@ export function readProvenance(
   });
 }
 
-/** The archived form of an active provenance record. */
+/** An archived record for replaced output that had no record of its own. */
+export function unrecordedArchive(
+  documentId: string,
+  segmentId: string,
+  archive: Archive,
+): AnnotationRecord {
+  return {
+    id: segmentId,
+    documentId,
+    kind: ARCHIVED_PROVENANCE,
+    data: { version: PROVENANCE_VERSION, requestId: null, archived: archive },
+    updatedAt: archive.at,
+  };
+}
+
+/** The archived form of a provenance record. */
 export function archiveRecord(
   stored: StoredProvenance,
   archive: Archive,

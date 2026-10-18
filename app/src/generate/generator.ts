@@ -38,7 +38,15 @@
  *   removed (for a regeneration, the replaced segment is put back as it
  *   was), since there is nothing to keep; the request stays stored.
  * - If the writer deletes or undoes the segment while it generates, the
- *   request is cancelled and nothing more is written.
+ *   request is cancelled and nothing more is written, except that a
+ *   regeneration whose replaced segment is gone too archives the replaced
+ *   blocks in that segment's record.
+ * - "Generating" is session-only (`editor/ai-segment.ts`): a segment saved
+ *   mid-stream reopens ready, with no provenance, so it can be accepted but
+ *   not regenerated.
+ * - Streamed text is shown at most once per frame (`scheduleRender`), and
+ *   only the line still arriving is parsed again, so a long output costs
+ *   about as much as its length.
  * - One generation runs at a time per document.
  */
 
@@ -50,9 +58,9 @@ import {
   type Result,
   ResultAsync,
 } from "neverthrow";
-import { nanoid } from "platejs";
+import { nanoid, type TElement } from "platejs";
 import { canonicalize } from "~/content/canonicalize";
-import { parseGeneratedText } from "~/content/generated-text";
+import { GeneratedTextStream } from "~/content/generated-text";
 import { blockText } from "~/content/projections";
 import {
   type ContentDocument,
@@ -72,13 +80,10 @@ import type {
   RevisionRecord,
 } from "~/context/requests";
 import {
-  insertGeneratingSegment,
-  removeSegment,
-  renderSegment,
-  replaceWithGeneratingSegment,
-  restoreSegment,
+  type SegmentGeneration,
+  type SegmentPlacement,
   segmentIndex,
-  setSegmentStatus,
+  startGeneration,
   unwrapSegment,
 } from "~/editor/ai-segment";
 import { checkRequest, send as sendRequest } from "~/llm/client";
@@ -99,6 +104,7 @@ import type { TimelineStoreError } from "~/time/store";
 import type { DocumentSession, SaveStatus } from "~/workspace/document-session";
 import { createStore, type Store } from "~/workspace/store";
 import {
+  type Archive,
   archiveRecord,
   type GenerationOutcome,
   PROVENANCE_VERSION,
@@ -107,6 +113,7 @@ import {
   readProvenance,
   type StoredProvenance,
   samplerOf,
+  unrecordedArchive,
 } from "./provenance";
 
 export type GenerateError =
@@ -207,6 +214,27 @@ export interface GeneratorOptions {
   readonly profile: (name: string) => BackendProfile | undefined;
   readonly now?: () => number;
   readonly newId?: () => string;
+  /**
+   * Schedules showing streamed text; returns a function that cancels it.
+   * Deltas arriving before it runs are shown together. Defaults to the next
+   * animation frame (a 16 ms timeout where there is none).
+   */
+  readonly scheduleRender?: (render: () => void) => () => void;
+}
+
+export const nextFrame = (render: () => void): (() => void) => {
+  if (typeof requestAnimationFrame === "function") {
+    const handle = requestAnimationFrame(() => render());
+    return () => cancelAnimationFrame(handle);
+  }
+  const handle = setTimeout(render, 16);
+  return () => clearTimeout(handle);
+};
+
+/** The blocks of a segment node, as stored content. */
+function blocksOf(node: TElement): JsonValue {
+  // Editor nodes are plain JSON.
+  return canonicalize(node.children) as JsonValue;
 }
 
 export function createGenerator(options: GeneratorOptions): Generator {
@@ -214,6 +242,7 @@ export function createGenerator(options: GeneratorOptions): Generator {
   const { documentId, editor } = session;
   const now = options.now ?? Date.now;
   const newId = options.newId ?? nanoid;
+  const scheduleRender = options.scheduleRender ?? nextFrame;
   const active = createStore<ActiveGeneration | null>(null);
   let controller: AbortController | null = null;
   /**
@@ -344,64 +373,77 @@ export function createGenerator(options: GeneratorOptions): Generator {
       });
   }
 
-  type Placement = { segmentId: string; replaced: StoredReplaced | null };
-  type StoredReplaced = {
+  type Placement = {
     segmentId: string;
-    node: NonNullable<ReturnType<typeof replaceWithGeneratingSegment>>;
+    generation: SegmentGeneration;
+    /** The segment this generation replaces, as it was. */
+    replaced: { segmentId: string; node: TElement } | null;
   };
 
   /** Puts a generating segment where `target` says. */
   function place(target: GenerationTarget): Result<Placement, GenerateError> {
     const segmentId = newId();
+    let placement: SegmentPlacement;
     if (target.kind === "replace") {
       const ready = readySegment(target.segmentId);
       if (ready.isErr()) return err(ready.error);
-      const node = replaceWithGeneratingSegment(
-        editor,
-        target.segmentId,
-        segmentId,
-      );
-      if (!node) {
-        return err({
-          kind: "segment_not_found",
-          documentId,
-          segmentId: target.segmentId,
-        });
+      placement = { kind: "replace", segmentId: target.segmentId };
+    } else if (target.blockId === null) {
+      placement = { kind: "insert", index: editor.children.length };
+    } else {
+      const { blockId } = target;
+      const at = editor.children.findIndex((node) => node.id === blockId);
+      if (at === -1) {
+        return err({ kind: "block_not_found", documentId, blockId });
       }
-      return ok({
-        segmentId,
-        replaced: { segmentId: target.segmentId, node },
+      placement = { kind: "insert", index: at + 1 };
+    }
+    const started = startGeneration(editor, segmentId, placement);
+    if (!started) {
+      return err({
+        kind: "segment_not_found",
+        documentId,
+        segmentId: target.kind === "replace" ? target.segmentId : segmentId,
       });
     }
-    const { blockId } = target;
-    let index = editor.children.length;
-    if (blockId !== null) {
-      const at = editor.children.findIndex((node) => node.id === blockId);
-      if (at === -1)
-        return err({ kind: "block_not_found", documentId, blockId });
-      index = at + 1;
-    }
-    insertGeneratingSegment(editor, segmentId, index);
-    return ok({ segmentId, replaced: null });
+    return ok({
+      segmentId,
+      generation: started.generation,
+      replaced:
+        target.kind === "replace" && started.replaced
+          ? { segmentId: target.segmentId, node: started.replaced }
+          : null,
+    });
   }
 
   async function stream(
     profile: BackendProfile,
     requestId: string,
     request: LlmRequest,
-    { segmentId, replaced }: Placement,
+    { segmentId, generation, replaced }: Placement,
   ): Promise<GenerationResult> {
     const startedAt = now();
     const abort = new AbortController();
     controller = abort;
     let text = "";
+    let parser = new GeneratedTextStream();
+    /** Finished paragraphs already shown in their final form. */
+    let shown = 0;
     const logprobs: TokenLogprob[] = [];
     let removed = false;
+    let cancelRender: (() => void) | null = null;
     active.set({ segmentId, requestId, text });
 
-    const render = (raw: string) => {
-      if (!renderSegment(editor, segmentId, parseGeneratedText(raw))) {
-        // The writer deleted or undid the segment.
+    const render = () => {
+      cancelRender = null;
+      const { finished } = parser;
+      const present = generation.render(
+        [...finished.slice(shown), ...parser.tail()],
+        shown,
+      );
+      shown = finished.length;
+      active.set({ segmentId, requestId, text });
+      if (!present) {
         removed = true;
         abort.abort();
       }
@@ -410,12 +452,21 @@ export function createGenerator(options: GeneratorOptions): Generator {
       signal: abort.signal,
       onDelta: (delta) => {
         text += delta.text;
+        parser.push(delta.text);
         logprobs.push(...delta.logprobs);
-        active.set({ segmentId, requestId, text });
-        render(text);
+        cancelRender ??= scheduleRender(render);
       },
     });
     controller = null;
+    (cancelRender as (() => void) | null)?.();
+    if (result.isOk() && result.value.text !== text) {
+      // Not streamed (or the stream disagreed): show the whole response.
+      text = result.value.text;
+      parser = new GeneratedTextStream();
+      parser.push(text);
+      shown = 0;
+    }
+    if (!removed) render();
 
     const done = (
       outcome: GenerationOutcome,
@@ -433,27 +484,36 @@ export function createGenerator(options: GeneratorOptions): Generator {
       };
     };
 
-    if (result.isOk()) {
-      text = result.value.text;
-      if (!removed) render(text);
-    }
     const outcome: GenerationOutcome = result.isOk()
       ? "complete"
       : result.error.kind === "aborted"
         ? "cancelled"
         : "failed";
     const error = result.isErr() ? result.error : undefined;
-    if (removed || segmentIndex(editor, segmentId) === -1) {
+    const at = now();
+    if (removed) {
+      // The writer deleted or undid the new segment. If it replaced one that
+      // is gone too, keep the replaced blocks in the old record.
+      generation.abandon();
+      if (replaced && segmentIndex(editor, replaced.segmentId) === -1) {
+        const archive = await replacedArchive(replaced, null, at);
+        if (archive) {
+          written.set(archive.id, archive);
+          return done(
+            "cancelled",
+            null,
+            await session.saveWith({ annotations: [archive] }),
+          );
+        }
+      }
       return done("cancelled", null, session.status.get());
     }
-    if (parseGeneratedText(text).length === 0) {
-      if (replaced) restoreSegment(editor, segmentId, replaced.node);
-      else removeSegment(editor, segmentId);
+    if (parser.finished.length === 0 && parser.tail().length === 0) {
+      generation.discard();
       return done(outcome, null, await session.flush(), error);
     }
 
-    setSegmentStatus(editor, segmentId, "ready");
-    const at = now();
+    generation.finish();
     const completion = result.isOk() ? result.value : null;
     const provenance: Provenance = {
       version: PROVENANCE_VERSION,
@@ -472,27 +532,41 @@ export function createGenerator(options: GeneratorOptions): Generator {
       startedAt,
       finishedAt: at,
       replaces: replaced
-        ? {
-            segmentId: replaced.segmentId,
-            // Editor nodes are plain JSON.
-            content: canonicalize(replaced.node.children) as JsonValue,
-          }
+        ? { segmentId: replaced.segmentId, content: blocksOf(replaced.node) }
         : null,
     };
     const records = [provenanceRecord(documentId, segmentId, provenance, at)];
     if (replaced) {
-      // A failed load only costs the old record its "replaced" mark: the
-      // replaced blocks are kept in the new record either way.
-      const old = await loadProvenance(replaced.segmentId);
-      if (old.isOk() && old.value && !old.value.archived) {
-        records.push(
-          archiveRecord(old.value, { reason: "replaced", at, by: segmentId }),
-        );
-      }
+      const archive = await replacedArchive(replaced, segmentId, at);
+      if (archive) records.push(archive);
     }
     for (const record of records) written.set(record.id, record);
     const save = await session.saveWith({ annotations: records });
     return done(outcome, segmentId, save, error);
+  }
+
+  /**
+   * The archived record of a replaced segment. `by` is its replacement, or
+   * null when the replacement wasn't kept; then the replaced blocks go in
+   * the archive, since no other record has them. Undefined when its record
+   * can't be read: the record is left as it is rather than overwritten.
+   */
+  async function replacedArchive(
+    replaced: { segmentId: string; node: TElement },
+    by: string | null,
+    at: number,
+  ): Promise<AnnotationRecord | undefined> {
+    const old = await loadProvenance(replaced.segmentId);
+    if (old.isErr()) return undefined;
+    const archive: Archive = {
+      reason: "replaced",
+      at,
+      by,
+      ...(by === null ? { content: blocksOf(replaced.node) } : {}),
+    };
+    return old.value
+      ? archiveRecord(old.value, archive)
+      : unrecordedArchive(documentId, replaced.segmentId, archive);
   }
 
   return {
@@ -510,7 +584,7 @@ export function createGenerator(options: GeneratorOptions): Generator {
       const request: ResultAsync<string, GenerateError> = requestId
         ? okAsync(requestId)
         : loadProvenance(segmentId).andThen((stored) =>
-            stored
+            stored?.requestId
               ? okAsync(stored.requestId)
               : errAsync({
                   kind: "no_provenance" as const,

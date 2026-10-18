@@ -49,6 +49,42 @@ export function parseGeneratedText(text: string): GeneratedParagraph[] {
     .map((line) => ({ type: "p", children: parseInlines(line) }));
 }
 
+/**
+ * Parses output as it streams in. A finished line (one followed by a line
+ * break) parses the same whatever comes after it, so each is parsed once;
+ * only the line still arriving is parsed again. `finished` and `tail`
+ * together equal `parseGeneratedText` of everything pushed.
+ */
+export class GeneratedTextStream {
+  /** Paragraphs of finished lines. Only ever appended to. */
+  readonly finished: GeneratedParagraph[] = [];
+  /** Raw text after the last line break. */
+  private pending = "";
+
+  push(text: string): void {
+    // `pending` holds no line break, so only the new text is searched.
+    let end = -1;
+    for (const match of text.matchAll(LINE_BREAK)) {
+      end = match.index + match[0].length;
+    }
+    if (end === -1) {
+      this.pending += text;
+      return;
+    }
+    this.finished.push(
+      ...parseGeneratedText(this.pending + text.slice(0, end)),
+    );
+    this.pending = text.slice(end);
+  }
+
+  /** The paragraph of the line still arriving, if it has any text. */
+  tail(): GeneratedParagraph[] {
+    return parseGeneratedText(this.pending);
+  }
+}
+
+const LINE_BREAK = /\r\n?|[\n\u2028\u2029\u0085]/g;
+
 function sanitize(text: string): string {
   return (
     text
@@ -98,6 +134,7 @@ function emit(
   out: (Text | Link)[],
   linksAllowed: boolean,
 ): void {
+  const closers = new Closers(source);
   let plain = "";
   const flush = () => {
     if (plain !== "") out.push({ text: plain, ...marks });
@@ -122,7 +159,7 @@ function emit(
         continue;
       }
     }
-    const emphasis = matchEmphasis(source, i);
+    const emphasis = matchEmphasis(source, i, closers);
     if (emphasis) {
       flush();
       emit(
@@ -140,9 +177,56 @@ function emit(
   flush();
 }
 
+/**
+ * For each delimiter, where the nearest valid closing delimiter at or after
+ * each position is, computed once per source so finding a closer is a
+ * lookup and parsing stays linear.
+ */
+class Closers {
+  private readonly next = new Map<string, Int32Array>();
+
+  constructor(private readonly source: string) {}
+
+  /** The first valid closing `delimiter` at or after `from`, or -1. */
+  find(delimiter: string, from: number): number {
+    let table = this.next.get(delimiter);
+    if (!table) {
+      table = this.build(delimiter);
+      this.next.set(delimiter, table);
+    }
+    return from < table.length ? (table[from] as number) : -1;
+  }
+
+  private build(delimiter: string): Int32Array {
+    const { source } = this;
+    const char = delimiter[0] as string;
+    const table = new Int32Array(source.length + 1).fill(-1);
+    for (let close = source.length - 1; close >= 0; close--) {
+      table[close] = isCloser(source, close, delimiter, char)
+        ? close
+        : (table[close + 1] as number);
+    }
+    return table;
+  }
+}
+
+function isCloser(
+  source: string,
+  close: number,
+  delimiter: string,
+  char: string,
+): boolean {
+  if (close === 0 || !source.startsWith(delimiter, close)) return false;
+  const before = source[close - 1] as string;
+  const after = source[close + delimiter.length] ?? "";
+  if (SPACE.test(before) || before === char || after === char) return false;
+  return !(char === "_" && WORD.test(after));
+}
+
 function matchEmphasis(
   source: string,
   at: number,
+  closers: Closers,
 ): { content: string; marks: Marks; end: number } | null {
   for (const { text: delimiter, marks } of DELIMITERS) {
     if (!source.startsWith(delimiter, at)) continue;
@@ -152,21 +236,13 @@ function matchEmphasis(
     // A longer run of the same character is a different delimiter.
     if (first === undefined || first === char || SPACE.test(first)) continue;
     if (char === "_" && WORD.test(source[at - 1] ?? "")) continue;
-    for (
-      let close = source.indexOf(delimiter, start + 1);
-      close !== -1;
-      close = source.indexOf(delimiter, close + 1)
-    ) {
-      const before = source[close - 1] as string;
-      const after = source[close + delimiter.length] ?? "";
-      if (SPACE.test(before) || before === char || after === char) continue;
-      if (char === "_" && WORD.test(after)) continue;
-      return {
-        content: source.slice(start, close),
-        marks,
-        end: close + delimiter.length,
-      };
-    }
+    const close = closers.find(delimiter, start + 1);
+    if (close === -1) continue;
+    return {
+      content: source.slice(start, close),
+      marks,
+      end: close + delimiter.length,
+    };
   }
   return null;
 }

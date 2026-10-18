@@ -16,12 +16,14 @@ import { ListPlugin } from "@platejs/list/react";
 import {
   createSlatePlugin,
   ElementApi,
+  NodeApi,
+  PathApi,
   type SlateEditor,
   type Value,
 } from "platejs";
 import { createPlateEditor, createPlatePlugin } from "platejs/react";
 import { isInternalLinkTarget, isLinkTarget } from "~/content/schema";
-import { AiSegmentGuardPlugin } from "./ai-segment";
+import { GeneratingSegmentPlugin } from "./ai-segment";
 import { BlockIdPlugin } from "./block-id-plugin";
 import {
   AiSegmentElement,
@@ -98,6 +100,26 @@ const ChangePlugin = createSlatePlugin({
 }));
 
 /**
+ * `editor.api.node(path)` for a path with no node returns undefined, as it
+ * does anyway, but without Slate first building an error message that
+ * serialises the whole document. The list plugin asks for the next sibling
+ * of every inserted node, so without this inserting a last node (Enter at
+ * the end, or streamed AI text) cost time proportional to the document.
+ */
+const MissingNodePlugin = createSlatePlugin({
+  key: "missingNode",
+}).overrideEditor(({ editor, api: { node } }) => ({
+  api: {
+    node(atOrOptions, nodeOptions) {
+      if (PathApi.isPath(atOrOptions) && !NodeApi.has(editor, atOrOptions)) {
+        return undefined;
+      }
+      return node(atOrOptions, nodeOptions);
+    },
+  },
+}));
+
+/**
  * The schema stops at h3. Pasted h4–h6 become h3, so they stay separate
  * blocks instead of running into their neighbours.
  */
@@ -162,6 +184,7 @@ const AUTOFORMAT_RULES: AutoformatRule[] = [
  */
 export const documentPlugins = [
   BlockIdPlugin,
+  MissingNodePlugin,
   LayerParagraphPlugin,
   H1Plugin,
   H2Plugin,
@@ -189,7 +212,7 @@ export const documentPlugins = [
   }),
   AutoformatPlugin.configure({ options: { rules: AUTOFORMAT_RULES } }),
   AiSegmentPlugin,
-  AiSegmentGuardPlugin,
+  GeneratingSegmentPlugin,
   PlaceholderPlugin,
   // Layer marks are decorations: they never touch the content.
   LayerPlugin,

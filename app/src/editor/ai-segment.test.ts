@@ -7,12 +7,8 @@ import {
   validateDocument,
 } from "~/content/schema";
 import {
-  insertGeneratingSegment,
-  removeSegment,
-  renderSegment,
-  replaceWithGeneratingSegment,
-  restoreSegment,
-  setSegmentStatus,
+  type SegmentGeneration,
+  startGeneration,
   unwrapSegment,
 } from "./ai-segment";
 import { createDocumentEditor, type DocumentEditor } from "./document-editor";
@@ -35,32 +31,46 @@ const segment = (editor: DocumentEditor, index: number): AiSegment => {
   return node;
 };
 
-const fresh = () =>
-  createDocumentEditor([p("Before.", "b1"), p("After.", "b2")]);
+const texts = (s: AiSegment) =>
+  s.children.map((b) =>
+    b.children.map((c) => ("text" in c ? c.text : "")).join(""),
+  );
 
-describe("AI segment transforms", () => {
+/** Ends the current event, as separate keystrokes are separate undo steps. */
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+const [BEFORE, AFTER] = [p("Before.", "b1"), p("After.", "b2")] as [
+  ContentDocument[number],
+  ContentDocument[number],
+];
+const ORIGINAL: ContentDocument = [BEFORE, AFTER];
+const fresh = () => createDocumentEditor(structuredClone(ORIGINAL));
+
+function start(editor: DocumentEditor, index = 1, id = "seg") {
+  const started = startGeneration(editor, id, { kind: "insert", index });
+  if (!started) throw new Error("expected a generation");
+  return started.generation;
+}
+
+/** Renders all of `text` from the first paragraph. */
+const show = (generation: SegmentGeneration, text: string) =>
+  generation.render(parseGeneratedText(text), 0);
+
+describe("AI segment generations", () => {
   test("streamed text lands in the segment only, with block IDs that stay put", () => {
     const editor = fresh();
-    insertGeneratingSegment(editor, "seg", 1);
+    const generation = start(editor);
     expect(segment(editor, 1)).toMatchObject({
       id: "seg",
       status: "generating",
       children: [{ type: "p", children: [{ text: "" }] }],
     });
-
-    renderSegment(editor, "seg", parseGeneratedText("The road"));
+    show(generation, "The road");
     const [first] = segment(editor, 1).children;
-    renderSegment(
-      editor,
-      "seg",
-      parseGeneratedText("The road bent.\n\nMara **ran"),
-    );
-    renderSegment(
-      editor,
-      "seg",
-      parseGeneratedText("The road bent.\n\nMara **ran**."),
-    );
-    setSegmentStatus(editor, "seg", "ready");
+    show(generation, "The road bent.\n\nMara **ran");
+    // Paragraph 0 is finished: only paragraph 1 onward is passed.
+    generation.render(parseGeneratedText("Mara **ran**."), 1);
+    generation.finish();
 
     const done = segment(editor, 1);
     expect(done.status).toBe("ready");
@@ -69,104 +79,169 @@ describe("AI segment transforms", () => {
       [{ text: "The road bent." }],
       [{ text: "Mara " }, { text: "ran", bold: true }, { text: "." }],
     ]);
-    expect(new Set(done.children.map((b) => b.id)).size).toBe(2);
     const doc = content(editor);
-    expect([doc[0], doc[2]]).toEqual([
-      p("Before.", "b1"),
-      p("After.", "b2"),
-    ] as ContentDocument);
+    expect([doc[0], doc[2]]).toEqual(ORIGINAL);
+  });
+
+  test("a paragraph that only grew gets the new text inserted", async () => {
+    const editor = fresh();
+    const generation = start(editor);
+    show(generation, "The road");
+    await tick();
+    show(generation, "The road bent");
+    expect(editor.operations.map((op) => op.type)).toEqual(["insert_text"]);
+    expect(texts(segment(editor, 1))).toEqual(["The road bent"]);
   });
 
   test("an empty render leaves one empty paragraph", () => {
     const editor = fresh();
-    insertGeneratingSegment(editor, "seg", 2);
-    renderSegment(editor, "seg", parseGeneratedText("one\ntwo"));
-    renderSegment(editor, "seg", []);
+    const generation = start(editor, 2);
+    show(generation, "one\ntwo");
+    show(generation, "");
     expect(segment(editor, 2).children.map((b) => b.children)).toEqual([
       [{ text: "" }],
     ]);
   });
 
-  test("one undo removes the whole generation", () => {
+  test("one undo removes the whole generation and redo brings it back finished", () => {
     const editor = fresh();
-    insertGeneratingSegment(editor, "seg", 1);
-    renderSegment(editor, "seg", parseGeneratedText("one"));
-    renderSegment(editor, "seg", parseGeneratedText("one\ntwo"));
-    setSegmentStatus(editor, "seg", "ready");
+    const generation = start(editor);
+    show(generation, "one");
+    show(generation, "one\ntwo");
+    generation.finish();
+    const finished = content(editor);
     editor.undo();
-    expect(content(editor)).toEqual([
-      p("Before.", "b1"),
-      p("After.", "b2"),
-    ] as ContentDocument);
+    expect(content(editor)).toEqual(ORIGINAL);
+    editor.redo();
+    expect(content(editor)).toEqual(finished);
+    expect(segment(editor, 1).status).toBe("ready");
   });
 
-  test("unwrap leaves the segment's blocks in place with their IDs", () => {
+  test("the writer's edits during a stream stay their own undo steps", async () => {
     const editor = fresh();
-    insertGeneratingSegment(editor, "seg", 1);
-    renderSegment(editor, "seg", parseGeneratedText("one\ntwo"));
-    setSegmentStatus(editor, "seg", "ready");
-    const ids = segment(editor, 1).children.map((b) => b.id);
-    expect(unwrapSegment(editor, "seg")).toEqual(ids);
-    expect(content(editor)).toEqual([
-      p("Before.", "b1"),
-      p("one", ids[0] as string),
-      p("two", ids[1] as string),
-      p("After.", "b2"),
-    ] as ContentDocument);
-    expect(unwrapSegment(editor, "seg")).toBeUndefined();
+    const generation = start(editor);
+    await tick();
+    show(generation, "Half");
+    editor.tf.insertText(" typo", { at: { path: [2, 0], offset: 6 } });
+    await tick();
+    show(generation, "Half a line.\nAnd more.");
+    generation.finish();
+    const finished = segment(editor, 1);
+
+    editor.undo();
+    expect(content(editor)).toEqual([BEFORE, finished, AFTER]);
+    editor.undo();
+    expect(content(editor)).toEqual(ORIGINAL);
   });
 
-  test("replace puts a new generating segment in place; restore puts the old one back", () => {
+  test("undoing a delete made mid-stream brings the segment back ready", async () => {
     const editor = fresh();
-    insertGeneratingSegment(editor, "old", 1);
-    renderSegment(editor, "old", parseGeneratedText("first try"));
-    setSegmentStatus(editor, "old", "ready");
+    const generation = start(editor);
+    await tick();
+    show(generation, "Partial");
+    editor.tf.removeNodes({ at: [1] });
+    await tick();
+    expect(show(generation, "Partial text")).toBe(false);
+    generation.abandon();
+    editor.undo();
+    expect(segment(editor, 1)).toMatchObject({ id: "seg", status: "ready" });
+    expect(texts(segment(editor, 1))).toEqual(["Partial"]);
+  });
+
+  test("a stored generating segment loads ready, without an undo step", () => {
+    const editor = createDocumentEditor([
+      p("Before.", "b1"),
+      {
+        type: "ai_segment",
+        id: "seg",
+        status: "generating",
+        children: [p("Cut off mid", "s1")],
+      },
+    ]);
+    expect(segment(editor, 1).status).toBe("ready");
+    expect(editor.history.undos).toHaveLength(0);
+    editor.tf.select({ path: [1, 0, 0], offset: 3 });
+    editor.tf.insertText("X");
+    expect(texts(segment(editor, 1))).toEqual(["CutX off mid"]);
+  });
+
+  test("discard takes the segment out; a replacement puts the old one back", () => {
+    const editor = fresh();
+    const first = start(editor, 1, "old");
+    show(first, "first try");
+    first.finish();
     const before = content(editor);
 
-    const replaced = replaceWithGeneratingSegment(editor, "old", "new");
-    expect(replaced?.id).toBe("old");
+    const started = startGeneration(editor, "new", {
+      kind: "replace",
+      segmentId: "old",
+    });
+    expect(started?.replaced?.id).toBe("old");
     expect(segment(editor, 1)).toMatchObject({
       id: "new",
       status: "generating",
     });
-    expect(content(editor)).toHaveLength(3);
-
-    if (!replaced) throw new Error("expected the replaced node");
-    expect(restoreSegment(editor, "new", replaced)).toBe(true);
+    started?.generation.discard();
     expect(content(editor)).toEqual(before);
+    // Nothing else happened, so the attempt left no undo step either.
+    editor.undo();
+    expect(content(editor)).toEqual(ORIGINAL);
+  });
 
-    expect(removeSegment(editor, "old")?.id).toBe("old");
+  test("discard after the writer edited records its own undo step", async () => {
+    const editor = fresh();
+    const generation = start(editor);
+    await tick();
+    editor.tf.insertText("!", { at: { path: [0, 0], offset: 0 } });
+    await tick();
+    generation.discard();
     expect(content(editor)).toEqual([
-      p("Before.", "b1"),
-      p("After.", "b2"),
+      p("!Before.", "b1") as ContentDocument[number],
+      AFTER,
+    ]);
+    editor.undo();
+    editor.undo();
+    editor.undo();
+    expect(content(editor)).toEqual(ORIGINAL);
+  });
+
+  test("unwrap leaves the segment's blocks in place with their IDs", () => {
+    const editor = fresh();
+    const generation = start(editor);
+    show(generation, "one\ntwo");
+    generation.finish();
+    const ids = segment(editor, 1).children.map((b) => b.id);
+    expect(unwrapSegment(editor, "seg")).toEqual(ids);
+    expect(content(editor)).toEqual([
+      BEFORE,
+      p("one", ids[0] as string),
+      p("two", ids[1] as string),
+      AFTER,
     ] as ContentDocument);
+    expect(unwrapSegment(editor, "seg")).toBeUndefined();
   });
 
   test("typing is ignored inside a generating segment, not a ready one", () => {
     const editor = fresh();
-    insertGeneratingSegment(editor, "seg", 1);
-    renderSegment(editor, "seg", parseGeneratedText("Arriving"));
+    const generation = start(editor);
+    show(generation, "Arriving");
     editor.tf.select({ path: [1, 0, 0], offset: 3 });
     editor.tf.insertText("X");
     editor.tf.insertBreak();
     editor.tf.deleteBackward("character");
     editor.tf.addMark("bold", true);
-    expect(segment(editor, 1).children.map((b) => b.children)).toEqual([
-      [{ text: "Arriving" }],
-    ]);
+    expect(texts(segment(editor, 1))).toEqual(["Arriving"]);
 
-    setSegmentStatus(editor, "seg", "ready");
+    generation.finish();
     editor.tf.select({ path: [1, 0, 0], offset: 3 });
     editor.tf.insertText("X");
-    expect(segment(editor, 1).children[0]?.children).toEqual([
-      { text: "ArrXiving" },
-    ]);
+    expect(texts(segment(editor, 1))).toEqual(["ArrXiving"]);
   });
 
   test("a selection reaching outside a generating segment edits normally", () => {
     const editor = fresh();
-    insertGeneratingSegment(editor, "seg", 1);
-    renderSegment(editor, "seg", parseGeneratedText("Arriving"));
+    const generation = start(editor);
+    show(generation, "Arriving");
     editor.tf.select({
       anchor: { path: [0, 0], offset: 0 },
       focus: { path: [2, 0], offset: 0 },

@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { type GeneratedParagraph, parseGeneratedText } from "./generated-text";
+import {
+  type GeneratedParagraph,
+  GeneratedTextStream,
+  parseGeneratedText,
+} from "./generated-text";
 import { exportMarkdown, parseMarkdown } from "./markdown";
 import { type ContentDocument, validateDocument } from "./schema";
 
@@ -226,5 +230,43 @@ describe("generated text grammar", () => {
       }
       parsed(text);
     }
+  });
+
+  test("is linear on unclosed delimiters", () => {
+    for (const unit of ["*a ", "**a ", "x _a ", "[a](b "]) {
+      const text = unit.repeat(Math.ceil(50_000 / unit.length));
+      const started = performance.now();
+      const [paragraph] = parseGeneratedText(text);
+      // Quadratic search took 1-5 s here; linear takes milliseconds.
+      expect(performance.now() - started).toBeLessThan(500);
+      expect(paragraph?.children).toHaveLength(1);
+    }
+  });
+});
+
+describe("streamed generated text", () => {
+  test("gives the same paragraphs as parsing the whole text, however it is split", () => {
+    const text =
+      "One **bold\r\nline**.\r\n\r\nTwo [link](old-mill) 😀\u2028three _x_\n\nfour";
+    for (let size = 1; size <= 7; size++) {
+      const stream = new GeneratedTextStream();
+      // Splits fall inside CRLF pairs and surrogate pairs too.
+      for (let i = 0; i < text.length; i += size) {
+        stream.push(text.slice(i, i + size));
+      }
+      expect([...stream.finished, ...stream.tail()]).toEqual(
+        parseGeneratedText(text),
+      );
+    }
+  });
+
+  test("a finished line is never parsed again", () => {
+    const stream = new GeneratedTextStream();
+    stream.push("first *line*\nsec");
+    const [first] = stream.finished;
+    stream.push("ond\nthird");
+    expect(stream.finished[0]).toBe(first as GeneratedParagraph);
+    expect(stream.finished).toHaveLength(2);
+    expect(stream.tail()).toEqual([para({ text: "third" })]);
   });
 });

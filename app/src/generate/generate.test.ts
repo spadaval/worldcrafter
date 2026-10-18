@@ -175,6 +175,10 @@ for (const [name, open] of [
     let session: DocumentSession;
     let generator: Generator;
     let clock = 1000;
+    /** Opens a document's session and a generator for it. */
+    let openDocument: (
+      documentId: string,
+    ) => Promise<{ session: DocumentSession; generator: Generator }>;
 
     beforeEach(async () => {
       scripts.length = 0;
@@ -212,24 +216,30 @@ for (const [name, open] of [
           cause: null,
         }),
       );
-      session = (
-        await openDocumentSession("doc1", {
-          connection,
-          readOnly: false,
-          now,
-          saveDelayMs: 60_000,
-          retryDelayMs: 60_000,
-        })
-      )._unsafeUnwrap();
-      generator = createGenerator({
-        session,
-        storage,
-        requests: createRequestStore(storage, { now }),
-        gather: () => gatherWorldContext(world, time, "doc1"),
-        profile: (profileName) =>
-          profileName === profile.name ? profile : undefined,
-        now,
-      });
+      openDocument = async (documentId) => {
+        const opened = (
+          await openDocumentSession(documentId, {
+            connection,
+            readOnly: false,
+            now,
+            saveDelayMs: 60_000,
+            retryDelayMs: 60_000,
+          })
+        )._unsafeUnwrap();
+        return {
+          session: opened,
+          generator: createGenerator({
+            session: opened,
+            storage,
+            requests: createRequestStore(storage, { now }),
+            gather: () => gatherWorldContext(world, time, documentId),
+            profile: (profileName) =>
+              profileName === profile.name ? profile : undefined,
+            now,
+          }),
+        };
+      };
+      ({ session, generator } = await openDocument("doc1"));
     });
     afterEach(() => {
       session.dispose();
@@ -546,6 +556,147 @@ for (const [name, open] of [
       expect(content(session)).toEqual(ORIGINAL);
       expect((await storage.annotations.list())._unsafeUnwrap()).toEqual([]);
     });
+
+    test("a segment saved mid-stream reopens ready: accept works, regenerate has no request", async () => {
+      const interrupted: JsonValue = [
+        ...ORIGINAL,
+        {
+          type: "ai_segment",
+          id: "cut",
+          status: "generating",
+          children: [{ type: "p", id: "c1", children: [{ text: "Cut off" }] }],
+        },
+      ];
+      (
+        await storage.documents.save({
+          id: "doc2",
+          title: "Crashed",
+          content: interrupted,
+          updatedAt: 1,
+        })
+      )._unsafeUnwrap();
+      const reopened = await openDocument("doc2");
+      expect(segmentAt(content(reopened.session), 3).status).toBe("ready");
+      // The repair is saved.
+      expect(await reopened.session.flush()).toEqual({ kind: "saved" });
+      expect(
+        JSON.stringify(
+          (await storage.documents.load("doc2"))._unsafeUnwrap().content,
+        ),
+      ).not.toContain("generating");
+      expect(
+        (await reopened.generator.regenerate("cut"))._unsafeUnwrapErr(),
+      ).toMatchObject({ kind: "no_provenance", segmentId: "cut" });
+      const accepted = (await reopened.generator.accept("cut"))._unsafeUnwrap();
+      expect(accepted).toEqual({ blocks: ["c1"], save: { kind: "saved" } });
+      expect(content(reopened.session)).toEqual([
+        ...ORIGINAL,
+        { type: "p", id: "c1", children: [{ text: "Cut off" }] },
+      ]);
+      reopened.session.dispose();
+    });
+
+    test("the writer's typing during a stream is its own undo step", async () => {
+      const assembled = await prepare();
+      scripts.push(
+        stream(
+          [...pieces("The wind rose and rose.", 3).map(chunk), finish],
+          15,
+        ),
+      );
+      const sending = generator.send(assembled.id, {
+        kind: "after",
+        blockId: "p2",
+      });
+      await until(() => (generator.active.get()?.text.length ?? 0) > 3);
+      session.editor.tf.insertText(" typo", {
+        at: { path: [1, 0], offset: "Mara crossed the flats.".length },
+      });
+      const result = (await sending)._unsafeUnwrap();
+      expect(result.outcome).toBe("complete");
+      const finished = segmentAt(content(session), 3);
+      expect(textOf(finished)).toEqual(["The wind rose and rose."]);
+
+      session.editor.undo();
+      expect(content(session)).toEqual([...ORIGINAL, finished]);
+      session.editor.undo();
+      expect(content(session)).toEqual(ORIGINAL);
+    });
+
+    test("a replacement deleted mid-stream leaves the replaced blocks in the old record", async () => {
+      const assembled = await prepare();
+      scripts.push(streamText("Keep me."));
+      const kept = (
+        await generator.send(assembled.id, { kind: "after", blockId: "p2" })
+      )._unsafeUnwrap();
+      const oldId = kept.segmentId as string;
+      const oldBlocks = segmentAt(content(session), 3).children;
+      scripts.push(
+        stream([...pieces("Replacement text.", 3).map(chunk), finish], 20),
+      );
+      const sending = generator.regenerate(oldId);
+      await until(() => (generator.active.get()?.text.length ?? 0) > 0);
+      session.editor.tf.removeNodes({ at: [3] });
+      const result = (await sending)._unsafeUnwrap();
+      expect(result).toMatchObject({ outcome: "cancelled", segmentId: null });
+      expect(content(session)).toEqual(ORIGINAL);
+      expect(
+        (await storage.annotations.load(oldId))._unsafeUnwrap(),
+      ).toMatchObject({
+        kind: "ai_provenance_archived",
+        data: {
+          text: "Keep me.",
+          archived: { reason: "replaced", by: null, content: oldBlocks },
+        },
+      });
+    });
+
+    test.each([
+      [
+        "prose",
+        "The salt wind rose over the flats, and Mara walked on. ".repeat(18) +
+          "\n\n",
+      ],
+      ["unclosed emphasis on one line", "*a **a x _a [a](b "],
+      ["markup on many lines", "# h\n- *a* **b\n<p>x</p> :::\n"],
+    ])(
+      "streaming 50 KB of %s in 4-character deltas stays fast",
+      async (_, unit) => {
+        const output = unit.repeat(Math.ceil(50_000 / unit.length));
+        const events = [...pieces(output, 4).map(chunk), finish];
+        // Like a network: many events per read.
+        scripts.push(
+          () =>
+            new Response(
+              new ReadableStream<Uint8Array>({
+                async start(controller) {
+                  for (let i = 0; i < events.length; i += 64) {
+                    controller.enqueue(
+                      encoder.encode(events.slice(i, i + 64).join("")),
+                    );
+                    await Bun.sleep(0);
+                  }
+                  controller.close();
+                },
+              }),
+              { headers: { "Content-Type": "text/event-stream" } },
+            ),
+        );
+        const assembled = await prepare();
+        const started = performance.now();
+        const result = (
+          await generator.send(assembled.id, { kind: "after", blockId: "p2" })
+        )._unsafeUnwrap();
+        const elapsed = performance.now() - started;
+        expect(result.outcome).toBe("complete");
+        const segment = segmentAt(content(session), 3);
+        expect(textOf(segment).join("\n").length).toBeGreaterThan(40_000);
+        expect(content(session).slice(0, 3)).toEqual(ORIGINAL);
+        // Measured at ~1 s; quadratic rendering took minutes.
+        expect(elapsed).toBeLessThan(10_000);
+      },
+      30_000,
+    );
 
     test("a request edited to another host or endpoint shape is refused before sending", async () => {
       const assembled = await prepare();

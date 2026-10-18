@@ -5,7 +5,7 @@ import { createMemoryStorage } from "../storage/memory";
 import type { StorageAdapter } from "../storage/types";
 import type { EntryFacts } from "./facts";
 import {
-  type CreateEntry,
+  type AttachEntry,
   createWorldStore,
   type WorldCommand,
   type WorldStore,
@@ -23,17 +23,32 @@ const run = async (command: WorldCommand) =>
   (await world.execute(command))._unsafeUnwrap();
 const fail = async (command: WorldCommand) =>
   (await world.execute(command))._unsafeUnwrapErr();
-const create = (payload: CreateEntry) => run({ name: "createEntry", payload });
+/** Saves a document, as the document store would. */
+const saveDocument = async (id: string, title: string) =>
+  (
+    await storage.documents.save({ id, title, content: [], updatedAt: 1 })
+  )._unsafeUnwrap();
+/** Saves a document and attaches facts to it. */
+const create = async ({
+  title,
+  ...payload
+}: AttachEntry & { title: string }) => {
+  await saveDocument(payload.documentId, title);
+  return run({ name: "attachEntry", payload });
+};
 
-describe("createEntry", () => {
-  test("creates the document and its facts", async () => {
-    const entry = await create({
-      documentId: "d1",
-      title: "  Ardelia Voss ",
-      kind: "person",
-      template: "ruler",
-      aliases: ["the Red Queen", " Ardelia "],
-      tags: ["Exile", "royalty", "exile"],
+describe("attachEntry", () => {
+  test("attaches facts to an existing document without touching it", async () => {
+    await saveDocument("d1", "Ardelia Voss");
+    const entry = await run({
+      name: "attachEntry",
+      payload: {
+        documentId: "d1",
+        kind: "person",
+        template: "ruler",
+        aliases: ["the Red Queen", " Ardelia "],
+        tags: ["Exile", "royalty", "exile"],
+      },
     });
     expect(entry).toEqual({
       documentId: "d1",
@@ -52,7 +67,7 @@ describe("createEntry", () => {
       id: "d1",
       title: "Ardelia Voss",
       content: [],
-      updatedAt: 1000,
+      updatedAt: 1,
     });
     expect((await world.entry("d1"))._unsafeUnwrap()).toEqual(entry);
   });
@@ -67,39 +82,125 @@ describe("createEntry", () => {
     expect(second.canonicalName).toBe("harrow-2");
   });
 
-  test("rejects a reused document ID, an empty title and a mismatched template", async () => {
+  test("fails for a missing document or one that already has facts", async () => {
+    expect(
+      await fail({
+        name: "attachEntry",
+        payload: { documentId: "nope", kind: "place" },
+      }),
+    ).toEqual({ kind: "not_found", collection: "documents", id: "nope" });
+    expect(
+      (await storage.worldEntries.load("nope"))._unsafeUnwrapErr(),
+    ).toMatchObject({ kind: "not_found" });
+
     await create({ documentId: "d1", title: "Harrow", kind: "place" });
     expect(
       await fail({
-        name: "createEntry",
-        payload: { documentId: "d1", title: "Other", kind: "place" },
+        name: "attachEntry",
+        payload: { documentId: "d1", kind: "person" },
       }),
-    ).toEqual({ kind: "already_exists", documentId: "d1" });
+    ).toEqual({ kind: "already_attached", documentId: "d1" });
+    expect((await world.entry("d1"))._unsafeUnwrap().kind).toBe("place");
+  });
+
+  test("rejects a mismatched template and a tag with no letters or digits", async () => {
+    await saveDocument("d2", "Harrow");
     expect(
       await fail({
-        name: "createEntry",
-        payload: { documentId: "d2", title: "  ", kind: "place" },
+        name: "attachEntry",
+        payload: { documentId: "d2", kind: "person", template: "city" },
       }),
-    ).toMatchObject({ kind: "invalid_command", reason: "title is empty" });
-    expect(
-      await fail({
-        name: "createEntry",
-        payload: {
-          documentId: "d2",
-          title: "Harrow",
-          kind: "person",
-          template: "city",
-        },
-      }),
-    ).toMatchObject({
+    ).toEqual({
       kind: "invalid_command",
-      command: "createEntry",
+      command: "attachEntry",
       documentId: "d2",
       reason: 'template "city" is for place, not person',
     });
+    for (const tag of ["!!!", "#"]) {
+      expect(
+        await fail({
+          name: "attachEntry",
+          payload: { documentId: "d2", kind: "place", tags: ["ok", tag] },
+        }),
+      ).toMatchObject({
+        kind: "invalid_command",
+        reason: `tag "${tag}" has no letters or digits`,
+      });
+    }
     expect(
-      (await storage.documents.load("d2"))._unsafeUnwrapErr(),
+      (await storage.worldEntries.load("d2"))._unsafeUnwrapErr(),
     ).toMatchObject({ kind: "not_found" });
+  });
+});
+
+describe("concurrent commands", () => {
+  test("two attaches with the same title get different canonical names", async () => {
+    await saveDocument("a", "Mill");
+    await saveDocument("b", "Mill");
+    const [a, b] = await Promise.all([
+      world.execute({
+        name: "attachEntry",
+        payload: { documentId: "a", kind: "place" },
+      }),
+      world.execute({
+        name: "attachEntry",
+        payload: { documentId: "b", kind: "place" },
+      }),
+    ]);
+    expect([
+      a._unsafeUnwrap().canonicalName,
+      b._unsafeUnwrap().canonicalName,
+    ]).toEqual(["mill", "mill-2"]);
+  });
+
+  test("concurrent edits to one entry all land", async () => {
+    await create({ documentId: "d1", title: "Ardelia", kind: "person" });
+    // A second store over the same adapter shares its queue.
+    const other = createWorldStore(storage);
+    const results = await Promise.all([
+      world.execute({
+        name: "addAlias",
+        payload: { documentId: "d1", alias: "the Red Queen" },
+      }),
+      other.execute({
+        name: "setField",
+        payload: { documentId: "d1", field: "Age", value: 34 },
+      }),
+      world.execute({
+        name: "addAlias",
+        payload: { documentId: "d1", alias: "Ardy" },
+      }),
+    ]);
+    for (const result of results) result._unsafeUnwrap();
+    const entry = (await world.entry("d1"))._unsafeUnwrap();
+    expect(entry.aliases).toEqual(["the Red Queen", "Ardy"]);
+    expect(Object.keys(entry.fields)).toEqual(["Age"]);
+  });
+
+  test("a command that throws fails alone and later commands still run", async () => {
+    await create({ documentId: "d1", title: "Ardelia", kind: "person" });
+    const broken = {
+      name: "addAlias",
+      payload: {
+        documentId: "d1",
+        get alias(): string {
+          throw new Error("boom");
+        },
+      },
+    } satisfies WorldCommand;
+    const [thrown, after] = await Promise.all([
+      world.execute(broken),
+      world.execute({
+        name: "addAlias",
+        payload: { documentId: "d1", alias: "Ardy" },
+      }),
+    ]);
+    expect(thrown._unsafeUnwrapErr()).toMatchObject({
+      kind: "failure",
+      collection: "worldEntries",
+      id: "d1",
+    });
+    expect(after._unsafeUnwrap().aliases).toEqual(["Ardy"]);
   });
 });
 
@@ -553,6 +654,126 @@ describe("persistence", () => {
       kind: "invalid_facts",
       documentId: "x",
       reason: 'unknown kind "dragon"',
+    });
+  });
+
+  test("an unreadable record is reported but doesn't block the rest of the world", async () => {
+    await create({ documentId: "ardelia", title: "Ardelia", kind: "person" });
+    await create({
+      documentId: "court",
+      title: "Ember Court",
+      kind: "organization",
+    });
+    await create({
+      documentId: "guild",
+      title: "Salt Guild",
+      kind: "organization",
+    });
+    await run({
+      name: "addRelation",
+      payload: { documentId: "court", type: "allied_with", target: "guild" },
+    });
+    await saveDocument("x", "X");
+    await storage.worldEntries.save({
+      documentId: "x",
+      facts: { version: 1, kind: "dragon" },
+      updatedAt: 1,
+    });
+
+    expect((await world.unreadable())._unsafeUnwrap()).toEqual([
+      { documentId: "x", reason: 'unknown kind "dragon"' },
+    ]);
+    // Reads skip it.
+    expect((await world.entry("ardelia"))._unsafeUnwrap().title).toBe(
+      "Ardelia",
+    );
+    expect((await world.card("guild"))._unsafeUnwrap()).toBe(
+      "Salt Guild (Organization)\nRelations:\n- allied with Ember Court",
+    );
+    expect((await world.resolveName("ardelia"))._unsafeUnwrap()).toBe(
+      "ardelia",
+    );
+    // Edits that allocate no name still work.
+    await run({
+      name: "addAlias",
+      payload: { documentId: "ardelia", alias: "Ardy" },
+    });
+    // Name allocation fails closed: the bad record might hold the name.
+    await saveDocument("new", "Harrow");
+    expect(
+      await fail({
+        name: "attachEntry",
+        payload: { documentId: "new", kind: "place" },
+      }),
+    ).toEqual({
+      kind: "invalid_facts",
+      documentId: "x",
+      reason: 'unknown kind "dragon"',
+    });
+    expect(
+      await fail({
+        name: "renameEntry",
+        payload: { documentId: "ardelia", title: "Queen" },
+      }),
+    ).toMatchObject({ kind: "invalid_facts", documentId: "x" });
+  });
+});
+
+describe("setField names", () => {
+  beforeEach(async () => {
+    await create({ documentId: "d1", title: "Ardelia", kind: "person" });
+  });
+
+  test("rejects __proto__", async () => {
+    expect(
+      await fail({
+        name: "setField",
+        payload: { documentId: "d1", field: "__proto__", value: "x" },
+      }),
+    ).toEqual({
+      kind: "invalid_command",
+      command: "setField",
+      documentId: "d1",
+      reason: '"__proto__" is a reserved name',
+    });
+  });
+
+  test("names of Object.prototype members are ordinary fields", async () => {
+    for (const field of ["constructor", "toString", "hasOwnProperty"]) {
+      await run({
+        name: "setField",
+        payload: { documentId: "d1", field, value: field },
+      });
+    }
+    // Clearing one that was never set is a no-op.
+    await run({
+      name: "setField",
+      payload: { documentId: "d1", field: "valueOf", value: null },
+    });
+    const reopened = (
+      await createWorldStore(storage).entry("d1")
+    )._unsafeUnwrap();
+    expect(Object.keys(reopened.fields)).toEqual([
+      "constructor",
+      "toString",
+      "hasOwnProperty",
+    ]);
+    expect(Object.entries(reopened.fields)[0]?.[1].base?.value).toBe(
+      "constructor",
+    );
+  });
+
+  test("a stored __proto__ field makes the record unreadable", async () => {
+    await storage.worldEntries.save({
+      documentId: "d1",
+      facts: JSON.parse(
+        '{"version":1,"kind":"person","template":null,"canonicalName":"ardelia","formerNames":[],"aliases":[],"tags":[],"relations":[],"fields":{"__proto__":{"base":null,"changes":[]}}}',
+      ),
+      updatedAt: 1,
+    });
+    expect((await world.entry("d1"))._unsafeUnwrapErr()).toMatchObject({
+      kind: "invalid_facts",
+      reason: 'field "__proto__" is reserved',
     });
   });
 });

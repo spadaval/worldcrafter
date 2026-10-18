@@ -25,20 +25,36 @@ const SEPARATORS = /[^\p{L}\p{M}\p{N}]+/gu;
 export const FALLBACK_NAME = "untitled";
 
 /**
+ * The canonical form of `text`, or `""` if it has no letters or digits.
+ * Apostrophes are dropped first and NFC is applied last, so removing a
+ * character can never leave a letter and its combining mark decomposed.
+ */
+function slug(text: string): string {
+  return text
+    .replace(DROPPED, "")
+    .normalize("NFC")
+    .toLowerCase()
+    .replace(SEPARATORS, "-")
+    .replace(/^-+|-+$/g, "")
+    .normalize("NFC");
+}
+
+/**
  * Derives a canonical name from a title: `Old Mill (East)` becomes
  * `old-mill-east`, `Café Noir` becomes `café-noir`. Every run of characters
  * other than letters, marks and digits becomes one hyphen; apostrophes are
  * dropped. A title with nothing left becomes `untitled`.
  */
 export function canonicalizeName(title: string): string {
-  const name = title
-    .normalize("NFC")
-    .toLowerCase()
-    .normalize("NFC")
-    .replace(DROPPED, "")
-    .replace(SEPARATORS, "-")
-    .replace(/^-+|-+$/g, "");
-  return name === "" ? FALLBACK_NAME : name;
+  return slug(title) || FALLBACK_NAME;
+}
+
+/**
+ * A tag in canonical form (`Royal Line` is `royal-line`), or `null` for a tag
+ * with no letters or digits (`!!!`), which has no meaningful form.
+ */
+export function canonicalizeTag(tag: string): string | null {
+  return slug(tag) || null;
 }
 
 /** Whether `value` is already in canonical form (and so a valid link target). */

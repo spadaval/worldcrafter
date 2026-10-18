@@ -1,18 +1,40 @@
 /**
  * The world-facts store: entries, their names and their relations, kept in
  * the storage adapter. An entry is a document (decision worldcrafter-9zj1):
- * its title lives on the document, its structured facts in the `worldEntries`
- * record with the same ID.
+ * the document store creates the document and owns its title and content;
+ * this store attaches structured facts to it, in the `worldEntries` record
+ * with the same ID.
  *
  * Every change goes through `execute` with a typed command, so the UI, tests
- * and (later) an external agent all use the same entry points.
+ * and (later) an external agent all use the same entry points. Commands on
+ * one adapter run one at a time.
+ *
+ * Ported from the old document-model V2 and `relation-model.ts`, with these
+ * deliberate differences:
+ * - Relations carry only type, target and a time-indexed `holds`; the old
+ *   status, notes, strength, confidence, ID and timestamps are not ported.
+ * - Renaming no longer rewrites links in content. The old canonical name is
+ *   kept as a former name, and links to it still resolve.
+ * - A template that doesn't match the kind is an error; the old code silently
+ *   resolved or dropped it.
+ * - Free-form frontmatter is replaced by named scalar fields.
+ * - There are no commands yet to change tags, kind or template, or to remove a
+ *   relation.
  */
 
-import { err, errAsync, ok, okAsync, Result, ResultAsync } from "neverthrow";
+import {
+  err,
+  errAsync,
+  ok,
+  okAsync,
+  type Result,
+  ResultAsync,
+} from "neverthrow";
+import { failure } from "../storage/internal";
+import { createCommandQueue } from "../storage/queue";
 import type {
   StorageAdapter,
   StorageError,
-  StoredDocument,
   WorldEntry,
 } from "../storage/types";
 import { type CardRelation, renderCard } from "./card";
@@ -23,16 +45,24 @@ import {
   FACTS_VERSION,
   type FieldValue,
   isFieldValue,
+  isReservedFieldName,
   parseEntryFacts,
 } from "./facts";
 import { isKind, type Kind, templateDefinition } from "./kinds";
-import { canonicalizeName, displayNameKey, uniqueName } from "./names";
+import {
+  canonicalizeName,
+  canonicalizeTag,
+  displayNameKey,
+  uniqueName,
+} from "./names";
 import { checkRelationKinds, relationDefinition } from "./relations";
 
-export type CreateEntry = {
-  /** The new document's ID. Fails if a document with this ID exists. */
+export type AttachEntry = {
+  /**
+   * An existing document, which must not have facts yet. Its canonical name
+   * is derived from its title.
+   */
   documentId: string;
-  title: string;
   kind: Kind;
   template?: string;
   aliases?: string[];
@@ -41,7 +71,7 @@ export type CreateEntry = {
 
 /** Every command, by name. Each one returns the entry it changed. */
 export type WorldCommands = {
-  createEntry: CreateEntry;
+  attachEntry: AttachEntry;
   /** Changes the title and canonical name; the old title becomes an alias. */
   renameEntry: { documentId: string; title: string };
   addAlias: { documentId: string; alias: string };
@@ -60,7 +90,8 @@ export type WorldCommand = {
 
 export type WorldError =
   | StorageError
-  | { kind: "already_exists"; documentId: string }
+  /** `attachEntry` on a document that already has facts. */
+  | { kind: "already_attached"; documentId: string }
   /** The command's payload breaks a rule; `reason` says which. */
   | {
       kind: "invalid_command";
@@ -86,9 +117,20 @@ export interface WorldStore {
    * former canonical name. The input is canonicalized first.
    */
   resolveName(name: string): ResultAsync<string, WorldError>;
-  /** The entry's prompt card (see `renderCard`). */
+  /**
+   * The entry's prompt card (see `renderCard`). Other entries whose facts
+   * can't be read are skipped; `unreadable` lists them.
+   */
   card(documentId: string): ResultAsync<string, WorldError>;
+  /**
+   * Stored facts records that can't be read, with the reason. Reads skip
+   * them, but commands that allocate a canonical name fail until they are
+   * repaired, since ignoring one could hand out a name it holds.
+   */
+  unreadable(): ResultAsync<UnreadableEntry[], WorldError>;
 }
+
+export type UnreadableEntry = { documentId: string; reason: string };
 
 export interface WorldStoreOptions {
   /** Clock for `updatedAt`, in epoch milliseconds. Defaults to `Date.now`. */
@@ -96,6 +138,8 @@ export interface WorldStoreOptions {
 }
 
 type StoredFacts = { documentId: string; facts: EntryFacts };
+
+const serialised = createCommandQueue();
 
 export function createWorldStore(
   storage: StorageAdapter,
@@ -118,10 +162,29 @@ export function createWorldStore(
       .load(documentId)
       .andThen((record) => parseRecord(record).map(({ facts }) => facts));
 
+  /** Every facts record, split into readable and unreadable ones. */
+  const listFacts = () =>
+    storage.worldEntries.list().map((records) => {
+      const readable: StoredFacts[] = [];
+      const unreadable: UnreadableEntry[] = [];
+      for (const record of records) {
+        parseEntryFacts(record.facts).match(
+          (facts) => readable.push({ documentId: record.documentId, facts }),
+          (reason) =>
+            unreadable.push({ documentId: record.documentId, reason }),
+        );
+      }
+      return { readable, unreadable };
+    });
+
+  /** Every facts record; fails if any can't be read. */
   const allFacts = (): ResultAsync<StoredFacts[], WorldError> =>
-    storage.worldEntries
-      .list()
-      .andThen((records) => Result.combine(records.map(parseRecord)));
+    listFacts().andThen(({ readable, unreadable }) => {
+      const [first] = unreadable;
+      return first === undefined
+        ? ok(readable)
+        : err<StoredFacts[], WorldError>({ kind: "invalid_facts", ...first });
+    });
 
   const saveFacts = (documentId: string, facts: EntryFacts) =>
     storage.worldEntries.save({ documentId, facts, updatedAt: now() });
@@ -169,15 +232,11 @@ export function createWorldStore(
     return { kind: "invalid_command", command, documentId, reason };
   }
 
-  function createEntry(payload: CreateEntry): ResultAsync<Entry, WorldError> {
+  function attachEntry(payload: AttachEntry): ResultAsync<Entry, WorldError> {
     const { documentId } = payload;
-    const title = payload.title.trim();
-    if (title === "") {
-      return errAsync(invalid("createEntry", documentId, "title is empty"));
-    }
     if (!isKind(payload.kind)) {
       return errAsync(
-        invalid("createEntry", documentId, `unknown kind "${payload.kind}"`),
+        invalid("attachEntry", documentId, `unknown kind "${payload.kind}"`),
       );
     }
     const template = payload.template ?? null;
@@ -186,7 +245,7 @@ export function createWorldStore(
       if (definition?.kind !== payload.kind) {
         return errAsync(
           invalid(
-            "createEntry",
+            "attachEntry",
             documentId,
             definition === undefined
               ? `unknown template "${template}"`
@@ -195,58 +254,64 @@ export function createWorldStore(
         );
       }
     }
-    const aliases: string[] = [];
-    for (const alias of payload.aliases ?? []) {
-      const checked = checkNewAlias(title, aliases, alias);
-      if (checked.isErr()) {
-        return errAsync(invalid("createEntry", documentId, checked.error));
+    const tags: string[] = [];
+    for (const tag of payload.tags ?? []) {
+      const name = canonicalizeTag(tag);
+      if (name === null) {
+        return errAsync(
+          invalid(
+            "attachEntry",
+            documentId,
+            `tag "${tag}" has no letters or digits`,
+          ),
+        );
       }
-      aliases.push(checked.value);
+      if (!tags.includes(name)) tags.push(name);
     }
-    const tags = [
-      ...new Set(
-        (payload.tags ?? [])
-          .filter((tag) => tag.trim() !== "")
-          .map(canonicalizeName),
-      ),
-    ];
 
-    return ensureNoDocument(documentId)
-      .andThen(() => takenNames(documentId))
-      .andThen((taken) => {
-        const facts: EntryFacts = {
-          version: FACTS_VERSION,
-          kind: payload.kind,
-          template,
-          canonicalName: uniqueName(canonicalizeName(title), taken),
-          formerNames: [],
-          aliases,
-          tags,
-          fields: {},
-          relations: [],
-        };
-        const document: StoredDocument = {
-          id: documentId,
-          title,
-          content: [],
-          updatedAt: now(),
-        };
-        // Facts first: if the document save then fails, the create can be
-        // retried, and it replaces the orphaned facts.
-        return saveFacts(documentId, facts)
-          .andThen(() => storage.documents.save(document))
-          .map(() => ({ ...facts, documentId, title }));
-      });
+    return storage.documents.load(documentId).andThen((document) =>
+      ensureNoFacts(documentId)
+        .andThen(() => takenNames(documentId))
+        .andThen((taken) => {
+          const title = document.title;
+          const aliases: string[] = [];
+          for (const alias of payload.aliases ?? []) {
+            const checked = checkNewAlias(title, aliases, alias);
+            if (checked.isErr()) {
+              return errAsync(
+                invalid("attachEntry", documentId, checked.error),
+              );
+            }
+            aliases.push(checked.value);
+          }
+          const facts: EntryFacts = {
+            version: FACTS_VERSION,
+            kind: payload.kind,
+            template,
+            canonicalName: uniqueName(canonicalizeName(title), taken),
+            formerNames: [],
+            aliases,
+            tags,
+            fields: {},
+            relations: [],
+          };
+          return saveFacts(documentId, facts).map(() => ({
+            ...facts,
+            documentId,
+            title,
+          }));
+        }),
+    );
   }
 
-  function ensureNoDocument(documentId: string): ResultAsync<void, WorldError> {
-    return storage.documents
+  function ensureNoFacts(documentId: string): ResultAsync<void, WorldError> {
+    return storage.worldEntries
       .load(documentId)
       .andThen(() =>
-        errAsync<void, WorldError>({ kind: "already_exists", documentId }),
+        errAsync<void, WorldError>({ kind: "already_attached", documentId }),
       )
       .orElse((error) =>
-        error.kind === "not_found" && error.collection === "documents"
+        error.kind === "not_found" && error.collection === "worldEntries"
           ? okAsync(undefined)
           : errAsync(error),
       );
@@ -295,6 +360,8 @@ export function createWorldStore(
         formerNames,
         aliases,
       };
+      // The title is the document's. Writing it here is temporary: once the
+      // document store exists, it owns title changes and this store follows.
       return saveFacts(documentId, facts)
         .andThen(() => storage.documents.load(documentId))
         .andThen((document) =>
@@ -340,6 +407,11 @@ export function createWorldStore(
     if (field === "") {
       return errAsync(invalid("setField", documentId, "field name is empty"));
     }
+    if (isReservedFieldName(field)) {
+      return errAsync(
+        invalid("setField", documentId, `"${field}" is a reserved name`),
+      );
+    }
     if (value !== null && !isFieldValue(value)) {
       return errAsync(
         invalid(
@@ -351,7 +423,7 @@ export function createWorldStore(
     }
     return update(documentId, (current) => {
       const fields = { ...current.fields };
-      const existing = fields[field];
+      const existing = Object.hasOwn(fields, field) ? fields[field] : undefined;
       if (value !== null) {
         fields[field] = {
           base: asserted(value),
@@ -411,9 +483,24 @@ export function createWorldStore(
   }
 
   function execute(command: WorldCommand): ResultAsync<Entry, WorldError> {
+    const { documentId } = command.payload;
+    return serialised(
+      storage,
+      () => run(command),
+      (cause) =>
+        failure(
+          { operation: "save", collection: "worldEntries", id: documentId },
+          new Error(`world command ${command.name} failed: ${String(cause)}`, {
+            cause,
+          }),
+        ),
+    );
+  }
+
+  function run(command: WorldCommand): ResultAsync<Entry, WorldError> {
     switch (command.name) {
-      case "createEntry":
-        return createEntry(command.payload);
+      case "attachEntry":
+        return attachEntry(command.payload);
       case "renameEntry":
         return renameEntry(command.payload);
       case "addAlias":
@@ -429,7 +516,7 @@ export function createWorldStore(
 
   function resolveName(name: string): ResultAsync<string, WorldError> {
     const wanted = canonicalizeName(name);
-    return allFacts().andThen((all) => {
+    return listFacts().andThen(({ readable: all }) => {
       const match =
         all.find(({ facts }) => facts.canonicalName === wanted) ??
         all.find(({ facts }) => facts.formerNames.includes(wanted));
@@ -446,9 +533,9 @@ export function createWorldStore(
   function card(documentId: string): ResultAsync<string, WorldError> {
     return ResultAsync.combine([
       entry(documentId),
-      allFacts(),
+      listFacts(),
       storage.documents.list(),
-    ]).map(([current, all, documents]) => {
+    ]).map(([current, { readable: all }, documents]) => {
       const titles = new Map(documents.map((d) => [d.id, d.title]));
       const relations: CardRelation[] = [];
       // A relation whose other end has no document (it was deleted) is left
@@ -477,7 +564,10 @@ export function createWorldStore(
     });
   }
 
-  return { execute, entry, resolveName, card };
+  const unreadable = () =>
+    listFacts().map(({ unreadable: problems }) => problems);
+
+  return { execute, entry, resolveName, card, unreadable };
 }
 
 /** The facts part of an entry, for saving. */

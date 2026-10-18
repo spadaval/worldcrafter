@@ -8,14 +8,11 @@ import {
   ok,
   okAsync,
   type Result,
-  ResultAsync,
+  type ResultAsync,
 } from "neverthrow";
 import { failure } from "../storage/internal";
-import type {
-  StorageAdapter,
-  StorageError,
-  StorageFailure,
-} from "../storage/types";
+import { createCommandQueue } from "../storage/queue";
+import type { StorageAdapter, StorageError } from "../storage/types";
 import {
   applyOutlineCommand,
   danglingScenes,
@@ -74,18 +71,27 @@ export function runOutlineCommand(
   command: OutlineCommand,
   now: number = Date.now(),
 ): ResultAsync<Outline, OutlineStoreError> {
-  return serialised(storage, command, () =>
-    requireDocument(storage, command)
-      .andThen(() => loadSaved(storage))
-      .andThen((saved) =>
-        applyOutlineCommand(saved, command).andThen((outline) =>
-          noNewProblems(saved, outline),
+  return serialised(
+    storage,
+    () =>
+      requireDocument(storage, command)
+        .andThen(() => loadSaved(storage))
+        .andThen((saved) =>
+          applyOutlineCommand(saved, command).andThen((outline) =>
+            noNewProblems(saved, outline),
+          ),
+        )
+        .andThen((outline) =>
+          storage.outlines
+            .save({ id: OUTLINE_ID, books: outline.books, updatedAt: now })
+            .map(() => outline),
         ),
-      )
-      .andThen((outline) =>
-        storage.outlines
-          .save({ id: OUTLINE_ID, books: outline.books, updatedAt: now })
-          .map(() => outline),
+    (cause) =>
+      failure(
+        { operation: "save", collection: "outlines", id: OUTLINE_ID },
+        new Error(`outline command ${command.type} failed: ${String(cause)}`, {
+          cause,
+        }),
       ),
   );
 }
@@ -102,40 +108,7 @@ function noNewProblems(
   return added === undefined ? ok(after) : err(added);
 }
 
-/** The tail of each adapter's command queue. It never rejects. */
-const queues = new WeakMap<StorageAdapter, Promise<void>>();
-
-function serialised<T, E>(
-  storage: StorageAdapter,
-  command: OutlineCommand,
-  work: () => ResultAsync<T, E>,
-): ResultAsync<T, E | StorageFailure> {
-  const previous = queues.get(storage) ?? Promise.resolve();
-  // A throw or rejected promise inside `work` (a bug, or a malformed stored
-  // record) becomes this command's Err, so later commands still run.
-  const next = previous
-    .then(() => work())
-    .then(
-      (result): Result<T, E | StorageFailure> => result,
-      (cause) =>
-        err(
-          failure(
-            { operation: "save", collection: "outlines", id: OUTLINE_ID },
-            new Error(
-              `outline command ${command.type} failed: ${String(cause)}`,
-              {
-                cause,
-              },
-            ),
-          ),
-        ),
-    );
-  queues.set(
-    storage,
-    next.then(() => undefined),
-  );
-  return new ResultAsync(next);
-}
+const serialised = createCommandQueue();
 
 function requireDocument(
   storage: StorageAdapter,

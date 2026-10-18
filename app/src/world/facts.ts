@@ -174,6 +174,14 @@ function checkFact<T>(
   return ok({ base, changes });
 }
 
+/**
+ * Field names that can't be stored: assigning `__proto__` on a plain object
+ * sets its prototype instead of adding a field.
+ */
+export function isReservedFieldName(name: string): boolean {
+  return name === "__proto__";
+}
+
 export function isFieldValue(value: unknown): value is FieldValue {
   return (
     typeof value === "string" ||
@@ -214,6 +222,7 @@ export function parseEntryFacts(value: JsonValue): Check<EntryFacts> {
   if (!isRecord(value.fields)) return err("fields must be an object");
   const fields: Record<string, Fact<FieldValue>> = {};
   for (const [name, fact] of Object.entries(value.fields)) {
+    if (isReservedFieldName(name)) return err(`field "${name}" is reserved`);
     const checked = checkFact(fact, `fields.${name}`, isFieldValue);
     if (checked.isErr()) return err(checked.error);
     fields[name] = checked.value;

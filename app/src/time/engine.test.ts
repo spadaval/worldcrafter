@@ -204,6 +204,124 @@ describe("scene placement", () => {
   });
 });
 
+describe("main line", () => {
+  const FIVE = scenesOf(["s1", "s2", "s3", "s4", "s5"]);
+
+  test("a flash-forward prologue doesn't become the anchor; the next scene starts the main line", () => {
+    const timeline = build(
+      [
+        ...events("fall"),
+        {
+          type: "placeScene",
+          scene: "s1",
+          placement: [{ relation: "after", event: "fall" }],
+        },
+      ],
+      FIVE,
+    );
+    const chronology = compileChronology(timeline, FIVE);
+    // s2 doesn't follow the prologue: it is unordered with it.
+    expect(compareEvents(chronology, s("s1"), s("s2"))).toBe("unordered");
+    expect(compareEvents(chronology, s("s2"), s("s3"))).toBe("before");
+    expect(compareEvents(chronology, s("s4"), s("s5"))).toBe("before");
+    expect(chronology.hints).toEqual([
+      {
+        kind: "assumed_main_line",
+        scene: "s2",
+        after: "s1",
+        anchor: null,
+        message:
+          "Scene s2 comes after scene s1, which is placed off the main line, so it is assumed to start the main line. Place it, or mark s1 as continuing, to confirm.",
+      },
+    ]);
+    // So a change in the prologue is not assumed to hold in s2.
+    expect(
+      stateAt(timeline, changes("free", [s("s1"), "crowned"]), "s2", FIVE),
+    ).toMatchObject({ status: "uncertain" });
+  });
+
+  test("a two-scene flashback with only its first scene placed: the default stands, with a hint", () => {
+    const timeline = build(
+      [
+        {
+          type: "placeScene",
+          scene: "s3",
+          placement: [{ relation: "before", event: s("s1") }],
+        },
+      ],
+      FIVE,
+    );
+    const chronology = compileChronology(timeline, FIVE);
+    expect(compareEvents(chronology, s("s2"), s("s4"))).toBe("before");
+    expect(compareEvents(chronology, s("s4"), s("s5"))).toBe("before");
+    expect(chronology.hints).toMatchObject([
+      { kind: "assumed_main_line", scene: "s4", after: "s3", anchor: "s2" },
+    ]);
+  });
+
+  test("a two-scene flashback marked as continuing: its second scene follows the first", () => {
+    const timeline = build(
+      [
+        {
+          type: "placeScene",
+          scene: "s3",
+          placement: [{ relation: "before", event: s("s1") }],
+          continues: true,
+        },
+        {
+          type: "placeScene",
+          scene: "s5",
+          placement: [{ relation: "after", event: s("s2") }],
+          continues: true,
+        },
+      ],
+      FIVE,
+    );
+    const chronology = compileChronology(timeline, FIVE);
+    expect(compareEvents(chronology, s("s3"), s("s4"))).toBe("before");
+    // s4 is in the flashback, not after s2.
+    expect(compareEvents(chronology, s("s2"), s("s4"))).not.toBe("before");
+    expect(chronology.hints).toEqual([]);
+  });
+
+  test("a time skip becomes the anchor without being marked", () => {
+    const timeline = build(
+      [
+        {
+          type: "placeScene",
+          scene: "s3",
+          placement: [
+            {
+              relation: "after",
+              event: s("s2"),
+              duration: { amount: 10, frame: "world" },
+            },
+          ],
+        },
+      ],
+      FIVE,
+    );
+    const chronology = compileChronology(timeline, FIVE);
+    expect(compareEvents(chronology, s("s3"), s("s4"))).toBe("before");
+    expect(chronology.hints).toEqual([]);
+  });
+
+  test("only a placed scene can continue the main line", () => {
+    expect(
+      applyTimelineCommand(
+        emptyTimeline,
+        {
+          type: "placeScene",
+          scene: "s2",
+          placement: "default",
+          continues: true,
+        },
+        SCENES,
+      )._unsafeUnwrapErr(),
+    ).toMatchObject({ kind: "invalid_command" });
+  });
+});
+
 describe("positions", () => {
   test("positions in one frame order events without constraints", () => {
     const timeline = build([
@@ -236,6 +354,29 @@ describe("positions", () => {
       status: "known",
       min: 0,
       max: 2,
+    });
+  });
+
+  test("a change at a point event is not uncertain at a scene during it", () => {
+    const timeline = build([
+      ...events("bell"),
+      {
+        type: "setPosition",
+        event: "bell",
+        frame: "world",
+        position: { start: 5, end: 5 },
+      },
+      {
+        type: "placeScene",
+        scene: "s2",
+        placement: [{ relation: "during", event: "bell" }],
+      },
+    ]);
+    const fact = changes("silent", ["bell", "ringing"]);
+    // s2 lies within an instant, so it starts as the bell does: not yet rung.
+    expect(stateAt(timeline, fact, "s2")).toMatchObject({
+      status: "holds",
+      value: "silent",
     });
   });
 

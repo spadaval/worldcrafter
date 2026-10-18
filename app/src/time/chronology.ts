@@ -12,9 +12,8 @@
  *   `T(start) <= e.start` and `e.end < T(end)` (`<=` for an exact position),
  *   so positions in one frame order events without any pairwise edges, and an
  *   event positioned in two frames (a sync point) links their clocks;
- * - a scene without an explicit placement comes right after the anchor: the
- *   last scene before it in narrative order that is known to come after the
- *   anchor before it. See `compileChronology`.
+ * - a scene without an explicit placement comes right after the main-line
+ *   anchor; see `compileChronology`.
  *
  * `p` happens before `q` when a path from `p` to `q` has a strict edge. Points
  * with no path between them are unordered: queries report them as uncertain,
@@ -86,6 +85,23 @@ export type TimelineProblem =
     };
 
 /**
+ * An unplaced scene whose default placement is a guess the bookkeeping pass
+ * should confirm. Raised when the scene right before it in narrative order
+ * is placed and did not become the anchor (a flashback or prologue not
+ * marked `continues`): the scene might continue that one instead. The
+ * default still stands; this is not a problem and blocks nothing.
+ */
+export type PlacementHint = {
+  kind: "assumed_main_line";
+  scene: string;
+  /** The placed scene just before it. */
+  after: string;
+  /** The anchor it was placed after; `null` if it starts the main line. */
+  anchor: string | null;
+  message: string;
+};
+
+/**
  * How point `p` relates to point `q`: `before` (`p < q`), `same_or_before`
  * (`p <= q`, maybe equal), the reverses, `unordered`, or `contradictory`
  * (both `p < q` and `q <= p` follow).
@@ -117,6 +133,8 @@ export interface Chronology {
   readonly scenes: readonly SceneRef[];
   /** Contradictions, and references to events or frames that don't exist. */
   readonly problems: readonly TimelineProblem[];
+  /** Default placements to confirm, in narrative order. */
+  readonly hints: readonly PlacementHint[];
   hasEvent(event: EventId): boolean;
   /** The graph point of an event's start or end; undefined for an unknown event. */
   point(event: EventId, end: "start" | "end"): number | undefined;
@@ -138,13 +156,18 @@ type Reach = Uint8Array;
  * Compiles `timeline` against the scenes of the current outline, in reading
  * order (`readingOrder`).
  *
- * Default placement: scenes are visited in narrative order with an anchor,
- * initially the first scene. A scene without a placement comes right after
- * the anchor and becomes the anchor. A placed scene becomes the anchor only
- * if it is known to come after it (a time skip); otherwise (a flashback, a
- * parallel scene, or one whose order is unknown) the anchor stays, so the
- * scene after a flashback resumes the main line instead of following the
- * flashback into the past.
+ * Default placement ("main line"): scenes are visited in narrative order
+ * with an anchor, the main line's latest scene, initially none.
+ * - An unplaced scene comes right after the anchor and becomes the anchor.
+ *   With no anchor yet, it starts the main line: it becomes the anchor,
+ *   unordered with any placed scene before it.
+ * - A placed scene marked `continues` becomes the anchor.
+ * - Any other placed scene becomes the anchor only if there is one and the
+ *   scene is known to come after it (a time skip). Otherwise (a flashback, a
+ *   flash-forward prologue, a parallel scene, or one whose order is unknown)
+ *   the anchor stays, so the next unplaced scene resumes the main line.
+ * An unplaced scene right after a placed scene that did not become the
+ * anchor gets a `PlacementHint`.
  */
 export function compileChronology(
   timeline: Timeline,
@@ -232,12 +255,12 @@ export function compileChronology(
     }
   }
 
-  const placed = new Set<string>();
+  const placed = new Map<string, boolean>();
   for (const placement of timeline.placements) {
     const by = `the placement of scene ${placement.scene}`;
     const scene = resolve(sceneEventId(placement.scene), by);
     if (scene === undefined) continue;
-    placed.add(placement.scene);
+    placed.set(placement.scene, placement.continues);
     const origin: Origin = { kind: "placement", scene: placement.scene };
     for (const constraint of placement.constraints) {
       const other = resolve(constraint.event, by);
@@ -297,22 +320,43 @@ export function compileChronology(
     }
   }
 
+  const hints: PlacementHint[] = [];
   let anchor: { index: number; scene: string } | undefined;
+  /** The previous scene, if it was placed and didn't become the anchor. */
+  let offLine: string | undefined;
   for (const scene of scenes) {
     const index = eventIndex.get(sceneEventId(scene.documentId));
     if (index === undefined) continue;
     const current = { index, scene: scene.documentId };
-    if (anchor === undefined) {
+    const continues = placed.get(scene.documentId);
+    if (continues === undefined) {
+      if (offLine !== undefined) {
+        hints.push({
+          kind: "assumed_main_line",
+          scene: scene.documentId,
+          after: offLine,
+          anchor: anchor?.scene ?? null,
+          message: `Scene ${scene.documentId} comes after scene ${offLine}, which is placed off the main line, so it is assumed to ${anchor === undefined ? "start the main line" : `follow scene ${anchor.scene} on the main line`}. Place it, or mark ${offLine} as continuing, to confirm.`,
+        });
+      }
+      if (anchor !== undefined) {
+        addEdge(endOf(anchor.index), startOf(index), true, {
+          kind: "default_placement",
+          scene: scene.documentId,
+          after: anchor.scene,
+        });
+      }
       anchor = current;
-    } else if (!placed.has(scene.documentId)) {
-      addEdge(endOf(anchor.index), startOf(index), true, {
-        kind: "default_placement",
-        scene: scene.documentId,
-        after: anchor.scene,
-      });
+      offLine = undefined;
+    } else if (
+      continues ||
+      (anchor !== undefined &&
+        (sweep(out, endOf(anchor.index))[startOf(index)] ?? 0) === 2)
+    ) {
       anchor = current;
-    } else if ((sweep(out, endOf(anchor.index))[startOf(index)] ?? 0) === 2) {
-      anchor = current;
+      offLine = undefined;
+    } else {
+      offLine = scene.documentId;
     }
   }
 
@@ -356,6 +400,7 @@ export function compileChronology(
     timeline,
     scenes,
     problems,
+    hints,
     position: (event, frame) => positions.get(JSON.stringify([event, frame])),
     hasEvent: (event) => eventIndex.has(event),
     point(event, end) {

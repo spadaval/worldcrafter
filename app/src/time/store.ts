@@ -26,6 +26,7 @@ import type { RecordFactChange, WorldError, WorldStore } from "../world/store";
 import {
   type Chronology,
   compileChronology,
+  type PlacementHint,
   type TimelineProblem,
 } from "./chronology";
 import {
@@ -65,6 +66,8 @@ export interface LoadedTimeline {
    * the affected results as uncertain.
    */
   readonly problems: readonly TimelineProblem[];
+  /** Default scene placements the bookkeeping pass should confirm. */
+  readonly hints: readonly PlacementHint[];
 }
 
 export interface TimelineStore {
@@ -130,6 +133,7 @@ export function createTimelineStore(
           timeline,
           chronology,
           problems: timelineProblems(chronology),
+          hints: chronology.hints,
         };
       },
     );

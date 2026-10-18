@@ -197,7 +197,15 @@ for (const [name, open] of [
         null,
         s("s2"),
       ]);
-      // The scene after the flashback resumes the main line, after s3.
+      expect(flashback.placementHint).toBeNull();
+      // The scene after the flashback resumes the main line, after s3, and
+      // that guess is flagged for the bookkeeping pass to confirm.
+      expect((await context("s5")).placementHint).toMatchObject({
+        scene: "s5",
+        after: "s4",
+        anchor: "s3",
+      });
+      expect((await time.load())._unsafeUnwrap().hints).toHaveLength(1);
       expect(summary((await context("s5")).revealed)).toEqual([
         "aldric.title=king since scene:s2",
       ]);
@@ -261,6 +269,50 @@ for (const [name, open] of [
       });
       expect(summary((await context("s3")).unrevealed)).toEqual([
         "aldric.title=exile since abdication",
+      ]);
+    });
+
+    test("a border that moves during a years-long war is uncertain during it", async () => {
+      await entry("harrow", "place");
+      await field("harrow", "border", "the river");
+      await run({ type: "addEvent", id: "war", label: "The Ten Years' War" });
+      await change("harrow", "border", "war", "the mountains");
+      // s1 before the war, s2 during it, s3 after it.
+      await run({
+        type: "constrain",
+        id: "c1",
+        a: "war",
+        relation: "after",
+        b: s("s1"),
+      });
+      await run({
+        type: "placeScene",
+        scene: "s2",
+        placement: [{ relation: "during", event: "war" }],
+      });
+      await run({
+        type: "constrain",
+        id: "c2",
+        a: "war",
+        relation: "before",
+        b: s("s3"),
+      });
+      const border = (c: SceneContext) =>
+        summary([...c.revealed, ...c.unrevealed, ...c.uncertain]).filter((f) =>
+          f.startsWith("harrow"),
+        );
+      expect(border(await context("s1"))).toEqual([
+        "harrow.border=the river since base",
+      ]);
+      const during = await context("s2");
+      expect(border(during)).toEqual([
+        "harrow.border uncertain: the river since base | the mountains since war",
+      ]);
+      expect(during.uncertain[0]?.state).toMatchObject({
+        reasons: [{ kind: "during", relativeTo: s("s2"), event: "war" }],
+      });
+      expect(border(await context("s3"))).toEqual([
+        "harrow.border=the mountains since war",
       ]);
     });
 

@@ -53,7 +53,8 @@ export type TimelineCommand =
   | { type: "removeConstraint"; id: string }
   /**
    * Places a scene explicitly, replacing any earlier placement, or (with
-   * `"default"`) returns it to following the scene before it.
+   * `"default"`) returns it to following the main line. With `continues`,
+   * the main line continues from this scene (see `ScenePlacement`).
    */
   | ({
       type: "placeScene";
@@ -61,6 +62,7 @@ export type TimelineCommand =
       placement:
         | "default"
         | { relation: TimeRelation; event: EventId; duration?: Duration }[];
+      continues?: boolean;
     } & WithAuthority)
   /** Reference defaults to the world frame, rate to 1. */
   | {
@@ -283,6 +285,11 @@ function edit(
         (p) => p.scene !== command.scene,
       );
       if (command.placement === "default") {
+        if (command.continues !== undefined) {
+          return invalid(
+            "only an explicitly placed scene can continue the main line",
+          );
+        }
         return ok({ ...timeline, placements: others });
       }
       for (const constraint of command.placement) {
@@ -303,6 +310,7 @@ function edit(
               event: c.event,
               duration: c.duration ?? null,
             })),
+            continues: command.continues ?? false,
             authority,
           },
         ],

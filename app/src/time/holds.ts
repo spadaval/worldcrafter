@@ -2,12 +2,20 @@
  * What generation needs for a scene: which facts hold at its event, which the
  * reader has been shown before it, and which hold but haven't been shown.
  *
- * A change anchored to event E takes effect when E ends. A fact holds at an
- * event S as it starts: its latest change that ends before S starts, or its
- * base value if no change does. A change whose order relative to S (or to the
- * other changes) is unknown makes the fact uncertain, and the result lists
- * every value it might have. So does a change to an event that doesn't
- * exist, two changes at one event, or a contradiction in the order.
+ * A fact is read at an event S as S starts. A change anchored to event E
+ * ("uncertain during"):
+ * - is in effect at S if E ends before S starts;
+ * - is not in effect if S starts no later than E starts (including a change
+ *   in S itself, or at an event simultaneous with it);
+ * - is uncertain if S starts during E (after E starts, no later than E ends),
+ *   with a `during` reason naming E: the change happens somewhere within E.
+ * An event known to be a point (an exact position) has no "during", so a
+ * change there is either in effect or not. The fact's value is that of its
+ * latest change in effect, or its base value if none is. A change whose order
+ * relative to S (or to the other changes) is unknown also makes the fact
+ * uncertain, and the result lists every value it might have. So does a
+ * change to an event that doesn't exist, two changes at one event, or a
+ * contradiction in the order.
  *
  * Cost of `holdsAt`: two walks of the order graph from the scene, plus one
  * from each change that needs comparing with another change of its fact:
@@ -17,7 +25,7 @@
 import { err, ok, type Result } from "neverthrow";
 import type { Authority, Fact, FieldValue } from "../world/facts";
 import type { StoredFacts } from "../world/store";
-import type { Chronology, PointOrder } from "./chronology";
+import type { Chronology, PlacementHint, PointOrder } from "./chronology";
 import { type EventId, type FactRef, sceneEventId } from "./timeline";
 
 export type FactValueAt = FieldValue | true;
@@ -35,6 +43,8 @@ export type Candidate = {
  * with the fact's changes.
  */
 export type Uncertainty =
+  /** `relativeTo` starts during `event`, which changes the fact. */
+  | { kind: "during"; relativeTo: EventId; event: EventId }
   /** Changes at `events` may or may not take effect before `relativeTo`. */
   | { kind: "unordered"; relativeTo: EventId; events: EventId[] }
   /** Changes at `events` are all in effect, but which is latest is unknown. */
@@ -89,6 +99,8 @@ export type SceneContext = {
    * hold at its event (the reader may still believe them).
    */
   revealedBefore: RevealedFact[];
+  /** Set when the scene's default placement should be confirmed. */
+  placementHint: PlacementHint | null;
 };
 
 /** Every fact of every entry at the start of `event`. */
@@ -187,6 +199,8 @@ export function sceneContext(
         unrevealed: [],
         uncertain: [],
         revealedBefore,
+        placementHint:
+          chronology.hints.find((hint) => hint.scene === scene) ?? null,
       };
       for (const at of facts) {
         const { state } = at;
@@ -227,12 +241,14 @@ function revealKey(entry: string, fact: FactRef, since: EventId | null) {
   return JSON.stringify([entry, fact, since]);
 }
 
-/** `at` relative to a change's end when the change has not taken effect. */
-const NOT_IN_EFFECT: readonly PointOrder[] = [
+/** `at` is no later than the point it is compared with. */
+const AT_OR_BEFORE: readonly PointOrder[] = [
   "before",
   "same_or_before",
   "same",
 ];
+/** `at` is no earlier than the point it is compared with. */
+const AT_OR_AFTER: readonly PointOrder[] = ["after", "same_or_after", "same"];
 
 /** The state of one fact at the start of `event` (point `at`). */
 function stateAt<T extends FactValueAt>(
@@ -244,6 +260,8 @@ function stateAt<T extends FactValueAt>(
   const unknownEvents = new Set<EventId>();
   /** Open changes whose order relative to `event` is unknown. */
   const unordered = new Set<EventId>();
+  /** Open changes whose event `event` starts during. */
+  const during = new Set<EventId>();
   const contradictory = new Set<EventId>();
   /** Changes known to take effect before `at`. */
   const before: { change: Fact<T>["changes"][number]; end: number }[] = [];
@@ -258,14 +276,24 @@ function stateAt<T extends FactValueAt>(
       continue;
     }
     // Compare from `at`, so every change reuses the same two cached walks.
-    const order = chronology.comparePoints(at, end);
-    if (order === "after") {
+    const toEnd = chronology.comparePoints(at, end);
+    if (toEnd === "after") {
       before.push({ change, end });
-    } else if (order === "contradictory") {
+      continue;
+    }
+    const start = chronology.point(change.event, "start") ?? end;
+    const toStart = chronology.comparePoints(at, start);
+    if (toEnd === "contradictory" || toStart === "contradictory") {
       open.push({ change, end });
       contradictory.add(change.event).add(event);
-    } else if (!NOT_IN_EFFECT.includes(order)) {
-      // Unordered, or the change ends no later than `at` but maybe at it.
+    } else if (AT_OR_BEFORE.includes(toStart)) {
+      // Not started yet as `event` starts: not in effect.
+    } else if (AT_OR_AFTER.includes(toStart) && AT_OR_BEFORE.includes(toEnd)) {
+      open.push({ change, end });
+      during.add(change.event);
+    } else {
+      // Unordered with the change's event, or after its start but maybe
+      // after its end too.
       open.push({ change, end });
       unordered.add(change.event);
     }
@@ -334,6 +362,11 @@ function stateAt<T extends FactValueAt>(
   for (const e of unknownEvents) {
     if (relevant.has(e) || e === event) {
       reasons.push({ kind: "unknown_event", event: e });
+    }
+  }
+  for (const e of during) {
+    if (relevant.has(e)) {
+      reasons.push({ kind: "during", relativeTo: event, event: e });
     }
   }
   const openEvents = [...unordered].filter((e) => relevant.has(e));

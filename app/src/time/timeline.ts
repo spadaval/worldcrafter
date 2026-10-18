@@ -108,12 +108,15 @@ export type SceneConstraint = {
 
 /**
  * A scene placed explicitly (a flashback, a time skip, a parallel POV). A
- * scene without one is placed right after the scene before it in narrative
- * order; see `compileChronology`.
+ * scene without one follows the main line; see `compileChronology`.
+ * `continues` marks the main line as continuing from this scene: the next
+ * unplaced scene follows it (the rest of a multi-scene flashback, or the
+ * story after a time skip).
  */
 export type ScenePlacement = {
   scene: string;
   constraints: SceneConstraint[];
+  continues: boolean;
   authority: Authority;
 };
 
@@ -353,11 +356,14 @@ function checkPlacement(v: JsonRecord, at: string): Check<ScenePlacement> {
   return strings(v, at, ["scene"]).andThen(({ scene }) =>
     list(v.constraints, `${at}.constraints`, checkSceneConstraint).andThen(
       (constraints) =>
-        checkAuthority(v.authority, at).map((authority) => ({
-          scene,
-          constraints,
-          authority,
-        })),
+        typeof v.continues !== "boolean"
+          ? err(`${at}.continues must be a boolean`)
+          : checkAuthority(v.authority, at).map((authority) => ({
+              scene,
+              constraints,
+              continues: v.continues === true,
+              authority,
+            })),
     ),
   );
 }

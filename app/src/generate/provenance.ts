@@ -51,8 +51,13 @@ export type Provenance = {
   outcome: GenerationOutcome;
   finishReason: string | null;
   error: string | null;
-  /** The model's raw text, before the output grammar was applied. */
+  /**
+   * The model's raw text the segment shows, before the output grammar was
+   * applied. For a stopped or failed generation, what was shown then.
+   */
   text: string;
+  /** All the raw text that arrived; longer than `text` only when it stopped or failed between renders. */
+  received: string;
   logprobs: TokenLogprob[] | null;
   /** Epoch milliseconds. */
   startedAt: number;

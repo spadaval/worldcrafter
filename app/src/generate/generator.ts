@@ -457,6 +457,8 @@ export function createGenerator(options: GeneratorOptions): Generator {
     const abort = new AbortController();
     controller = abort;
     let text = "";
+    /** The raw text the segment shows: `text` as of the last render. */
+    let shownText = "";
     let parser = new GeneratedTextStream();
     /** Finished paragraphs already shown in their final form. */
     let shown = 0;
@@ -477,6 +479,7 @@ export function createGenerator(options: GeneratorOptions): Generator {
           shown,
         );
         shown = finished.length;
+        shownText = text;
         active.set({ segmentId, requestId, text });
         if (!present) {
           removed = true;
@@ -547,7 +550,8 @@ export function createGenerator(options: GeneratorOptions): Generator {
         outcome,
         finishReason: completion?.finishReason ?? null,
         error,
-        text,
+        text: shownText,
+        received: text,
         logprobs: completion ? completion.logprobs : logprobs,
         startedAt,
         finishedAt: at,
@@ -571,10 +575,33 @@ export function createGenerator(options: GeneratorOptions): Generator {
         `Showing the output failed: ${cause instanceof Error ? cause.message : String(cause)}`,
       );
 
+    /**
+     * The writer deleted or undid the new segment. If it replaced one that is
+     * gone too, keep the replaced blocks in the old record.
+     */
+    const removedByWriter = async (): Promise<GenerationResult> => {
+      generation.abandon();
+      if (replaced && segmentIndex(editor, replaced.segmentId) === -1) {
+        const archive = await replacedArchive(replaced, null, now());
+        if (archive) {
+          written.set(archive.id, archive);
+          return done(
+            "cancelled",
+            null,
+            await session.saveWith({ annotations: [archive] }),
+          );
+        }
+      }
+      return done("cancelled", null, session.status.get());
+    };
+
     try {
       if (failure !== null) return await failed(failure);
       if (generation.state === "stopped") {
-        return await keep("stopped", null);
+        // The stopping edit may have removed the segment too.
+        return segmentIndex(editor, segmentId) === -1
+          ? await removedByWriter()
+          : await keep("stopped", null);
       }
       if (result.isOk() && result.value.text !== text) {
         // Not streamed (or the stream disagreed): show the whole response.
@@ -592,23 +619,7 @@ export function createGenerator(options: GeneratorOptions): Generator {
           ? "cancelled"
           : "failed";
       const error = result.isErr() ? result.error : undefined;
-      if (removed) {
-        // The writer deleted or undid the new segment. If it replaced one
-        // that is gone too, keep the replaced blocks in the old record.
-        generation.abandon();
-        if (replaced && segmentIndex(editor, replaced.segmentId) === -1) {
-          const archive = await replacedArchive(replaced, null, now());
-          if (archive) {
-            written.set(archive.id, archive);
-            return done(
-              "cancelled",
-              null,
-              await session.saveWith({ annotations: [archive] }),
-            );
-          }
-        }
-        return done("cancelled", null, session.status.get());
-      }
+      if (removed) return await removedByWriter();
       if (parser.finished.length === 0 && parser.tail().length === 0) {
         generation.discard();
         return done(outcome, null, await session.flush(), error);

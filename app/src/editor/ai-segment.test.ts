@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { TextApi } from "platejs";
 import { canonicalize } from "~/content/canonicalize";
 import { parseGeneratedText } from "~/content/generated-text";
 import {
@@ -205,19 +206,27 @@ describe("AI segment generations", () => {
     expect(content(editor)).toEqual(ORIGINAL);
   });
 
-  test("a render after undo and redo of the segment re-syncs every paragraph", async () => {
+  test("undo then redo mid-stream, caret inside, brings back the segment as shown", async () => {
     const editor = fresh();
     const generation = start(editor);
     await tick();
-    show(generation, "one\ntwo");
+    show(generation, "one\ntwo words");
+    editor.tf.select({ path: [1, 1, 0], offset: 7 });
     editor.undo();
+    expect(generation.state).toBe("stopped");
+    expect(content(editor)).toEqual(ORIGINAL);
     editor.redo();
-    expect(generation.render(parseGeneratedText("one\ntwo\nthree"), 2)).toBe(
-      true,
-    );
-    expect(texts(segment(editor, 1))).toEqual(["one", "two", "three"]);
-    generation.finish();
     expect(segment(editor, 1).status).toBe("ready");
+    expect(texts(segment(editor, 1))).toEqual(["one", "two words"]);
+    const { selection } = editor;
+    for (const point of selection ? [selection.anchor, selection.focus] : []) {
+      const leaf = editor.api.node(point.path)?.[0];
+      expect(TextApi.isText(leaf) && point.offset <= leaf.text.length).toBe(
+        true,
+      );
+    }
+    expect(show(generation, "one\ntwo words more")).toBe(false);
+    expect(texts(segment(editor, 1))).toEqual(["one", "two words"]);
   });
 
   test("discard after the writer's edit was undone keeps redo working", async () => {
@@ -350,19 +359,83 @@ describe("writer edits touching a generating segment", () => {
     roundTrip(editor, 2);
   });
 
-  test("select-all and type removes the segment, which cancels it", async () => {
+  test("select-all and type stops it first, then removes it", async () => {
     const { editor, generation } = await streaming();
     editor.tf.select([]);
     editor.tf.insertText("X");
-    expect(generation.state).toBe("live");
+    expect(generation.state).toBe("stopped");
     expect(show(generation, "Hello\nworld wide")).toBe(false);
-    generation.abandon();
     expect(content(editor).map((b) => b.type)).not.toContain("ai_segment");
     expect(editor.api.string([])).toBe("X");
     await tick();
     editor.undo();
     expect(texts(segment(editor, 1))).toEqual(["Hello", "world"]);
     expect(segment(editor, 1).status).toBe("ready");
+  });
+
+  test("an edit covering the segment that Slate keeps it through still stops it", async () => {
+    for (const select of [
+      // From the segment's first character to the end of the next block.
+      (editor: DocumentEditor) =>
+        editor.tf.select({
+          anchor: { path: [1, 0, 0], offset: 0 },
+          focus: { path: [2, 0], offset: 6 },
+        }),
+      // Exactly the segment's contents.
+      (editor: DocumentEditor) =>
+        editor.tf.select({
+          anchor: { path: [1, 0, 0], offset: 0 },
+          focus: { path: [1, 1, 0], offset: 5 },
+        }),
+    ]) {
+      const { editor, generation } = await streaming();
+      select(editor);
+      editor.tf.insertText("MINE");
+      expect(generation.state).toBe("stopped");
+      const text = editor.api.string([]);
+      expect(text).toContain("MINE");
+      show(generation, "Hello\nworld wide");
+      expect(editor.api.string([])).toBe(text);
+    }
+  });
+
+  test("bold over a covered range stops it first", async () => {
+    const { editor, generation } = await streaming();
+    editor.tf.select({
+      anchor: { path: [1, 0, 0], offset: 0 },
+      focus: { path: [1, 1, 0], offset: 5 },
+    });
+    editor.tf.addMark("bold", true);
+    expect(generation.state).toBe("stopped");
+    expect(segment(editor, 1).children[0]?.children).toEqual([
+      { text: "Hello", bold: true },
+    ]);
+  });
+
+  test("with the segment first, select-all and type stops it first", async () => {
+    const editor = createDocumentEditor([p("After.", "b2")]);
+    const generation = start(editor, 0);
+    await tick();
+    show(generation, "Hello\nworld");
+    editor.tf.select([]);
+    editor.tf.insertText("MINE");
+    expect(generation.state).toBe("stopped");
+    expect(editor.api.string([])).toBe("MINE");
+    show(generation, "Hello\nworld wide");
+    expect(editor.api.string([])).toBe("MINE");
+  });
+
+  test("the stopping edit is its own undo step", async () => {
+    const { editor, generation } = await streaming();
+    editor.tf.insertText("!", { at: { path: [2, 0], offset: 6 } });
+    editor.tf.select({ path: [1, 0, 0], offset: 5 });
+    editor.tf.insertText("X");
+    expect(generation.state).toBe("stopped");
+    editor.undo();
+    expect(texts(segment(editor, 1))).toEqual(["Hello", "world"]);
+    expect(content(editor)[2]).toMatchObject({
+      children: [{ text: "After.!" }],
+    });
   });
 
   test("edits elsewhere leave it streaming", async () => {

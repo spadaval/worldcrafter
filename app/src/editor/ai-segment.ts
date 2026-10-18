@@ -23,7 +23,6 @@ import {
   createSlatePlugin,
   type Descendant,
   ElementApi,
-  PointApi,
   RangeApi,
   type SlateEditor,
   type TElement,
@@ -118,7 +117,7 @@ export function startGeneration(
     index = placement.index;
   }
   // Registered before the segment exists, so normalising keeps it generating.
-  setLive(editor, segmentId, () => stop());
+  setLive(editor, segmentId, { stop: () => stop(), step: undefined });
   editor.tf.withNewBatch(() => {
     editor.tf.withoutNormalizing(() => {
       if (replaced) editor.tf.removeNodes({ at: [index] });
@@ -126,6 +125,7 @@ export function startGeneration(
     });
   });
   const step = editor.history.undos.at(-1);
+  setLive(editor, segmentId, { stop: () => stop(), step });
   // Whatever is recorded next (the writer's edits) is a step of its own, even
   // in the same tick.
   editor.tf.setSplittingOnce(true);
@@ -221,6 +221,8 @@ export function startGeneration(
     settle();
     end("stopped");
     generation.onStop?.();
+    // The stopping edit is a step of its own, not part of the writer's last.
+    editor.tf.setSplittingOnce(true);
   }
   return { generation, replaced };
 }
@@ -316,17 +318,27 @@ export function unwrapSegment(
   return ids;
 }
 
+/** An undo step (Slate history's batch). */
+type Batch = SlateEditor["history"]["undos"][number];
+
+/** A generation registered in an editor: how to stop it, and its undo step. */
+interface LiveGeneration {
+  readonly stop: () => void;
+  readonly step: Batch | undefined;
+}
+
 /**
  * Stops every live generation whose segment the writer's next edit touches,
  * so the edit lands on a ready segment and no render overwrites it. The
  * edit's reach is the selection, plus the neighbouring block for a
  * collapsed Backspace at the start of a block or Delete at the end (they
- * merge into it). A segment the selection covers whole is left alone: the
- * edit removes it, which cancels its generation.
+ * merge into it). That includes a selection covering the whole segment:
+ * Slate may keep the segment (a selection starting at its first character),
+ * so it is stopped first in every case.
  */
 function stopTouched(
   editor: SlateEditor,
-  live: ReadonlyMap<string, () => void>,
+  live: ReadonlyMap<string, LiveGeneration>,
   reach?: "backward" | "forward",
 ): void {
   const { selection } = editor;
@@ -350,17 +362,7 @@ function stopTouched(
     ) {
       continue;
     }
-    const stop = live.get(String(node.id));
-    if (!stop) continue;
-    const segmentStart = editor.api.start([i]);
-    const segmentEnd = editor.api.end([i]);
-    const covered =
-      !collapsed &&
-      segmentStart !== undefined &&
-      segmentEnd !== undefined &&
-      PointApi.compare(start, segmentStart) <= 0 &&
-      PointApi.compare(end, segmentEnd) >= 0;
-    if (!covered) stop();
+    live.get(String(node.id))?.stop();
   }
 }
 
@@ -376,15 +378,20 @@ function stopTouched(
  *   from either side) first stops its generation, keeping the text shown,
  *   and then applies to the now ready segment. Streamed text never
  *   overwrites the writer's edits, and history stays consistent: the
- *   generation's undo step places the segment as it was when stopped. An
- *   edit that removes the whole segment just removes it (its generation then
- *   sees it gone and cancels). The transforms above are not affected.
+ *   generation's undo step places the segment as it was when stopped. This
+ *   holds for an edit covering the whole segment too, whether or not Slate
+ *   then removes it. The transforms above are not affected.
+ * - Undoing a live generation's own step stops it first, so redo brings
+ *   back the segment as shown (and a caret inside it stays valid).
  */
 export const GeneratingSegmentPlugin = createSlatePlugin({
   key: "generatingSegment",
   options: {
-    /** Live generations by segment ID, each with the function that stops it. */
-    live: new Map<string, () => void>() as ReadonlyMap<string, () => void>,
+    /** Live generations by segment ID. */
+    live: new Map<string, LiveGeneration>() as ReadonlyMap<
+      string,
+      LiveGeneration
+    >,
   },
 }).overrideEditor(
   ({
@@ -392,6 +399,7 @@ export const GeneratingSegmentPlugin = createSlatePlugin({
     getOptions,
     tf: {
       normalizeNode,
+      undo,
       insertText,
       insertBreak,
       insertSoftBreak,
@@ -432,6 +440,15 @@ export const GeneratingSegmentPlugin = createSlatePlugin({
           }
           normalizeNode(entry);
         },
+        undo() {
+          // Undoing a live generation's own step: stop it first, so the step
+          // places the segment as shown and redo brings that back.
+          const newest = editor.history.undos.at(-1);
+          for (const generation of getOptions().live.values()) {
+            if (newest && generation.step === newest) generation.stop();
+          }
+          undo();
+        },
         insertText(text, options) {
           if (!options?.at) stopTouched(editor, getOptions().live);
           insertText(text, options);
@@ -458,7 +475,7 @@ export const GeneratingSegmentPlugin = createSlatePlugin({
 function setLive(
   editor: SlateEditor,
   segmentId: string,
-  stop: (() => void) | null,
+  stop: LiveGeneration | null,
 ): void {
   const next = new Map(editor.getOption(GeneratingSegmentPlugin, "live"));
   if (stop) next.set(segmentId, stop);

@@ -16,6 +16,7 @@ import {
 import { IDBFactory } from "fake-indexeddb";
 import { errAsync } from "neverthrow";
 import { canonicalize } from "~/content/canonicalize";
+import { parseGeneratedText } from "~/content/generated-text";
 import {
   type AiSegment,
   type ContentDocument,
@@ -722,6 +723,7 @@ for (const [name, open] of [
         anchor: { path: [3, 1, 0], offset: 2 },
         focus: { path: [4, 0], offset: 3 },
       });
+      const shownBeforeEdit = textOf(segmentAt(content(session), 3));
       editor.tf.insertText("MINE");
       const shownWhenStopped = textOf(segmentAt(content(session), 3));
       const result = (await sending)._unsafeUnwrap();
@@ -735,12 +737,37 @@ for (const [name, open] of [
         await storage.annotations.load(result.segmentId as string)
       )._unsafeUnwrap();
       expect(record.data).toMatchObject({ outcome: "stopped" });
+      // Provenance text is what the segment showed when it stopped.
+      const data = record.data as { text: string; received: string };
       expect(
-        "Hello\nworld and the rest of it.".startsWith(
-          (record.data as { text: string }).text,
+        parseGeneratedText(data.text).map((p) =>
+          p.children.map((c) => ("text" in c ? c.text : "")).join(""),
         ),
-      ).toBe(true);
+      ).toEqual(shownBeforeEdit);
+      expect(data.received.startsWith(data.text)).toBe(true);
+      expect("Hello\nworld and the rest of it.".startsWith(data.received)).toBe(
+        true,
+      );
       expect(await stored()).toEqual(content(session));
+    });
+
+    test("select-all and type mid-stream stops it, and as the segment is gone records nothing", async () => {
+      const assembled = await prepare();
+      scripts.push(
+        stream([...pieces("Some words arriving.", 3).map(chunk), finish], 15),
+      );
+      const sending = generator.send(assembled.id, {
+        kind: "after",
+        blockId: "p2",
+      });
+      await until(() => (generator.active.get()?.text.length ?? 0) > 6);
+      await Bun.sleep(20);
+      session.editor.tf.select([]);
+      session.editor.tf.insertText("MINE");
+      const result = (await sending)._unsafeUnwrap();
+      expect(result).toMatchObject({ outcome: "cancelled", segmentId: null });
+      expect(session.editor.api.string([])).toBe("MINE");
+      expect((await storage.annotations.list())._unsafeUnwrap()).toEqual([]);
     });
 
     test("a render that throws mid-stream ends the generation as failed, with provenance", async () => {

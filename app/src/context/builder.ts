@@ -16,7 +16,8 @@
  * Mentions
  * --------
  * An entry is mentioned when its title or one of its aliases appears in the
- * window as a whole word, ignoring case. This is deliberately naive: no
+ * window as a whole word, ignoring case. Both sides are compared in NFC, and
+ * any run of whitespace matches any other ("Mira Vale" across a line break). This is deliberately naive: no
  * stemming, possessives only by luck ("Ardelia's" matches, "Ardelias"
  * doesn't), and an alias that is a common word matches everywhere.
  *
@@ -101,6 +102,8 @@ export type BuildContextInput = {
 
 export const DEFAULT_WINDOW = { minimum: 1000, preferred: 6000 };
 
+export type WindowLimit = "preferred" | "budget" | "document";
+
 export type CardReason = "pinned" | "mentioned";
 
 /** A card the builder considered, in priority order. */
@@ -128,6 +131,16 @@ export type ContextBreakdown = {
     truncated: boolean;
     /** IDs of AI segments left out because they were still generating. */
     excludedSegments: string[];
+    /** The window lengths asked for, in characters. */
+    minimum: number;
+    preferred: number;
+    /** Characters of prose before the cursor. */
+    available: number;
+    /**
+     * What stopped the window growing: its preferred length, the budget
+     * (pins or fixed text left no room), or the start of the document.
+     */
+    limitedBy: WindowLimit;
   };
   /** The instruction as sent, and the writer's part of it. */
   instruction: { text: string; writer: string | null };
@@ -169,11 +182,15 @@ export const DEFAULT_INSTRUCTION =
   "point of view. Write the next few paragraphs. Don't repeat what is " +
   "already written.";
 
-const SCENE_NOTES =
+export const SCENE_NOTES =
   "World notes, as of this scene. Keep the story consistent with every " +
-  "fact, and don't reveal facts the reader hasn't been shown.";
+  "fact. Facts known only to the author are given so the story stays " +
+  "consistent with them; don't state or hint at them unless the writer's " +
+  "instruction says to. Uncertain facts aren't settled at this point: " +
+  "don't state them as fact. Where the writer's instruction and these " +
+  "notes disagree, follow the instruction.";
 
-const NO_POSITION_NOTES =
+export const NO_POSITION_NOTES =
   "World notes. This document is not a scene in the outline, so facts are " +
   "as they stand at the start of the story.";
 
@@ -300,6 +317,15 @@ export function buildContext(
             text: window,
             truncated: window.length < prose.length,
             excludedSegments,
+            minimum: windowSize.minimum,
+            preferred: windowSize.preferred,
+            available: prose.length,
+            limitedBy:
+              length < preferred
+                ? "budget"
+                : prose.length <= windowSize.preferred
+                  ? "document"
+                  : "preferred",
           },
           instruction: { text: instruction, writer: writerPart(input) },
           cards: choices,
@@ -473,12 +499,15 @@ export function findMentions(
   text: string,
   entries: readonly Entry[],
 ): Mention[] {
+  const normalized = normalizeWithMap(text);
   const mentions: Mention[] = [];
   for (const entry of entries) {
     let best: Mention | null = null;
     for (const name of [entry.title, ...entry.aliases]) {
-      const offset = lastWordMatch(text, name.trim());
-      if (offset !== -1 && (best === null || offset > best.offset)) {
+      const found = lastWordMatch(normalized.text, name);
+      if (found === -1) continue;
+      const offset = normalized.toOriginal[found] as number;
+      if (best === null || offset > best.offset) {
         best = { entry: entry.documentId, name, offset };
       }
     }
@@ -491,9 +520,39 @@ export function findMentions(
   );
 }
 
+/**
+ * `text` in NFC, with the offset in `text` each output position came from.
+ * Each base character and its combining marks are normalized on their own,
+ * so every output position maps back exactly.
+ */
+function normalizeWithMap(text: string): {
+  text: string;
+  toOriginal: number[];
+} {
+  let out = "";
+  const toOriginal: number[] = [];
+  let at = 0;
+  for (const run of text.match(/\P{M}\p{M}*|\p{M}+/gu) ?? []) {
+    const composed = run.normalize("NFC");
+    for (let i = 0; i < composed.length; i += 1) toOriginal.push(at);
+    out += composed;
+    at += run.length;
+  }
+  toOriginal.push(at);
+  return { text: out, toOriginal };
+}
+
+/**
+ * Where the last whole-word, case-insensitive match of `name` starts in
+ * (normalized) `text`, or -1. The name is NFC-normalized, and any run of
+ * whitespace in it matches any run in the text ("Mira\nVale").
+ */
 function lastWordMatch(text: string, name: string): number {
-  if (name === "") return -1;
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const words = name.normalize("NFC").trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return -1;
+  const escaped = words
+    .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("\\s+");
   const pattern = new RegExp(
     `(?<![\\p{L}\\p{M}\\p{N}])${escaped}(?![\\p{L}\\p{M}\\p{N}])`,
     "giu",

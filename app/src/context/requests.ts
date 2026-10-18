@@ -5,8 +5,10 @@
  *
  * Requests are never changed in place. Editing one stores a new revision that
  * names its parent, so the request sent can always be told apart from the one
- * assembled. A revision keeps its root's breakdown, which describes how the
- * original was assembled, not the edited text.
+ * assembled. Only an assembled request has a breakdown: an edit can change
+ * any part of the text, so a revision instead names the assembled request its
+ * chain started from (`assembledFrom`), whose breakdown says how the original
+ * was put together.
  *
  * Storage keeps the record in the `requests` collection; this module owns the
  * shape of its `request` JSON and checks it on load.
@@ -20,19 +22,34 @@ import type {
   CardChoice,
   CardReason,
   ContextBreakdown,
+  WindowLimit,
 } from "./builder";
 
-export type ContextRequest = {
+type RequestCommon = {
   id: string;
   documentId: string;
-  /** The request this one was edited from; `null` for an assembled one. */
-  parentId: string | null;
   /** Epoch milliseconds. */
   createdAt: number;
   /** The exact request to send. */
   request: LlmRequest;
+};
+
+/** A request as the builder assembled it. */
+export type AssembledRecord = RequestCommon & {
+  origin: "assembled";
   breakdown: ContextBreakdown;
 };
+
+/** A writer's edit of another stored request. */
+export type RevisionRecord = RequestCommon & {
+  origin: "revision";
+  /** The request this one was edited from. */
+  parentId: string;
+  /** The assembled request at the root of the chain of edits. */
+  assembledFrom: string;
+};
+
+export type ContextRequest = AssembledRecord | RevisionRecord;
 
 export type RequestStoreError =
   | StorageError
@@ -43,17 +60,16 @@ export interface RequestStore {
   /** Stores an assembled request under a new ID. */
   save(
     assembled: AssembledRequest,
-  ): ResultAsync<ContextRequest, RequestStoreError>;
+  ): ResultAsync<AssembledRecord, RequestStoreError>;
   load(id: string): ResultAsync<ContextRequest, RequestStoreError>;
   /**
    * Stores `request` as a new revision of `parentId`, which is kept as it
-   * was. The revision belongs to the parent's document and keeps its
-   * breakdown.
+   * was. The revision belongs to the parent's document.
    */
   revise(
     parentId: string,
     request: LlmRequest,
-  ): ResultAsync<ContextRequest, RequestStoreError>;
+  ): ResultAsync<RevisionRecord, RequestStoreError>;
 }
 
 export interface RequestStoreOptions {
@@ -61,8 +77,15 @@ export interface RequestStoreOptions {
   newId?: () => string;
 }
 
-/** Version of the `request` JSON this module writes. */
-export const REQUEST_RECORD_VERSION = 1;
+/**
+ * Version of the `request` JSON this module writes. Version 1 (revisions
+ * copied their parent's breakdown) was never released, so it isn't read.
+ */
+export const REQUEST_RECORD_VERSION = 2;
+
+type Body =
+  | Omit<AssembledRecord, keyof RequestCommon | "request">
+  | Omit<RevisionRecord, keyof RequestCommon | "request">;
 
 export function createRequestStore(
   storage: StorageAdapter,
@@ -71,23 +94,18 @@ export function createRequestStore(
   const now = options.now ?? Date.now;
   const newId = options.newId ?? (() => crypto.randomUUID());
 
-  function store(
-    record: Omit<ContextRequest, "id" | "createdAt">,
-  ): ResultAsync<ContextRequest, RequestStoreError> {
-    const stored: ContextRequest = { id: newId(), createdAt: now(), ...record };
+  function store<T extends ContextRequest>(
+    record: T,
+  ): ResultAsync<T, RequestStoreError> {
+    const { id, documentId, createdAt, ...body } = record;
     return storage.requests
       .save({
-        id: stored.id,
-        documentId: stored.documentId,
-        createdAt: stored.createdAt,
-        request: {
-          version: REQUEST_RECORD_VERSION,
-          parentId: stored.parentId,
-          request: stored.request,
-          breakdown: stored.breakdown,
-        },
+        id,
+        documentId,
+        createdAt,
+        request: { version: REQUEST_RECORD_VERSION, ...body },
       })
-      .map(() => stored);
+      .map(() => record);
   }
 
   const load = (id: string): ResultAsync<ContextRequest, RequestStoreError> =>
@@ -99,28 +117,40 @@ export function createRequestStore(
       });
       const { documentId } = record;
       if (documentId === null) return err(invalid("documentId is missing"));
+      const common = { id: record.id, documentId, createdAt: record.createdAt };
       return parseRecordBody(record.request)
         .map(
-          (parsed): ContextRequest => ({
-            id: record.id,
-            documentId,
-            createdAt: record.createdAt,
-            ...parsed,
+          ({ request, body }): ContextRequest => ({
+            ...common,
+            request,
+            ...body,
           }),
         )
         .mapErr(invalid);
     });
 
   return {
-    save: (assembled) => store({ ...assembled, parentId: null }),
+    save: ({ documentId, request, breakdown }) =>
+      store<AssembledRecord>({
+        id: newId(),
+        documentId,
+        createdAt: now(),
+        request,
+        origin: "assembled",
+        breakdown,
+      }),
     load,
     revise: (parentId, request) =>
       load(parentId).andThen((parent) =>
-        store({
+        store<RevisionRecord>({
+          id: newId(),
           documentId: parent.documentId,
-          parentId,
+          createdAt: now(),
           request,
-          breakdown: parent.breakdown,
+          origin: "revision",
+          parentId,
+          assembledFrom:
+            parent.origin === "assembled" ? parent.id : parent.assembledFrom,
         }),
       ),
   };
@@ -130,7 +160,6 @@ export function createRequestStore(
 // Parsing stored JSON
 
 type Check<T> = Result<T, string>;
-type Body = Pick<ContextRequest, "parentId" | "request" | "breakdown">;
 
 function isRecord(value: unknown): value is { [key: string]: JsonValue } {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -148,23 +177,40 @@ const oneOf =
   (value: unknown): value is T =>
     values.some((v) => v === value);
 const isReason = oneOf<CardReason>("pinned", "mentioned");
+const isWindowLimit = oneOf<WindowLimit>("preferred", "budget", "document");
 
-function parseRecordBody(value: JsonValue): Check<Body> {
+function parseRecordBody(
+  value: JsonValue,
+): Check<{ request: LlmRequest; body: Body }> {
   if (!isRecord(value)) return err("request record must be an object");
   if (value.version !== REQUEST_RECORD_VERSION) {
     return err(`unsupported request version ${JSON.stringify(value.version)}`);
   }
-  if (value.parentId !== null && !isString(value.parentId)) {
-    return err("parentId must be a string or null");
-  }
-  const parentId = value.parentId;
-  return parseLlmRequest(value.request).andThen((request) =>
-    parseBreakdown(value.breakdown).map((breakdown) => ({
-      parentId,
-      request,
-      breakdown,
-    })),
-  );
+  return parseLlmRequest(value.request).andThen((request) => {
+    if (value.origin === "assembled") {
+      return parseBreakdown(value.breakdown).map((breakdown) => ({
+        request,
+        body: { origin: "assembled" as const, breakdown },
+      }));
+    }
+    if (
+      value.origin === "revision" &&
+      isString(value.parentId) &&
+      isString(value.assembledFrom)
+    ) {
+      return ok({
+        request,
+        body: {
+          origin: "revision" as const,
+          parentId: value.parentId,
+          assembledFrom: value.assembledFrom,
+        },
+      });
+    }
+    return err(
+      "request record must be assembled with a breakdown, or a revision with parentId and assembledFrom",
+    );
+  });
 }
 
 function parseLlmRequest(value: JsonValue | undefined): Check<LlmRequest> {
@@ -208,7 +254,11 @@ function parseBreakdown(value: JsonValue | undefined): Check<ContextBreakdown> {
     !isRecord(window) ||
     !isString(window.text) ||
     !isBoolean(window.truncated) ||
-    !isStringList(window.excludedSegments)
+    !isStringList(window.excludedSegments) ||
+    !isNumber(window.minimum) ||
+    !isNumber(window.preferred) ||
+    !isNumber(window.available) ||
+    !isWindowLimit(window.limitedBy)
   ) {
     return err("breakdown.window is malformed");
   }
@@ -241,6 +291,10 @@ function parseBreakdown(value: JsonValue | undefined): Check<ContextBreakdown> {
       text: window.text,
       truncated: window.truncated,
       excludedSegments: window.excludedSegments,
+      minimum: window.minimum,
+      preferred: window.preferred,
+      available: window.available,
+      limitedBy: window.limitedBy,
     },
     instruction: { text: instruction.text, writer: instruction.writer },
     cards: parsedCards,

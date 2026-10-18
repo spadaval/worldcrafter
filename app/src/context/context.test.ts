@@ -25,6 +25,7 @@ import {
   buildContext,
   DEFAULT_INSTRUCTION,
   findMentions,
+  SCENE_NOTES,
 } from "./builder";
 import { gatherWorldContext, type WorldContext } from "./gather";
 import { createRequestStore } from "./requests";
@@ -53,6 +54,12 @@ const scene = [
     text: "Al rode north. Also, the king's riders followed him to Harrow.",
   }),
 ];
+
+/** The scene's prose without the generating segment. */
+const scenePlainProse =
+  "Bren the Smith had left Harrow before the snows.\n\n" +
+  "Snow fell all night over the hills.\n\n" +
+  "Al rode north. Also, the king's riders followed him to Harrow.";
 
 /** What the window should be: from the first whole word in reach. */
 const expectedWindow =
@@ -256,6 +263,19 @@ for (const [name, open] of [
         text: expectedWindow,
         truncated: true,
         excludedSegments: ["g1"],
+        minimum: 10,
+        preferred: expectedWindow.length + 3,
+        available: scenePlainProse.length,
+        limitedBy: "preferred",
+      });
+      // A window longer than the prose stops at the start of the document.
+      const whole = await built("s3", {
+        window: { minimum: 10, preferred: 10_000 },
+      });
+      expect(whole.breakdown.window).toMatchObject({
+        text: scenePlainProse,
+        truncated: false,
+        limitedBy: "document",
       });
       const body = assembled.request.body;
       expect(body.messages).toEqual([
@@ -309,6 +329,15 @@ for (const [name, open] of [
       )[0]?.content;
       expect(system).toContain(aldricAtS3);
       expect(system).toContain(harrowAtS3);
+      // Why the author-only facts are there, and that the writer's
+      // instruction (say, "reveal that he is a changeling") wins.
+      expect(system).toContain(SCENE_NOTES);
+      expect(SCENE_NOTES).toContain(
+        "Facts known only to the author are given so the story stays consistent with them; don't state or hint at them unless the writer's instruction says to.",
+      );
+      expect(SCENE_NOTES).toContain(
+        "Where the writer's instruction and these notes disagree, follow the instruction.",
+      );
       expect(system).not.toContain("Bren");
 
       // A pinned entry that is also mentioned appears once, as a pin.
@@ -368,6 +397,9 @@ for (const [name, open] of [
         expectedWindow.length - 20,
       );
       expect(tight.breakdown.window.text.length).toBeGreaterThanOrEqual(10);
+      // ...and the breakdown says the budget, not the preferred length, cut it.
+      expect(tight.breakdown.window.limitedBy).toBe("budget");
+      expect(all.breakdown.window.limitedBy).toBe("preferred");
 
       // A custom measure: four characters a token, say.
       const tokens = await built("s3", {
@@ -456,6 +488,7 @@ for (const [name, open] of [
       const prompt = request.body.prompt as string;
       expect(prompt.endsWith(`]\n\n${expectedWindow}`)).toBe(true);
       expect(prompt).toContain(aldricAtS3);
+      expect(prompt).toContain(SCENE_NOTES);
       expect(breakdown.instruction).toEqual({
         text: `${DEFAULT_INSTRUCTION}\n\nWriter's instruction: Have the riders catch him.`,
         writer: "Have the riders catch him.",
@@ -479,27 +512,43 @@ for (const [name, open] of [
       expect(saved).toEqual({
         id: "req-1",
         documentId: "s3",
-        parentId: null,
         createdAt: 42,
         request: assembled.request,
+        origin: "assembled",
         breakdown: assembled.breakdown,
       });
       expect((await requests.load("req-1"))._unsafeUnwrap()).toEqual(saved);
 
+      // Two edits in a chain: each names its parent, both name the root,
+      // and neither carries a breakdown of its own.
       const edited = {
         ...saved.request,
         body: { ...saved.request.body, temperature: 0.2 },
       };
-      const revision = (await requests.revise("req-1", edited))._unsafeUnwrap();
-      expect(revision).toEqual({
+      const first = (await requests.revise("req-1", edited))._unsafeUnwrap();
+      expect(first).toEqual({
         id: "req-2",
         documentId: "s3",
-        parentId: "req-1",
         createdAt: 42,
         request: edited,
-        breakdown: assembled.breakdown,
+        origin: "revision",
+        parentId: "req-1",
+        assembledFrom: "req-1",
       });
-      expect((await requests.load("req-2"))._unsafeUnwrap()).toEqual(revision);
+      const again = { ...edited, body: { ...edited.body, prompt: "x" } };
+      const second = (await requests.revise("req-2", again))._unsafeUnwrap();
+      expect(second).toEqual({
+        id: "req-3",
+        documentId: "s3",
+        createdAt: 42,
+        request: again,
+        origin: "revision",
+        parentId: "req-2",
+        assembledFrom: "req-1",
+      });
+      expect(second).not.toHaveProperty("breakdown");
+      expect((await requests.load("req-2"))._unsafeUnwrap()).toEqual(first);
+      expect((await requests.load("req-3"))._unsafeUnwrap()).toEqual(second);
       expect((await requests.load("req-1"))._unsafeUnwrap()).toEqual(saved);
 
       expect(
@@ -512,7 +561,7 @@ for (const [name, open] of [
         await storage.requests.save({
           id: "bad",
           documentId: "s3",
-          request: { version: 1, parentId: null },
+          request: { version: 2, origin: "revision", parentId: null },
           createdAt: 1,
         })
       )._unsafeUnwrap();
@@ -558,6 +607,21 @@ describe("findMentions", () => {
       { entry: "bo", name: "Bo", offset: text.indexOf("Bo") },
       { entry: "ana", name: "Ana", offset: text.indexOf("Ana") },
       { entry: "mira", name: "the Red Queen", offset: 0 },
+    ]);
+  });
+
+  test("compares names in NFC and treats any whitespace run as a space", () => {
+    // "José" written decomposed (e + combining acute), "Mira Vale" broken
+    // across a line; offsets are in the original text.
+    const text = "Then Jose\u0301 came, and Mira\n  Vale. Mira-Vale stayed.";
+    expect(
+      findMentions(text, [
+        entry("jose", "Jos\u00e9"),
+        entry("mira", "Mira Vale"),
+      ]),
+    ).toEqual([
+      { entry: "mira", name: "Mira Vale", offset: text.indexOf("Mira") },
+      { entry: "jose", name: "Jos\u00e9", offset: text.indexOf("Jose") },
     ]);
   });
 });

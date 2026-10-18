@@ -15,9 +15,9 @@ relationships:
     type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Validate core loop against S1, S2, S4, S9, S10"
-updated_at: "2026-10-17T23:59:45.518920748+00:00"
+updated_at: "2026-10-18T05:43:40.629365013+00:00"
 ---
 
 ## Goal

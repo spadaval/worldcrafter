@@ -107,7 +107,9 @@ export type WorldError =
       reason: string;
     }
   /** A stored facts record is not in the expected shape. */
-  | { kind: "invalid_facts"; documentId: string; reason: string };
+  | { kind: "invalid_facts"; documentId: string; reason: string }
+  /** The document store refused or failed the title change. */
+  | { kind: "document_write_failed"; documentId: string; reason: string };
 
 export interface WorldStore {
   execute(command: WorldCommand): ResultAsync<Entry, WorldError>;
@@ -135,6 +137,17 @@ export type UnreadableEntry = { documentId: string; reason: string };
 export interface WorldStoreOptions {
   /** Clock for `updatedAt`, in epoch milliseconds. Defaults to `Date.now`. */
   now?: () => number;
+  /**
+   * Sets a document's title. The document store is the only writer of
+   * document records, so the app passes its rename command here (an open
+   * document's editor session would otherwise overwrite, or be overwritten
+   * by, a direct write). The default writes the record directly, for tests
+   * and callers without a document store.
+   */
+  renameDocument?: (
+    documentId: string,
+    title: string,
+  ) => ResultAsync<void, WorldError>;
 }
 
 type StoredFacts = { documentId: string; facts: EntryFacts };
@@ -146,6 +159,14 @@ export function createWorldStore(
   options: WorldStoreOptions = {},
 ): WorldStore {
   const now = options.now ?? Date.now;
+  const renameDocument =
+    options.renameDocument ??
+    ((documentId: string, title: string) =>
+      storage.documents
+        .load(documentId)
+        .andThen((document) =>
+          storage.documents.save({ ...document, title, updatedAt: now() }),
+        ));
 
   function parseRecord(record: WorldEntry): Result<StoredFacts, WorldError> {
     return parseEntryFacts(record.facts)
@@ -360,13 +381,9 @@ export function createWorldStore(
         formerNames,
         aliases,
       };
-      // The title is the document's. Writing it here is temporary: once the
-      // document store exists, it owns title changes and this store follows.
+      // The title is the document's: the document store changes it.
       return saveFacts(documentId, facts)
-        .andThen(() => storage.documents.load(documentId))
-        .andThen((document) =>
-          storage.documents.save({ ...document, title, updatedAt: now() }),
-        )
+        .andThen(() => renameDocument(documentId, title))
         .map(() => ({ ...facts, documentId, title }));
     });
   }

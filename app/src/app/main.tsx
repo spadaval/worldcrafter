@@ -6,8 +6,13 @@ import { createStorageConnection } from "~/workspace/connection";
 import { requestPersistentStorage } from "~/workspace/persistence";
 import { createWorkspace } from "~/workspace/workspace";
 import { acquireWriterLock } from "~/workspace/writer-lock";
-import { EnvironmentContext, WorkspaceContext } from "./hooks";
+import {
+  EnvironmentContext,
+  WorkspaceContext,
+  WorldStoreContext,
+} from "./hooks";
 import { createAppRouter } from "./router";
+import { createAppWorldStore } from "./world";
 import "./styles.css";
 
 /** One world for now; worlds as a list come with world management. */
@@ -31,6 +36,9 @@ async function start(root: HTMLElement) {
     readOnly: role === "reader",
   });
   await workspace.refreshDocuments();
+  // TODO: the world store holds the adapter it was given; it should go
+  // through the reconnecting storage connection like the workspace does.
+  const world = createAppWorldStore(storage.value, workspace);
 
   // Save what can be saved before the tab goes away, and ask the browser to
   // warn the writer if something is still unsaved.
@@ -47,9 +55,11 @@ async function start(root: HTMLElement) {
   createRoot(root).render(
     <StrictMode>
       <WorkspaceContext value={workspace}>
-        <EnvironmentContext value={{ role, persistence }}>
-          <RouterProvider router={router} />
-        </EnvironmentContext>
+        <WorldStoreContext value={world}>
+          <EnvironmentContext value={{ role, persistence }}>
+            <RouterProvider router={router} />
+          </EnvironmentContext>
+        </WorldStoreContext>
       </WorkspaceContext>
     </StrictMode>,
   );

@@ -1,10 +1,13 @@
 import { createContext, useContext, useSyncExternalStore } from "react";
 import type { Store } from "~/workspace/store";
 import type { Workspace } from "~/workspace/workspace";
+import type { WorldStore } from "~/world/store";
 import type { Environment } from "./environment";
 
 export const WorkspaceContext = createContext<Workspace | null>(null);
 export const EnvironmentContext = createContext<Environment | null>(null);
+/** The world-facts store, wired to the workspace (see `createAppWorldStore`). */
+export const WorldStoreContext = createContext<WorldStore | null>(null);
 
 export function useWorkspace(): Workspace {
   const workspace = useContext(WorkspaceContext);

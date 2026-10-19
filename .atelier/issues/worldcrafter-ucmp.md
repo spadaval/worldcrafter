@@ -21,9 +21,10 @@ relationships:
     type: "implements"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-19T15:21:06.694836768+00:00"
+status: "done"
 title: "Bring the design docs in line with worldcrafter-7hjn"
-updated_at: "2026-10-19T15:20:58.078746477+00:00"
+updated_at: "2026-10-19T15:21:06.694836768+00:00"
 ---
 
 ## Goal
@@ -34,3 +35,7 @@ Update the design docs that still describe lossless markdown as a storage format
 
 - They say that exact round-trips go through JSON, that markdown export is one-way, and that node types are gated on their AI projections.
 - No doc still presents a markdown folder on disk as a goal.
+
+## Close Reason
+
+Design docs, PRODUCT and the prior-art note describe JSON round-trips, one-way markdown export and projection-gated node types

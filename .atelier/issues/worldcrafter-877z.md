@@ -18,7 +18,7 @@ schema_version: 2
 closed_at: "2026-10-17T17:11:19.201432998+00:00"
 status: "done"
 title: "Platform: browser-only or Electron"
-updated_at: "2026-10-17T17:11:19.201432998+00:00"
+updated_at: "2026-10-19T15:19:48.424273485+00:00"
 ---
 
 ## Context
@@ -42,6 +42,10 @@ because all persistence goes through a storage adapter (S9). It does decide the 
 ## Decision
 
 Browser-only for now. Decided by Sumeet (2026-10-17). IndexedDB is the first storage adapter; Electron stays a later wrapper that the adapter and lossless markdown schema keep cheap.
+
+## Notes
+
+- 2026-10-19 [note] The decision stands (browser-only for now), but its premise about storage changed on 2026-10-19 (worldcrafter-7hjn). A plain-files storage adapter is no longer planned, and markdown no longer has to be lossless. If Electron comes, its motive is distribution (Sumeet), and it can keep the IndexedDB adapter.
 
 ## Close Reason
 

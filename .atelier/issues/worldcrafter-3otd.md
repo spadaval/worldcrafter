@@ -43,7 +43,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "draft"
 title: "Rebuild WorldCrafter around clear data boundaries"
-updated_at: "2026-10-17T07:07:33.753013235+00:00"
+updated_at: "2026-10-19T15:20:37.860763935+00:00"
 ---
 
 ## Outcome
@@ -58,3 +58,7 @@ the intent, the success criteria S1–S9, the shape and the authority.
 
 Design proposals: `docs/rebuild/data-model-boundaries.md`, `docs/rebuild/entity-pipeline.md`,
 `docs/rebuild/talk-pages.md`. Prior art: `docs/rebuild/prior-art-2026.md`. Philosophy: `docs/philosophy.md`.
+
+## Notes
+
+- 2026-10-19 [note] S1 was reworded on 2026-10-19 (worldcrafter-7hjn). The evidence still attached to it (worldcrafter-6uqy at 9f6c8cc1) proves the old markdown round-trip wording, not the new one. worldcrafter-qizl re-proves it.

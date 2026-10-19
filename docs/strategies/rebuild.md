@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-10-17: Legend State dropped from the keep list; the storage adapter, typed commands and document sessions replace it (Sumeet)"
+last_changed: "2026-10-19: lossless round-trips go through JSON, markdown export is one-way, and node types are gated on their AI projections (worldcrafter-7hjn, Sumeet)"
 ---
 
 # Why
@@ -30,10 +30,12 @@ generate with world context you can inspect and edit, then accept or regenerate.
 
 # Success Criteria
 
-- S1: Every allowed content node type round-trips losslessly through the
-  `export` projection (markdown plus directives). Shown by round-trip tests
-  over fixtures. Normal editing never re-parses a whole document from text,
-  shown by there being no such call path outside import.
+- S1: Every allowed content node type has defined `prose`, `addressable`
+  and `plain+map` projections, and a world round-trips exactly through
+  save and load and through export and import (JSON). Shown by projection
+  tests and round-trip tests over fixtures. Normal editing never re-parses a
+  whole document from text, shown by there being no such call path outside
+  import.
 - S2: Every block has a stable ID that survives reload, split, merge and
   paste. Shown by headless editor tests.
 - S3: Known entities are recognised by alias as annotations, and recognition
@@ -83,8 +85,10 @@ generate with world context you can inspect and edit, then accept or regenerate.
 - **Data boundaries** (`docs/rebuild/data-model-boundaries.md`). Content,
   annotations, world facts and discussions live in separate stores.
   Annotations never write to the content tree.
-- **Restricted content schema.** A node type is only allowed if its text
-  projection is lossless. Adding a node type requires a lossless projection.
+- **Restricted content schema.** A node type is only allowed once its AI
+  projections (`prose`, `addressable`, `plain+map`) are defined. Exact
+  round-trips go through JSON, and markdown export is readable and one-way
+  (worldcrafter-7hjn).
 - **Conversions are asymmetric.** Tree to text goes through purpose-specific
   projections with source maps. Text to tree only happens inside an AI
   segment, as block-ID edit operations, or on import.
@@ -129,7 +133,7 @@ Out of scope:
 - multi-user collaboration and sync
 - an MCP server (the commands make it possible later)
 - consistency checking against canon (a likely next mission)
-- tables, media and other non-lossless node types
+- tables, media, callouts and other node types beyond the schema list
 - desktop packaging
 
 Environment: one user (the author), using desktop Chromium, with local
@@ -157,8 +161,6 @@ These must come back to the human:
 
 - Plate's node IDs may not survive split and paste without custom handling.
   The first increment tests this before anything else depends on it.
-- Lossless markdown with directives may need a custom serializer rather than
-  Plate's markdown plugin.
 - Local models may not reliably produce the structured output discovery
   needs. Grammar-constrained decoding on llama.cpp is the planned mitigation.
 - It is not yet settled whether annotations anchor by offset or by quote

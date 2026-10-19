@@ -36,7 +36,7 @@ Other tools either inject lore into prompts (Novelcrafter, NovelAI, Sudowrite) o
 
 ## Capabilities and Constraints
 
-- The content schema is restricted to node types that can be exported to markdown without loss: paragraphs, headings, lists, quotes, rules, basic marks, links, AI segments and placeholders. Tables, media and callouts are excluded.
+- The content schema is restricted to node types whose AI projections are defined: paragraphs, headings, lists, quotes, rules, basic marks, links, AI segments and placeholders. Tables, media and callouts are excluded for now. A world exports and imports exactly as JSON, and also exports to readable markdown, one-way.
 - **AI segments** are AI-written content that is visibly marked. You can accept it, which turns it into ordinary text, or regenerate it. Its provenance (the request, model and sampler) is kept alongside it.
 - **AI presence: a quiet colleague.** AI work is always visible and attributed, but it stays in the background: margins, underlines, an inbox, talk-page topics. It never takes the main stage from the prose.
 - **Power controls on demand:** the assembled request can be viewed and edited, and sampler settings and logprobs are available, but none of these is in the way by default.

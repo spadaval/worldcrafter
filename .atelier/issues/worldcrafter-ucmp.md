@@ -4,6 +4,9 @@ id: "worldcrafter-ucmp"
 issue_type: "task"
 labels:
 - "rebuild"
+workflow_branch:
+  branch_base: master
+  work_branch: task/worldcrafter-ucmp
 priority: "P2"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "implements"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Bring the design docs in line with worldcrafter-7hjn"
-updated_at: "2026-10-19T15:20:55.784987578+00:00"
+updated_at: "2026-10-19T15:20:58.078746477+00:00"
 ---
 
 ## Goal

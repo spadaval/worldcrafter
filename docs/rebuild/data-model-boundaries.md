@@ -32,20 +32,22 @@ Rules:
 
 ## Boundary 2: a restricted content schema
 
-Every node type allowed in content must declare a **text projection**. We only allow node types whose projection is **lossless** (it can round-trip):
+Every node type allowed in content must define its **AI projections** (`prose`, `addressable` and `plain+map`, Boundary 3). Those are what keep the LLM boundary manageable, so they are what gate the schema. The allowed types are:
 
 - paragraph, heading (1–3), bulleted and numbered list, blockquote, horizontal rule
 - marks: bold, italic, strikethrough, code
 - internal link `[label](canonical-name)`, external link
 - `ai_segment` and `placeholder` (as directives, e.g. `:::ai{id=…}` … `:::`)
 
-Tables, columns, media, equations, callouts, toggles and the rest are out until there's a concrete need. Each one would also need a lossless projection.
+Tables, columns, media, equations, callouts, toggles and the rest are out until there's a concrete need. Each one would also need its AI projections defined. Adding a node type still comes back to the human.
 
-What this buys us: with every content node projecting losslessly, **markdown with a few directives becomes a valid storage format**, not just an export. That matters for the browser-vs-desktop decision (plain files on disk, git-friendly, readable by other tools and agents). We don't have to switch to markdown storage now. The restricted schema keeps the option open.
+**Exact round-trips go through JSON, not markdown** (decided by Sumeet, 2026-10-19, worldcrafter-7hjn). The tree is already stored as JSON. Save and load, and export and import, preserve it exactly, including block IDs, so annotations stay anchored. Markdown export is readable and one-way: it may drop IDs and anything outside the content tree.
 
-### Export syntax (as built, `app/src/content/`)
+This replaces an earlier goal: making the markdown lossless so it could become a storage format and keep plain files on disk open. That goal was dropped. The app's value is structure that lives outside the tree (annotations, world facts, story time, discussions), and markdown can only hold the prose. Editing such files outside the app would break block-ID anchors, and agents writing them would skip the proposal flow. Ownership comes from the export instead.
 
-The full spec is the comment at the top of `app/src/content/markdown.ts`. In short:
+### Markdown syntax (as built, `app/src/content/`)
+
+This was built when markdown was still meant to round-trip, so it carries every block ID and has a strict parser. Nothing in the product calls either one yet (only tests do). Under the 2026-10-19 decision it can become the readable one-way export, without the IDs, and the parser is no longer required. The full spec is the comment at the top of `app/src/content/markdown.ts`. In short:
 
 - Every block ends with its ID as a trailing `{#id}` (alone when the block is empty): `Some _text_. {#b_2}`, `--- {#r_1}`.
 - Headings use `#`/`##`/`###`, quotes `> `, bullets `- `, numbered items `N. `. Nested items are indented to the parent's content column. An indent that can't be derived from nesting (a skipped level, or a list that starts indented) is written explicitly: `{#b_10 indent=4}`, with values from 1 to 32.
@@ -64,13 +66,13 @@ Plate stores some derived or invisible state that the schema doesn't allow (`lis
 | `prose` | continuation, summaries, world context | strips placeholders and annotations; AI segments rendered inline |
 | `addressable` | AI edits | every block prefixed with its ID, e.g. `[b_7f3a] text…` |
 | `plain+map` | entity matching and extraction, consistency checks | flat text per block with an offset map |
-| `export` | files, interchange | lossless markdown + directives |
+| `export` | reading, sharing outside the app | readable markdown, one-way; exact export and import use JSON |
 
 **Text → tree is only allowed at narrow, typed entry points:**
 
 1. **Generated content → inside one AI segment.** We parse only a tiny grammar (paragraphs + emphasis + links). Anything else is flattened to text. The model never gets to write arbitrary structure.
 2. **AI edits → block operations.** The model returns operations against block IDs from the `addressable` projection, e.g. `replace(b_7f3a, newText)`, `insertAfter(b_7f3a, text)`, `delete(b_7f3a)`. They are applied as reviewable suggestions. Inside a block we diff old text against new and keep marks and links on the unchanged spans. This is the same shape as Tiptap's AI Toolkit (read/insert/patch tools plus a diff-based review).
-3. **Import → the whole document**, once, explicitly.
+3. **Import → the whole document or world**, once, explicitly, from the JSON export.
 
 **We never re-parse a whole document from markdown during normal editing.**
 

@@ -35,7 +35,7 @@ A quick survey made while reviving the project. Many of the sources are vendor b
 - **Notion** now exposes "enhanced markdown" for reading and editing pages in its official MCP server (API version `2026-03-11`), because it's token-efficient. Third-party converters regularly drop block types (callouts, toggles, tables). That's the same lossiness we hit.
   - https://docsearch.algolia.com/mcp/docs/repo/makenotion/notion-mcp-server
 
-**What this means for us:** keep the content schema small enough that markdown projection is lossless.
+**What this means for us:** keep the content schema small enough that every node type has a clean text projection for the model. (Update 2026-10-19, worldcrafter-7hjn: exact round-trips now go through JSON, and markdown is a one-way readable export.)
 
 ### 4. People bring their world to external agents through MCP
 
@@ -69,4 +69,5 @@ A quick survey made while reviving the project. Many of the sources are vendor b
 - **Browser only:** fastest to iterate, easy to distribute. Storage is IndexedDB or OPFS, which is invisible to the user. The File System Access API gives real folders but only on Chromium, and needs handles kept in IndexedDB.
   - https://www.mintlify.com/rbbydotdev/opal/advanced/storage
 - **Electron:** real files, can host an MCP server, no CORS issues with local model servers. The cost is packaging and IPC security.
-- **Either way:** put storage behind an adapter interface now (IndexedDB adapter first). Keep the content schema lossless in markdown so "a folder of markdown + frontmatter" stays possible. Then the platform decision doesn't block anything.
+- **Either way:** put storage behind an adapter interface now (IndexedDB adapter first). Then the platform decision doesn't block anything.
+- **Update 2026-10-19** (worldcrafter-7hjn): "a folder of markdown + frontmatter" is no longer a goal, so markdown doesn't need to be lossless. If Electron comes, it is for distribution, and it can keep the IndexedDB adapter.

@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-10-19: lossless round-trips go through JSON, markdown export is one-way, and node types are gated on their AI projections (worldcrafter-7hjn, Sumeet)"
+last_changed: "2026-10-29: web-first with sync-ready records, a typed model with adapters for serialisation, model control as a goal, and no data loss dropped from the quality ranking (Sumeet)"
 ---
 
 # Why
@@ -15,6 +15,13 @@ reviewable AI edits, which confirms the direction. Consistency checking, AI
 upkeep of the world, a typed world graph, and editable context are still
 underserved, and those are where WorldCrafter can stand out
 (`docs/rebuild/prior-art-2026.md`).
+
+It is also about control over the model. Coding harnesses and chat frontends
+decide the samplers, the system prompt and the prompt format for you, and
+they're built for frontier chat models. Writing well with experimental
+finetunes means choosing those yourself. The project started from wanting the
+XTC sampler, which almost no frontend offers, but the goal is control in
+general, not any one sampler.
 
 # Outcome
 
@@ -32,7 +39,7 @@ generate with world context you can inspect and edit, then accept or regenerate.
 
 - S1: Every allowed content node type has defined `prose`, `addressable`
   and `plain+map` projections, and a world round-trips exactly through
-  save and load and through export and import (JSON). Shown by projection
+  save and load and through every export and import adapter. Shown by projection
   tests and round-trip tests over fixtures. Normal editing never re-parses a
   whole document from text, shown by there being no such call path outside
   import.
@@ -66,14 +73,18 @@ generate with world context you can inspect and edit, then accept or regenerate.
   are clean on `master`.
 - S9: Persistence goes through a storage adapter, with IndexedDB as the
   first implementation. There is no direct IndexedDB access outside the
-  adapter, shown by a contract test and a search for direct access.
+  adapter, shown by a contract test and a search for direct access. Records
+  are ready for sync: client-generated IDs, an `updatedAt` on each record,
+  and tombstones for deletes, shown by the contract test.
 
 # Shape
 
-- **Fresh skeleton, browser-only.** A new static app is built and the
-  keep-list modules are ported into it. The old app is reference only until it
-  is retired. There's no server: storage is in the browser and LLM calls go
-  directly to the configured endpoints.
+- **Fresh skeleton, web-first.** A new app is built as an installable PWA
+  and the keep-list modules are ported into it. The old app is reference only
+  until it is retired. Storage is local-first in the browser. A sync backend
+  (a Cloudflare Worker, behind Cloudflare Access) comes in a later mission, so
+  that one writer can switch between laptop and phone. Desktop and mobile
+  wrappers may come later.
 - **Story time is world-first** (`docs/rebuild/story-time.md`). Events are
   ordered by happens-before. Clocks are frames, with the world calendar as the
   default frame. Fact changes are anchored to events. Narrative order comes
@@ -85,23 +96,33 @@ generate with world context you can inspect and edit, then accept or regenerate.
 - **Data boundaries** (`docs/rebuild/data-model-boundaries.md`). Content,
   annotations, world facts and discussions live in separate stores.
   Annotations never write to the content tree.
+- **A typed model with standoff layers.** The TypeScript model is the
+  source of truth: content nodes with stable IDs, plus annotation layers
+  anchored to them, like a screenplay breakdown over locked scene numbers.
+  Serialisation belongs to the storage and export adapters, not the model.
+  The content node types are our own, written so that Plate's nodes satisfy
+  them, so Plate is an editing view rather than the domain model. Markdown
+  export is readable and one-way (worldcrafter-7hjn).
 - **Restricted content schema.** A node type is only allowed once its AI
-  projections (`prose`, `addressable`, `plain+map`) are defined. Exact
-  round-trips go through JSON, and markdown export is readable and one-way
-  (worldcrafter-7hjn).
+  projections (`prose`, `addressable`, `plain+map`) are defined.
 - **Conversions are asymmetric.** Tree to text goes through purpose-specific
   projections with source maps. Text to tree only happens inside an AI
   segment, as block-ID edit operations, or on import.
-- **One OpenAI-compatible LLM client** with sampler and logprob passthrough
-  and backend profiles (llama.cpp, OpenRouter). It replaces the three old
-  backends.
+- **One OpenAI-compatible LLM client** with sampler, system prompt and
+  logprob passthrough and backend profiles (llama.cpp, OpenRouter,
+  featherless). It replaces the three old backends. It reaches a backend
+  either directly (local llama.cpp) or through the Worker (hosted providers,
+  and a home llama.cpp over a Cloudflare Tunnel). The proxy comes with the
+  sync mission. Stored requests look the same either way.
 - **Entities** follow `docs/rebuild/entity-pipeline.md`: an alias matcher for
   recognition, and a heuristic tier then an LLM tier for discovery. No NER
   model.
 - **Discussion** follows `docs/rebuild/talk-pages.md`. It replaces the old
   global chat.
 - **Commands first.** Actions are typed commands, the UI calls them, and an
-  external agent (MCP, later) can call the same ones.
+  external agent (MCP, later) can call the same ones. Commands, projections
+  and context assembly use no DOM or browser-only APIs, so they can run in a
+  Worker later (for example, background bookkeeping).
 - **Keep list, ported deliberately:**
   - `docs/philosophy.md`
   - AI segments and placeholders
@@ -110,10 +131,14 @@ generate with world context you can inspect and edit, then accept or regenerate.
   - `entity-suppression.ts`
   - sampler control
 - **When qualities conflict:**
-  1. No data loss.
-  2. The writer's visibility into and control over the AI.
-  3. AI capability.
-  4. Feature speed.
+  1. The writer's visibility into and control over the AI.
+  2. AI capability.
+  3. Feature speed.
+
+  This is a personal project, not an enterprise app. Losing data is still a
+  bug, but durability is not ranked above the rest: a schema version and a
+  backup export are enough, and breaking changes are fine when they make the
+  model better.
 
 # Scope
 
@@ -130,14 +155,17 @@ In scope:
 
 Out of scope:
 
-- multi-user collaboration and sync
+- multi-user collaboration
+- the sync backend, the inference proxy and server-side jobs (a likely next
+  mission; records are sync-ready in this one)
 - an MCP server (the commands make it possible later)
 - consistency checking against canon (a likely next mission)
 - tables, media, callouts and other node types beyond the schema list
 - desktop packaging
 
-Environment: one user (the author), using desktop Chromium, with local
-llama.cpp and OpenRouter. It should be usable by others later, but it is not
+Environment: one user (the author), using desktop Chromium and a phone, with
+local llama.cpp and hosted OpenAI-compatible providers (OpenRouter,
+featherless). It should be usable by others later, but it is not
 being hardened for them yet.
 
 # Authority
@@ -165,5 +193,8 @@ These must come back to the human:
   needs. Grammar-constrained decoding on llama.cpp is the planned mitigation.
 - It is not yet settled whether annotations anchor by offset or by quote
   (`data-model-boundaries.md`, open questions).
+- Hosted providers may not pass through the samplers we want (XTC, DRY and
+  others). The fallback is a home llama.cpp reached over a Cloudflare Tunnel,
+  which only works while that machine is on.
 - Bookkeeping cost and accuracy on local models. If it's too slow or too
   wrong, the automatic tier has to be throttled or moved to a hosted model.

@@ -18,9 +18,10 @@ relationships:
     type: "implements"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-29T20:21:43.859185887+00:00"
+status: "done"
 title: "Commit the Cloudflare Worker config for the static deploy"
-updated_at: "2026-10-29T20:20:56.360741217+00:00"
+updated_at: "2026-10-29T20:21:43.859185887+00:00"
 ---
 
 ## Goal
@@ -31,3 +32,7 @@ Commit `app/wrangler.jsonc`, which deploys the built app as static assets on a C
 
 - `app/wrangler.jsonc` is committed, and wrangler's local `.wrangler` directory is ignored.
 - `bun run check` passes in `app/`.
+
+## Close Reason
+
+wrangler.jsonc committed, .wrangler ignored, bun run check passes

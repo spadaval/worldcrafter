@@ -21,9 +21,10 @@ relationships:
     type: "implements"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-29T21:14:51.959170609+00:00"
+status: "done"
 title: "Rewrite the rebuild strategy and PRODUCT.md around the story model"
-updated_at: "2026-10-29T21:13:14.993738056+00:00"
+updated_at: "2026-10-29T21:14:51.959170609+00:00"
 ---
 
 ## Goal
@@ -35,3 +36,7 @@ Bring `docs/strategies/rebuild.md` and `PRODUCT.md` in line with decision worldc
 - The strategy's Outcome, success criteria and first worthwhile slice describe structure first: world and story at a coarse level, with prose generation later. Sumeet has approved the new success criteria.
 - PRODUCT.md's principles and purpose describe the story model. "The prose is the stage" is gone, and the manuscript is described as a view.
 - Existing design docs that assume the manuscript is a document are updated or noted.
+
+## Close Reason
+
+Rebuild narrowed to its foundation, Structure first mission (worldcrafter-z9qs) and strategy added with T1-T6 approved by Sumeet, PRODUCT.md and design docs describe the story model

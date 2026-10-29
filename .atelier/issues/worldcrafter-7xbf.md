@@ -4,6 +4,9 @@ id: "worldcrafter-7xbf"
 issue_type: "task"
 labels:
 - "rebuild"
+workflow_branch:
+  branch_base: master
+  work_branch: task/worldcrafter-7xbf
 priority: "P2"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "implements"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Add the story model design doc (worldcrafter-ok5a)"
-updated_at: "2026-10-29T20:19:22.164225226+00:00"
+updated_at: "2026-10-29T20:19:27.588342016+00:00"
 ---
 
 ## Goal

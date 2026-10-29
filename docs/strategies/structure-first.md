@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-10-29: first draft, from decision worldcrafter-ok5a (worldcrafter-uicb, Sumeet)"
+last_changed: "2026-10-29: modelling questions settled by worldcrafter-ddha; drive time-indexing added as an unknown (Sumeet)"
 ---
 
 # Why
@@ -134,12 +134,13 @@ These must come back to the human:
 
 # Risks and Unknowns
 
-- How drives and questions are stored is open: entries, facts on entries, or a
-  store of their own (`story-model.md`, open questions).
-- How far structure goes before prose (beats inside scenes, or scenes only) is
-  open.
-- Whether a scene belongs only to the telling, or is also a grouping of events,
-  is open. It affects how T3 and story time fit together.
+- The three modelling questions (where drives and questions live, beats,
+  scenes and events) are settled by decision worldcrafter-ddha: their own
+  records in the world store, optional beats inside scenes, and scenes that
+  depict events.
+- Drives probably change over story time (that is what an arc is). The first
+  increment stores them without time-indexing; whether they need `Fact`-style
+  changes anchored to events is open until arcs are built.
 - Passages anchored to beats need anchors that survive editing. Stable block
   IDs (S2 of the rebuild) are the starting point, but a passage may span
   several blocks.

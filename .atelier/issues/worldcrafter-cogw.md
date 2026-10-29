@@ -32,7 +32,7 @@ Considered so far (domain status from RDAP lookups on 2026-10-29, unconfirmed wi
 - **Heddle**, **Selvage** (loom parts): .ink looked free. Obscure.
 - Taken or crowded: Marginalia, Gloss, Orrery, Palimpsest, Subtext, Quire, Weft, worldcrafter.com. Anything with "loom" is avoided (the base-model writing tool Loom).
 
-Constraints: Sumeet's corporate network blocks newly registered domains for a while (Cisco DNS filtering), so register early. Renaming is cheap: the repo and the `worldcrafter-` issue IDs can stay.
+Renaming is cheap: the repo and the `worldcrafter-` issue IDs can stay.
 
 ## Question
 

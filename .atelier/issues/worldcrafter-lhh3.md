@@ -7,20 +7,15 @@ labels:
 - "talk"
 priority: "P2"
 relationships:
-  blocks:
-  - kind: "issue"
-    id: "worldcrafter-2x5z"
+  blocks: []
   children: []
   attachments: []
-  relates:
-  - kind: "issue"
-    id: "worldcrafter-3otd"
-    type: "advances"
+  relates: []
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Talk pages and world inbox"
-updated_at: "2026-10-18T01:06:39.196110575+00:00"
+updated_at: "2026-10-29T21:13:15.172019109+00:00"
 ---
 
 ## Goal
@@ -40,3 +35,4 @@ Provisional: scenario tests for both scopes, attribution, and proposals applying
 ## Notes
 
 - 2026-10-17 [note] From the 2ony story-time review (2026-10-17): (R6) when a scene leaves the outline, fact changes anchored to its event and reveals it made only show up as unknown_event reasons per query; load() does not report them. Surface them (and reveals whose fact or change no longer exists) as problems in the world inbox. (R7) reordering the outline can create contradictions with explicit scene constraints that are only reported on load; surface those too.
+- 2026-10-29 [note] Moved out of the rebuild mission (worldcrafter-3otd) on 2026-10-29: it was planned for a manuscript-first app. Re-plan it under the story model (decision worldcrafter-ok5a, docs/rebuild/story-model.md) before scheduling it.

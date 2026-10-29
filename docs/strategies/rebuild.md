@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-10-29: web-first with sync-ready records, a typed model with adapters for serialisation, model control as a goal, and no data loss dropped from the quality ranking (Sumeet)"
+last_changed: "2026-10-29: narrowed to the foundation; recognition, discovery and talk pages moved out, and the story model continues in docs/strategies/structure-first.md (worldcrafter-uicb, Sumeet)"
 ---
 
 # Why
@@ -23,17 +23,23 @@ finetunes means choosing those yourself. The project started from wanting the
 XTC sampler, which almost no frontend offers, but the goal is control in
 general, not any one sampler.
 
+# Status
+
+Narrowed on 2026-10-29. The story model (decision worldcrafter-ok5a,
+`docs/rebuild/story-model.md`) makes the app structure-first, not
+manuscript-first. This mission now finishes the foundation it has mostly
+built: content projections, stable IDs, generation with visible context, the
+storage adapter, story time, and retiring the old app. Recognition (S3),
+discovery and bookkeeping (S5) and talk pages (S6) moved out, to be re-planned
+under the story model. The next mission is `docs/strategies/structure-first.md`.
+
 # Outcome
 
-A writer works in a world of documents and entries. As they type, the app
-recognises the entities it already knows and suggests new ones, without
-touching the prose. Generation uses world context that the writer can see and
-edit before it is sent. AI output arrives as attributed, reviewable segments or
-proposals. Talk pages hold discussion next to the thing being discussed. The
-old app's dead paths are gone, and the checks pass.
-
-Worth shipping on its own: the core loop (S1, S2, S4, S9, S10). Write a document,
-generate with world context you can inspect and edit, then accept or regenerate.
+A rebuilt app with a sound foundation. Content has stable IDs and AI
+projections, and round-trips exactly. Generation uses world context the writer
+can see and edit, and its output arrives as attributed, reviewable AI segments.
+Story time can say what holds and what has been revealed at any scene. Storage
+goes through an adapter. The old app is gone, and the checks pass.
 
 # Success Criteria
 
@@ -45,29 +51,18 @@ generate with world context you can inspect and edit, then accept or regenerate.
   import.
 - S2: Every block has a stable ID that survives reload, split, merge and
   paste. Shown by headless editor tests.
-- S3: Known entities are recognised by alias as annotations, and recognition
-  leaves the content tree unchanged (a test compares the tree before and after).
-  A mentions view lists an entry's appearances across documents.
 - S4: Generation assembles a request from a window of the document, cards for
   entities mentioned nearby, and explicit pins. The request is stored and can
   be viewed and edited before it is sent. Output lands in an AI segment with
   provenance in the sidecar, and accept and regenerate work. Shown by a
   scenario test against a stub OpenAI-compatible server.
-- S5: Discovery (heuristic tier, then LLM tier) proposes new entities and
-  fact changes. Canon isn't written until accepted, and dismissals persist.
-  Bookkeeping (scene breakdowns, time placement) is applied automatically as
-  inferred data, and the writer's corrections are never overwritten. Shown by
-  fixture-text scenario tests.
 - S10: For any scene, the app can say which facts hold at its event and which
   have been revealed by its position in narrative order, including under a
   stasis or time-dilation frame. Shown by tests over a fixture world with a
   flashback and a paused frame.
-- S6: Talk pages exist for each document and for the world. Topics have
-  status, and model messages record the model and request. Proposed edits
-  and facts take effect only when accepted. Open topics started by the AI form
-  the world inbox. Shown by scenario tests.
-- S7: Every action in S3–S6 is a typed command callable without the UI.
-  Shown by tests that call the commands directly.
+- S7: Every action the app exposes (generation, accepting and regenerating
+  AI segments, story-time queries) is a typed command callable without the
+  UI. Shown by tests that call the commands directly.
 - S8: The old paths are removed: distilbert-NER, tiptap, global chat,
   template leftovers and unused dependencies. Typecheck, lint, tests and build
   are clean on `master`.
@@ -114,11 +109,9 @@ generate with world context you can inspect and edit, then accept or regenerate.
   either directly (local llama.cpp) or through the Worker (hosted providers,
   and a home llama.cpp over a Cloudflare Tunnel). The proxy comes with the
   sync mission. Stored requests look the same either way.
-- **Entities** follow `docs/rebuild/entity-pipeline.md`: an alias matcher for
-  recognition, and a heuristic tier then an LLM tier for discovery. No NER
-  model.
-- **Discussion** follows `docs/rebuild/talk-pages.md`. It replaces the old
-  global chat.
+- **Entities and discussion** (`docs/rebuild/entity-pipeline.md`,
+  `docs/rebuild/talk-pages.md`) moved out of this mission. The old NER model
+  and global chat are removed without replacements here.
 - **Commands first.** Actions are typed commands, the UI calls them, and an
   external agent (MCP, later) can call the same ones. Commands, projections
   and context assembly use no DOM or browser-only APIs, so they can run in a
@@ -146,14 +139,15 @@ In scope:
 
 - the editor
 - world entries and relations
-- the entity pipeline
 - generation and context
-- AI edit proposals
-- talk pages
 - the storage adapter
 - removing the old app
 
 Out of scope:
+
+- the story model (`docs/strategies/structure-first.md`)
+- the entity pipeline, discovery and bookkeeping, AI edit proposals and talk
+  pages (moved out on 2026-10-29, to be re-planned under the story model)
 
 - multi-user collaboration
 - the sync backend, the inference proxy and server-side jobs (a likely next
@@ -189,12 +183,8 @@ These must come back to the human:
 
 - Plate's node IDs may not survive split and paste without custom handling.
   The first increment tests this before anything else depends on it.
-- Local models may not reliably produce the structured output discovery
-  needs. Grammar-constrained decoding on llama.cpp is the planned mitigation.
 - It is not yet settled whether annotations anchor by offset or by quote
   (`data-model-boundaries.md`, open questions).
 - Hosted providers may not pass through the samplers we want (XTC, DRY and
   others). The fallback is a home llama.cpp reached over a Cloudflare Tunnel,
   which only works while that machine is on.
-- Bookkeeping cost and accuracy on local models. If it's too slow or too
-  wrong, the automatic tier has to be throttled or moved to a hosted model.

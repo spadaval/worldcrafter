@@ -1,6 +1,6 @@
 # Story Model
 
-Status: accepted direction (2026-10-29, decision worldcrafter-ok5a). Not yet reflected in the strategy, PRODUCT.md or the success criteria.
+Status: accepted (2026-10-29, decision worldcrafter-ok5a). Strategy: `docs/strategies/structure-first.md`.
 
 ## Identity
 
@@ -88,13 +88,9 @@ These are what the writer thinks in. They are named, writer-owned groupings over
 - **Seam check**: reveal-order breaks and stale transitions after scenes or passages move.
 - **Weave grid**: threads across scenes, with convergence visible where several questions close together.
 
-## Effect on the current plan
+## Effect on the plan
 
-If adopted, this changes the strategy's success criteria, which needs the human:
-
-- The main surface becomes the structure (zoomable outline and weave grid), not the manuscript. PRODUCT.md's principle "The prose is the stage" would change.
-- The first worthwhile slice becomes world plus story at a coarse level of detail, with prose generation later. S1–S4 are about the editor and prose generation today.
-- Story time, entity recognition, AI segments, provenance and stable IDs all keep their place. Prose is one layer among four, not the centre.
+Adopted on 2026-10-29 (worldcrafter-uicb). The rebuild mission (`docs/strategies/rebuild.md`) was narrowed to the foundation it had mostly built, and the story model continues as its own mission in `docs/strategies/structure-first.md`. Recognition, discovery and bookkeeping, AI edit proposals and talk pages moved to the backlog, to be re-planned under this model. Story time, AI segments, provenance and stable IDs keep their place.
 
 ## Open questions
 

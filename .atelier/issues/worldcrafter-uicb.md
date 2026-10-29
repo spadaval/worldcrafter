@@ -4,6 +4,9 @@ id: "worldcrafter-uicb"
 issue_type: "task"
 labels:
 - "rebuild"
+workflow_branch:
+  branch_base: master
+  work_branch: task/worldcrafter-uicb
 priority: "P2"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "implements"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Rewrite the rebuild strategy and PRODUCT.md around the story model"
-updated_at: "2026-10-29T20:19:22.179908184+00:00"
+updated_at: "2026-10-29T21:13:14.993738056+00:00"
 ---
 
 ## Goal

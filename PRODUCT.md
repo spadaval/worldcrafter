@@ -16,12 +16,16 @@ WorldCrafter is for writers and worldbuilders equally. Some users mostly draft p
 
 ## Product Purpose
 
-WorldCrafter is an AI-native writing and worldbuilding tool that is deliberately not a chatbot. The writer works in a world made of documents: manuscript scenes, entries and notes. As they write, the app recognises the entities it knows, suggests new ones, keeps a world-first timeline, and keeps the tedious bookkeeping (scene breakdowns, time placement, conversions) up to date. Generation uses world context that the writer can see and edit. Success means the world stays consistent and available while the writer writes, without them keeping it up by hand.
+WorldCrafter is a tool for building stories from the frame out, and it is deliberately not a chatbot. The world and the plot are the structure: actors and their drives, the questions the reader is waiting on, events and scenes, worked from a premise down to beats. The AI inspects that structure while it's still cheap to change. Prose is the finish: written by hand, drafted by AI, or both, and anchored to the scenes and beats it tells, so it moves with them and is flagged when they change. The manuscript is a view assembled from the arrangement, not a stored document (decision worldcrafter-ok5a, `docs/rebuild/story-model.md`).
+
+Success means a story can grow outside the writer's head without being flattened onto the page too early, and that changes made at the structural level reach everything they should.
 
 ## Positioning
 
-Other tools either inject lore into prompts (Novelcrafter, NovelAI, Sudowrite) or are wikis with AI added on (World Anvil, Campfire). WorldCrafter treats the world as a typed, time-indexed model that the AI maintains and the writer controls:
+Other tools either inject lore into prompts (Novelcrafter, NovelAI, Sudowrite), are wikis with AI added on (World Anvil, Campfire), or offer outlines and plot grids the app doesn't understand (Plottr, Dabble, Scrivener). WorldCrafter treats the story and the world as a typed model that the AI maintains and the writer controls:
 
+- the story is a graph of actors, drives, questions, events and scenes, and threads are writer-owned lenses over it
+- the app checks the structure: stale promises, drives that never collide, scenes that move nothing
 - facts change at events on a world-first timeline, with frames for stasis, dilation and dimensions
 - each scene knows what *holds* at that point and what has been *revealed* to the reader so far
 - AI bookkeeping is applied as attributed, inferred data that the writer can correct
@@ -29,10 +33,10 @@ Other tools either inject lore into prompts (Novelcrafter, NovelAI, Sudowrite) o
 
 ## Operating Context
 
-- Sessions mix drafting, building the world, arranging the timeline and reviewing what the AI inferred or proposed.
+- Sessions mix outlining, building the world, arranging scenes, drafting and reviewing what the AI inferred or proposed. Most of the leverage, and most of the time, is in the structure.
 - Mainly used on desktop Chromium, on a laptop or desktop screen, and also on a phone.
 - Models are local (llama.cpp) or hosted (OpenRouter, featherless), and the user supplies their own keys. The writer controls samplers, system prompts and prompt format, which coding harnesses and chat frontends decide for you.
-- Documents are the unit of work. Each document and the world itself has a talk page, made of topics, for discussion. There is no global chat.
+- Scenes and entries are documents, but a scene is a structural unit first, and its prose is a set of passages anchored to its beats. There is no global chat; discussion is planned as talk pages attached to what they discuss.
 
 ## Capabilities and Constraints
 
@@ -47,7 +51,7 @@ Other tools either inject lore into prompts (Novelcrafter, NovelAI, Sudowrite) o
   - *timeline*, *frame*, *event*
   - *holds* and *revealed*
   - *inferred* and *asserted*: AI-inferred versus writer-confirmed data
-- **Undecided:** the visual design, the styling stack, and whether entries need a different editing surface from scenes. The model is "everything is a document", decision worldcrafter-9zj1.
+- **Undecided:** the visual design, the styling stack, the product name, and whether entries need a different editing surface from scenes. Scenes and entries are documents (decision worldcrafter-9zj1, amended by worldcrafter-ok5a).
 
 ## Brand Commitments
 
@@ -59,8 +63,8 @@ There are no users, testimonials, metrics or sample worlds yet. Don't invent any
 
 ## Product Principles
 
-1. **The prose is the stage.** Writing is the main surface. The world, the AI and discussion support it from the sides.
+1. **The structure is the stage.** Work happens at the highest level where a change applies. Prose is the finish: crafted, and anchored to the structure rather than compiled from it.
 2. **The AI is a quiet, accountable colleague.** It does the bookkeeping, proposes changes to canon, and signs its work. It never competes for attention.
 3. **The writer stays in control.** Context is visible and editable, AI changes are reversible, and the writer's corrections always win.
-4. **The world is the truth.** The manuscript is one view into the world, presented in its own narrative order.
+4. **The story model is the truth.** The manuscript is one view of it, assembled from the arrangement in its own narrative order. World and story shape each other both ways.
 5. **Don't lose the writer's work.** Losing data is a bug, but this is a personal project: a schema version and a backup export are enough, and breaking changes are fine when they make the model better.

@@ -43,7 +43,7 @@ Status: proposal (2026-10-17). Settles the story-position decision (`worldcrafte
 ### Two orders
 
 - **Chronology:** happens-before, plus positions in frames.
-- **Narrative order:** the manuscript outline (book > chapter > scene). The outline is required, because narrative order comes from it.
+- **Narrative order:** the manuscript outline (book > chapter > scene). The outline is required, because narrative order comes from it. Under the story model (`story-model.md`), this outline is the arrangement: chapters are packaging over scenes, and the manuscript is a view assembled from it.
 - By default a scene is placed **after the main line**, so a linear story costs nothing. The main line is the latest scene that continues the story: an unplaced scene follows it and becomes the new main line. Flashbacks, time skips and parallel POVs override the default, and the AI proposes the override from cues in the prose ("years earlier…"). Decided by Sumeet (2026-10-17):
   - A placed scene (a flashback, a parallel scene) doesn't move the main line, so the scene after a flashback returns to the present.
   - A placed scene that is known to come after the main line (a time skip) becomes the new main line. So can any placed scene marked as *continuing* the main line, which covers a flashback that runs over several scenes.

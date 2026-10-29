@@ -19,22 +19,10 @@ relationships:
     id: "worldcrafter-877z"
     type: "advances"
   - kind: "issue"
-    id: "worldcrafter-8agg"
-    type: "advances"
-  - kind: "issue"
-    id: "worldcrafter-eh1z"
-    type: "advances"
-  - kind: "issue"
     id: "worldcrafter-hbnh"
     type: "advances"
   - kind: "issue"
-    id: "worldcrafter-lhh3"
-    type: "advances"
-  - kind: "issue"
     id: "worldcrafter-mqrq"
-    type: "advances"
-  - kind: "issue"
-    id: "worldcrafter-yx9v"
     type: "advances"
   - kind: "issue"
     id: "worldcrafter-zyc2"
@@ -43,21 +31,16 @@ schema: "atelier.issue"
 schema_version: 2
 status: "draft"
 title: "Rebuild WorldCrafter around clear data boundaries"
-updated_at: "2026-10-19T15:20:37.860763935+00:00"
+updated_at: "2026-10-29T21:14:31.234906749+00:00"
 ---
 
 ## Outcome
 
-Rebuild WorldCrafter as a non-conversational AI writing and worldbuilding tool. The writer types, and
-known entities are recognised and new ones suggested without the prose being touched. Generation uses world
-context the writer can see and edit. AI output arrives as attributed, reviewable segments or proposals, and
-talk pages hold discussion next to its subject. The strategy (`docs/strategies/rebuild.md`) owns
-the intent, the success criteria S1–S9, the shape and the authority.
+A rebuilt app with a sound foundation: content with stable IDs and AI projections that round-trips exactly, generation with world context the writer can see and edit, attributed and reviewable AI segments, story time, and storage behind an adapter. The old app is gone, and the checks pass. Narrowed on 2026-10-29 (worldcrafter-uicb): recognition, discovery and talk pages moved out, and the story model continues in the Structure first mission. The strategy (`docs/strategies/rebuild.md`) owns the intent, the success criteria, the shape and the authority.
 
 ## Background
 
-Design proposals: `docs/rebuild/data-model-boundaries.md`, `docs/rebuild/entity-pipeline.md`,
-`docs/rebuild/talk-pages.md`. Prior art: `docs/rebuild/prior-art-2026.md`. Philosophy: `docs/philosophy.md`.
+Design proposals: `docs/rebuild/data-model-boundaries.md`, `docs/rebuild/story-time.md`, `docs/rebuild/story-model.md`. Prior art: `docs/rebuild/prior-art-2026.md`. Philosophy: `docs/philosophy.md`.
 
 ## Notes
 

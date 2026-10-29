@@ -8,15 +8,12 @@ relationships:
   blocks: []
   children: []
   attachments: []
-  relates:
-  - kind: "issue"
-    id: "worldcrafter-3otd"
-    type: "advances"
+  relates: []
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Writer notes: decide their representation and keep them out of model context"
-updated_at: "2026-10-18T05:27:28.178059781+00:00"
+updated_at: "2026-10-29T21:13:15.247151297+00:00"
 ---
 
 ## Goal
@@ -30,3 +27,7 @@ A recorded decision; the prose projection (or the context builder) excludes writ
 ## Context
 
 Found while wiring generation (worldcrafter-2tz9, 2026-10-18). See .impeccable/surfaces/writing-workspace.md, docs/rebuild/data-model-boundaries.md (Boundary 1: content is only what the author would expect in an export), app/src/content/projections.ts, app/src/context/builder.ts.
+
+## Notes
+
+- 2026-10-29 [note] Moved out of the rebuild mission (worldcrafter-3otd) on 2026-10-29: it was planned for a manuscript-first app. Re-plan it under the story model (decision worldcrafter-ok5a, docs/rebuild/story-model.md) before scheduling it.

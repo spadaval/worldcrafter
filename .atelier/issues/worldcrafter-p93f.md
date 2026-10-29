@@ -21,9 +21,10 @@ relationships:
     type: "implements"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-29T18:43:55.732918748+00:00"
+status: "done"
 title: "Bring the design docs and PRODUCT.md in line with worldcrafter-gcox"
-updated_at: "2026-10-29T18:43:44.337897154+00:00"
+updated_at: "2026-10-29T18:43:55.732918748+00:00"
 ---
 
 ## Goal
@@ -35,3 +36,7 @@ Update the docs that still describe the old framing: `docs/rebuild/data-model-bo
 - They say exact round-trips go through the typed model and its adapters, not "JSON".
 - `PRODUCT.md` describes a web-first installable app with local-first storage and a later sync backend, not "browser-only with no server", and lists a phone in the operating context.
 - `PRODUCT.md` no longer ranks no data loss above every other quality.
+
+## Close Reason
+
+Design docs and PRODUCT.md describe the typed model with adapters, web-first with a later sync backend, a phone in the environment, and no data loss out of the top rank

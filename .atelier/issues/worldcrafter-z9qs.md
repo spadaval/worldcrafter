@@ -20,9 +20,9 @@ relationships:
     type: "derived_from"
 schema: "atelier.issue"
 schema_version: 2
-status: "draft"
+status: "todo"
 title: "Structure first: build stories from the frame out"
-updated_at: "2026-10-29T21:14:31.202754153+00:00"
+updated_at: "2026-10-29T22:23:17.583686824+00:00"
 ---
 
 ## Outcome
@@ -32,3 +32,7 @@ A writer can hold a story at any level of detail and change it at the highest le
 ## Background
 
 Decision worldcrafter-ok5a and `docs/rebuild/story-model.md`. Builds on the rebuild mission (worldcrafter-3otd).
+
+## Notes
+
+- 2026-10-29 [note] 2026-10-29 planned. Modelling questions settled (worldcrafter-ddha). Prerequisite: worldcrafter-4t98 (tombstones, rebuild S9). Increment 1 worldcrafter-z3w0 delivers T1, T3 and T2 without threads; its first ready child is the records issue once 4t98 lands. Increments 2-4 (T4, T5, T6 plus the rest of T2) are in backlog.

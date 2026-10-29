@@ -21,9 +21,10 @@ relationships:
     type: "implements"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-29T20:19:27.792599527+00:00"
+status: "done"
 title: "Add the story model design doc (worldcrafter-ok5a)"
-updated_at: "2026-10-29T20:19:27.588342016+00:00"
+updated_at: "2026-10-29T20:19:27.792599527+00:00"
 ---
 
 ## Goal
@@ -34,3 +35,7 @@ Add `docs/rebuild/story-model.md`, the design doc behind decision worldcrafter-o
 
 - The doc describes the identity, leverage, the construction and film-editing models, the four layers, the primitives, the lenses, the tools they enable, the effect on the current plan, and open questions.
 - It cites decision worldcrafter-ok5a and its amendment of worldcrafter-9zj1.
+
+## Close Reason
+
+story-model.md added, citing worldcrafter-ok5a and its amendment of worldcrafter-9zj1

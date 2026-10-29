@@ -1,0 +1,7 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Static assets only: the app is browser-only and routes via the URL hash.
+  "name": "worldcrafter",
+  "compatibility_date": "2026-10-19",
+  "assets": { "directory": "./dist" }
+}

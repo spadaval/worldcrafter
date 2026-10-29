@@ -4,6 +4,9 @@ id: "worldcrafter-kvzy"
 issue_type: "task"
 labels:
 - "rebuild"
+workflow_branch:
+  branch_base: master
+  work_branch: task/worldcrafter-kvzy
 priority: "P3"
 relationships:
   blocks: []
@@ -15,9 +18,9 @@ relationships:
     type: "implements"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Commit the Cloudflare Worker config for the static deploy"
-updated_at: "2026-10-29T20:20:56.282463392+00:00"
+updated_at: "2026-10-29T20:20:56.360741217+00:00"
 ---
 
 ## Goal

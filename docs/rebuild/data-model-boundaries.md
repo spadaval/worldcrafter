@@ -41,7 +41,7 @@ Every node type allowed in content must define its **AI projections** (`prose`, 
 
 Tables, columns, media, equations, callouts, toggles and the rest are out until there's a concrete need. Each one would also need its AI projections defined. Adding a node type still comes back to the human.
 
-**Exact round-trips go through JSON, not markdown** (decided by Sumeet, 2026-10-19, worldcrafter-7hjn). The tree is already stored as JSON. Save and load, and export and import, preserve it exactly, including block IDs, so annotations stay anchored. Markdown export is readable and one-way: it may drop IDs and anything outside the content tree.
+**Exact round-trips go through the typed model, not markdown** (decided by Sumeet, 2026-10-19, worldcrafter-7hjn; reframed 2026-10-29). The TypeScript model is the source of truth, and serialisation belongs to the storage and export adapters. Every adapter preserves the model exactly, including block IDs, so annotations stay anchored. JSON is simply the obvious format for the exact export. Markdown export is readable and one-way: it may drop IDs and anything outside the content tree.
 
 This replaces an earlier goal: making the markdown lossless so it could become a storage format and keep plain files on disk open. That goal was dropped. The app's value is structure that lives outside the tree (annotations, world facts, story time, discussions), and markdown can only hold the prose. Editing such files outside the app would break block-ID anchors, and agents writing them would skip the proposal flow. Ownership comes from the export instead.
 
@@ -66,13 +66,13 @@ Plate stores some derived or invisible state that the schema doesn't allow (`lis
 | `prose` | continuation, summaries, world context | strips placeholders and annotations; AI segments rendered inline |
 | `addressable` | AI edits | every block prefixed with its ID, e.g. `[b_7f3a] text…` |
 | `plain+map` | entity matching and extraction, consistency checks | flat text per block with an offset map |
-| `export` | reading, sharing outside the app | readable markdown, one-way; exact export and import use JSON |
+| `export` | reading, sharing outside the app | readable markdown, one-way; exact export and import go through an adapter that preserves the model |
 
 **Text → tree is only allowed at narrow, typed entry points:**
 
 1. **Generated content → inside one AI segment.** We parse only a tiny grammar (paragraphs + emphasis + links). Anything else is flattened to text. The model never gets to write arbitrary structure.
 2. **AI edits → block operations.** The model returns operations against block IDs from the `addressable` projection, e.g. `replace(b_7f3a, newText)`, `insertAfter(b_7f3a, text)`, `delete(b_7f3a)`. They are applied as reviewable suggestions. Inside a block we diff old text against new and keep marks and links on the unchanged spans. This is the same shape as Tiptap's AI Toolkit (read/insert/patch tools plus a diff-based review).
-3. **Import → the whole document or world**, once, explicitly, from the JSON export.
+3. **Import → the whole document or world**, once, explicitly, from the exact export.
 
 **We never re-parse a whole document from markdown during normal editing.**
 

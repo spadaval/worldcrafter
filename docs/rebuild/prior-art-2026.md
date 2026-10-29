@@ -35,7 +35,7 @@ A quick survey made while reviving the project. Many of the sources are vendor b
 - **Notion** now exposes "enhanced markdown" for reading and editing pages in its official MCP server (API version `2026-03-11`), because it's token-efficient. Third-party converters regularly drop block types (callouts, toggles, tables). That's the same lossiness we hit.
   - https://docsearch.algolia.com/mcp/docs/repo/makenotion/notion-mcp-server
 
-**What this means for us:** keep the content schema small enough that every node type has a clean text projection for the model. (Update 2026-10-19, worldcrafter-7hjn: exact round-trips now go through JSON, and markdown is a one-way readable export.)
+**What this means for us:** keep the content schema small enough that every node type has a clean text projection for the model. (Update 2026-10-19, worldcrafter-7hjn, reframed 2026-10-29: exact round-trips go through the typed model and its adapters, and markdown is a one-way readable export.)
 
 ### 4. People bring their world to external agents through MCP
 

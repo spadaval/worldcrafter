@@ -8,7 +8,7 @@ web
 
 ## Stack
 
-The app is being rebuilt from a fresh skeleton (decision worldcrafter-zyc2). It will be a static, browser-only app with no server, built on Vite, TanStack Router, React 19 and Plate (a Slate-based rich-text editor), with Legend State on IndexedDB for persistence. The old app's styling stack (Tailwind with daisyUI and shadcn scaffolds) is evidence only and is not carried forward. The new styling approach is undecided.
+The app is being rebuilt from a fresh skeleton (decision worldcrafter-zyc2). It is web-first: an installable web app (PWA) built on Vite, TanStack Router, React 19 and Plate (a Slate-based rich-text editor), with local-first storage through Legend State on IndexedDB. A sync backend (a Cloudflare Worker) comes later so one writer can switch between laptop and phone (decision worldcrafter-gcox). Desktop and mobile wrappers may come later. The old app's styling stack (Tailwind with daisyUI and shadcn scaffolds) is evidence only and is not carried forward. The new styling approach is undecided.
 
 ## Users
 
@@ -30,13 +30,13 @@ Other tools either inject lore into prompts (Novelcrafter, NovelAI, Sudowrite) o
 ## Operating Context
 
 - Sessions mix drafting, building the world, arranging the timeline and reviewing what the AI inferred or proposed.
-- Mainly used on desktop Chromium, on a laptop or desktop screen.
-- Models are local (llama.cpp) or hosted (OpenRouter), and the user supplies their own keys.
+- Mainly used on desktop Chromium, on a laptop or desktop screen, and also on a phone.
+- Models are local (llama.cpp) or hosted (OpenRouter, featherless), and the user supplies their own keys. The writer controls samplers, system prompts and prompt format, which coding harnesses and chat frontends decide for you.
 - Documents are the unit of work. Each document and the world itself has a talk page, made of topics, for discussion. There is no global chat.
 
 ## Capabilities and Constraints
 
-- The content schema is restricted to node types whose AI projections are defined: paragraphs, headings, lists, quotes, rules, basic marks, links, AI segments and placeholders. Tables, media and callouts are excluded for now. A world exports and imports exactly as JSON, and also exports to readable markdown, one-way.
+- The content schema is restricted to node types whose AI projections are defined: paragraphs, headings, lists, quotes, rules, basic marks, links, AI segments and placeholders. Tables, media and callouts are excluded for now. The TypeScript model is the source of truth, and a world round-trips exactly through every storage and export adapter. It also exports to readable markdown, one-way.
 - **AI segments** are AI-written content that is visibly marked. You can accept it, which turns it into ordinary text, or regenerate it. Its provenance (the request, model and sampler) is kept alongside it.
 - **AI presence: a quiet colleague.** AI work is always visible and attributed, but it stays in the background: margins, underlines, an inbox, talk-page topics. It never takes the main stage from the prose.
 - **Power controls on demand:** the assembled request can be viewed and edited, and sampler settings and logprobs are available, but none of these is in the way by default.
@@ -63,4 +63,4 @@ There are no users, testimonials, metrics or sample worlds yet. Don't invent any
 2. **The AI is a quiet, accountable colleague.** It does the bookkeeping, proposes changes to canon, and signs its work. It never competes for attention.
 3. **The writer stays in control.** Context is visible and editable, AI changes are reversible, and the writer's corrections always win.
 4. **The world is the truth.** The manuscript is one view into the world, presented in its own narrative order.
-5. **No data loss.** It outranks every other quality.
+5. **Don't lose the writer's work.** Losing data is a bug, but this is a personal project: a schema version and a backup export are enough, and breaking changes are fine when they make the model better.

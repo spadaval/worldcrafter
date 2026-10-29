@@ -4,6 +4,9 @@ id: "worldcrafter-p93f"
 issue_type: "task"
 labels:
 - "rebuild"
+workflow_branch:
+  branch_base: master
+  work_branch: task/worldcrafter-p93f
 priority: "P2"
 relationships:
   blocks: []
@@ -18,9 +21,9 @@ relationships:
     type: "implements"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Bring the design docs and PRODUCT.md in line with worldcrafter-gcox"
-updated_at: "2026-10-29T18:43:38.382002787+00:00"
+updated_at: "2026-10-29T18:43:44.337897154+00:00"
 ---
 
 ## Goal

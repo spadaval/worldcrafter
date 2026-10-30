@@ -53,7 +53,7 @@ already let a story grow outside the writer's head without being flattened.
   chapters, or reordering passages within a scene, carries the prose with it.
   The manuscript is a view assembled from the arrangement. After a move, the
   app flags questions progressed or answered before they open, story-time
-  constraints the new order breaks (S10 of the rebuild), and the seams: the
+  constraints the new order breaks (the rebuild's story-time model), and the seams: the
   moved scene's opening and closing and the facing ends of its old and new
   neighbours. Checking that a scene relies on something the reader hasn't
   learned yet waits until the model records what scenes rely on. Shown by

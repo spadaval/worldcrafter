@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Validate increment 1: a story you can hold"
-updated_at: "2026-10-30T05:26:32.464641998+00:00"
+updated_at: "2026-10-30T05:29:56.244914132+00:00"
 ---
 
 ## Goal
@@ -33,4 +33,4 @@ Each claim has an explicit result and linked evidence receipt; the handoff state
 
 ## Context
 
-Increment worldcrafter-z3w0 and its children. The validator builds a small story from a premise only, refines it to scenes and beats, adds opposing drives and questions, writes prose and anchors it to beats, reorders passages, moves a scene so a question goes out of order and a story-time constraint breaks, checks the seams flagged, and moves it back. Commands are also exercised directly through the tests named in each child. To run the app: in `app/`, `bun run build`, then `bunx vite preview` in the background; stop it afterwards.
+Increment worldcrafter-z3w0 and its children. The validator builds a small story from a premise only, refines it to scenes and beats, adds opposing drives and questions, writes prose and anchors it to beats, reorders passages, moves a scene so a question goes out of order and (in the `?demo` world, which has placements and constraints the UI cannot create) a story-time constraint breaks, checks the seams flagged, and moves it back. Commands are also exercised directly through the tests named in each child. To run the app: in `app/`, `bun run build`, then `bunx vite preview` in the background; stop it afterwards.

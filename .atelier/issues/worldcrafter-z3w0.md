@@ -11,6 +11,8 @@ relationships:
   - kind: "issue"
     id: "worldcrafter-3ugg"
   - kind: "issue"
+    id: "worldcrafter-4vxp"
+  - kind: "issue"
     id: "worldcrafter-6zlx"
   - kind: "issue"
     id: "worldcrafter-8tbh"
@@ -38,20 +40,21 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Increment 1: a story you can hold — primitives, outline and weave views, arrangement"
-updated_at: "2026-10-29T22:23:01.945950605+00:00"
+updated_at: "2026-10-30T05:26:32.479313574+00:00"
 ---
 
 ## Goal
 
-A writer can hold a story at any level of detail without writing prose: a premise, books and chapters with summaries, scenes with summaries and optional beats, actors' drives that oppose or ally, and questions opened, progressed and answered at scenes. They can see it as an outline and as a weave grid, rearrange scenes and passages with the prose travelling along, and see what a move broke. No AI is involved.
+A writer can hold a story at any level of detail without writing prose: a premise, books and chapters with summaries, scenes with summaries and optional beats, actors' drives that oppose or ally, and questions opened, progressed and answered at scenes. They can see it as an outline and as a weave grid, anchor prose to beats, rearrange scenes and passages with the prose travelling along, and see what a move broke. No AI is involved.
 
 ## Done when
 
-- Delivers T1 and T3, and T2 except threads as weave-grid rows (threads arrive with T6). Each child's proof passes, and the integrated increment is independently reviewed.
-- The validation child confirms the outcome in the running app.
+- Delivers `primitives`, `coarse-to-fine` and `arrangement`. Each child's proof passes, and the integrated increment is independently reviewed.
+- The validation child (worldcrafter-6zlx) confirms the outcome in the running app.
 
 ## Unknowns
 
+- How passages anchor to beats so the anchors survive editing; spike worldcrafter-4vxp settles it before worldcrafter-jd8b.
 - Whether drives need time-indexing; this increment stores them without it (strategy, Risks).
 - How the views should look. The visual design is undecided; build them functional and consistent with the existing shell.
 

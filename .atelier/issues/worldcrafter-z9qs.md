@@ -22,7 +22,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Structure first: build stories from the frame out"
-updated_at: "2026-10-29T22:23:17.583686824+00:00"
+updated_at: "2026-10-30T05:26:47.887655656+00:00"
 ---
 
 ## Outcome
@@ -36,3 +36,4 @@ Decision worldcrafter-ok5a and `docs/rebuild/story-model.md`. Builds on the rebu
 ## Notes
 
 - 2026-10-29 [note] 2026-10-29 planned. Modelling questions settled (worldcrafter-ddha). Prerequisite: worldcrafter-4t98 (tombstones, rebuild S9). Increment 1 worldcrafter-z3w0 delivers T1, T3 and T2 without threads; its first ready child is the records issue once 4t98 lands. Increments 2-4 (T4, T5, T6 plus the rest of T2) are in backlog.
+- 2026-10-30 [note] 2026-10-30 replanned after an independent review of the planning (19 findings). Criteria renamed to slugs Atelier parses (primitives, coarse-to-fine, arrangement, anchored-prose, inspection, lenses). Sumeet decided: requests sync (S9), depicts is descriptive, arrangement flags question-order, story-time and seam problems, coarse-to-fine reworded and arcs moved to lenses. New spike worldcrafter-4vxp settles passage anchoring before worldcrafter-jd8b. The fixed plan needs re-review before worldcrafter-4t98 starts.

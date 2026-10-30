@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Sync-ready storage: tombstones for deletes"
-updated_at: "2026-10-29T22:22:09.827789464+00:00"
+updated_at: "2026-10-30T05:26:32.325372974+00:00"
 ---
 
 ## Goal
@@ -26,18 +26,23 @@ Make every synced collection ready for a later sync backend (S9, decision worldc
 
 ## Done when
 
-- The storage contract test (`app/src/storage/contract.ts`), run against both the memory and IndexedDB adapters, shows for every keyed collection: `delete` leaves a tombstone with `deletedAt`; `load` of a tombstoned key fails with `not_found`; `list` omits tombstones; `save` after a delete brings the record back.
-- A contract test asserts every stored record type has a string `id` (or key) and an `updatedAt`, except the documented exemptions below.
+- The storage contract test (`app/src/storage/contract.ts`), run against the memory and IndexedDB adapters, shows for every keyed collection except snapshots: `delete` leaves a tombstone with `deletedAt`; `load` of a tombstoned key fails with `not_found`; `list` omits tombstones; `save` after a delete brings the record back.
+- The other read and write paths agree: `annotations.listForDocument` omits tombstoned annotations, and a `batch` that saves a document or annotation after its delete brings it back.
+- Listing tombstones returns each deleted key with its `deletedAt`, on both adapters and through `app/src/workspace/connected-storage.ts`, the adapter the app actually uses.
+- A test writes records into every collection of an IndexedDB database at the current version, upgrades it, and reads the same records back.
+- A compile-time check (a type over the `StorageAdapter` collections that fails `tsc` when broken) requires every synced record type to have a string `id` and a change time: `updatedAt`, or `createdAt` for stored requests.
 - `bun run check` passes in `app/`. Evidence recorded against S9.
 
 ## Scope
 
-- `app/src/storage/` (types, memory and IndexedDB adapters, contract tests), plus an IndexedDB version upgrade that keeps existing data.
-- A way to list tombstones (with `deletedAt`) for a future sync adapter. No sync code.
-- Exempt, and documented as device-local in `types.ts`: snapshots (auto-increment IDs, append-only local history) and stored requests (immutable, `createdAt` only).
-- Callers keep their current behaviour: nothing outside `storage/` should need to change.
+- `app/src/storage/` (types, the memory and IndexedDB adapters, contract tests) and `app/src/workspace/connected-storage.ts`, which implements the same interfaces by hand.
+- The adapter sets `deletedAt` from the clock when `delete` runs; `delete(key)` keeps its signature.
+- Stored requests sync like other records. They never change and have client-generated IDs, so `createdAt` is their change time; AI segment provenance on other devices points at them.
+- Snapshots stay device-local (auto-increment IDs, append-only local history) and get no tombstones. Say so in `types.ts`.
+- Update the `DB_VERSION` comment in `indexeddb.ts`: the app has been deployed (worldcrafter-kvzy), so real databases may exist.
+- No sync code. Callers keep their current behaviour.
 
 ## Context
 
-- `StorageAdapter`, `Collection<T>` and record types: `app/src/storage/types.ts`.
-- S9 in `docs/strategies/rebuild.md`; it was proven before the sync-ready wording was added, so it needs fresh evidence.
+- `StorageAdapter`, `Collection<T>`, `BatchWrite` and the record types: `app/src/storage/types.ts`. `listForDocument` reads the `byDocument` index in `app/src/storage/indexeddb.ts`.
+- S9 in `docs/strategies/rebuild.md`. It was proven before the sync-ready wording was added, so it needs fresh evidence.

@@ -17,24 +17,27 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Manuscript view and arrangement checks"
-updated_at: "2026-10-29T22:22:47.135513658+00:00"
+updated_at: "2026-10-30T05:26:32.419358668+00:00"
 ---
 
 ## Goal
 
-The manuscript is a view assembled from the arrangement, and moving scenes shows what the move broke (T3).
+The manuscript is a view assembled from the arrangement, and moving scenes shows what the move broke (`arrangement`).
 
 ## Done when
 
-- A function assembles the manuscript: books, chapters and their scenes' content in reading order. Nothing new is stored.
-- `arrangementProblems` reports (a) question marks that come before the question's `opens` mark in reading order, and (b) recorded reveals whose fact value no longer holds at the scene's event, using the story-time holds engine.
-- A scenario test over a fixture with a flashback moves a scene with the existing `moveScene` command, sees each kind of problem appear, moves it back and sees them clear. A placed (flashback) scene keeps its story time when moved; an unplaced one follows the main line.
+- A function assembles the manuscript: books, chapters and their scenes' content in reading order. It extends the existing scene rail (`ManuscriptView` in `app/src/app/manuscript.ts`) rather than adding a second reading-order path. Nothing new is stored.
+- `arrangementProblems` reports, for the current arrangement:
+  - (a) question marks that come before the question's `opens` mark in reading order;
+  - (b) story-time problems the order causes, from the existing `timelineProblems` (for example, an explicit scene constraint the new order contradicts);
+  - (c) after a move, the seams to reread: the moved scene's first and last blocks, and the facing blocks of the scenes before and after it, at both its old and its new place.
+- A scenario test over a fixture with a flashback moves a scene with the existing `moveScene` command, sees each kind of problem appear, moves it back and sees (a) and (b) clear. A placed (flashback) scene keeps its story time when moved; an unplaced one follows the main line.
 - `bun run check` passes.
 
 ## Scope
 
-`app/src/story/` and use of `app/src/time/` and `app/src/outline/`. No UI.
+`app/src/story/`, `app/src/app/manuscript.ts`, and use of `app/src/time/` and `app/src/outline/`. No UI. Whether a reveal's fact still holds is a continuity check, not part of this issue.
 
 ## Context
 
-`app/src/time/holds.ts`, `app/src/time/chronology.ts` (`compileChronology`), reveals in `app/src/time/timeline.ts`, `app/src/app/manuscript.ts`.
+`app/src/time/commands.ts` (`timelineProblems`), `app/src/time/chronology.ts` (`compileChronology`), `app/src/outline/outline.ts` (`moveScene`, `readingOrder`). Note R7 on worldcrafter-lhh3 describes outline and constraint contradictions after a reorder.

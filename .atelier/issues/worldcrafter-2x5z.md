@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Retire the old app and its dependencies"
-updated_at: "2026-10-29T21:13:34.435597643+00:00"
+updated_at: "2026-10-30T05:26:47.865840256+00:00"
 ---
 
 ## Goal
@@ -32,7 +32,7 @@ Provisional: typecheck, lint, test and build are clean on `master`, and a search
 
 ## Unknowns
 
-The scope depends on the rebuild-approach decision.
+Whether the root `src/` can go entirely, or whether anything there is still used as reference (decision worldcrafter-zyc2 made `app/` the rebuild).
 
 ## Notes
 

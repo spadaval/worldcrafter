@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-10-29: narrowed to the foundation; recognition, discovery and talk pages moved out, and the story model continues in docs/strategies/structure-first.md (worldcrafter-uicb, Sumeet)"
+last_changed: "2026-10-30: S9 names synced requests and device-local snapshots; stale bookkeeping text removed (Sumeet)"
 ---
 
 # Why
@@ -23,15 +23,11 @@ finetunes means choosing those yourself. The project started from wanting the
 XTC sampler, which almost no frontend offers, but the goal is control in
 general, not any one sampler.
 
-# Status
-
-Narrowed on 2026-10-29. The story model (decision worldcrafter-ok5a,
-`docs/rebuild/story-model.md`) makes the app structure-first, not
-manuscript-first. This mission now finishes the foundation it has mostly
-built: content projections, stable IDs, generation with visible context, the
-storage adapter, story time, and retiring the old app. Recognition (S3),
-discovery and bookkeeping (S5) and talk pages (S6) moved out, to be re-planned
-under the story model. The next mission is `docs/strategies/structure-first.md`.
+The story model (decision worldcrafter-ok5a, `docs/rebuild/story-model.md`)
+makes the app structure-first, not manuscript-first. This mission finishes the
+foundation: content projections, stable IDs, generation with visible context,
+the storage adapter, story time, and retiring the old app. The story model
+continues in `docs/strategies/structure-first.md`.
 
 # Outcome
 
@@ -69,8 +65,10 @@ goes through an adapter. The old app is gone, and the checks pass.
 - S9: Persistence goes through a storage adapter, with IndexedDB as the
   first implementation. There is no direct IndexedDB access outside the
   adapter, shown by a contract test and a search for direct access. Records
-  are ready for sync: client-generated IDs, an `updatedAt` on each record,
-  and tombstones for deletes, shown by the contract test.
+  are ready for sync: client-generated IDs, a change time on each record
+  (`updatedAt`, or `createdAt` for stored requests, which never change), and
+  tombstones for deletes, shown by the contract test. Snapshots are
+  device-local history and are not synced.
 
 # Shape
 
@@ -85,9 +83,6 @@ goes through an adapter. The old app is gone, and the checks pass.
   default frame. Fact changes are anchored to events. Narrative order comes
   from the manuscript outline. This is in the world-fact schema from the
   first increment, not added afterwards.
-- **The AI does the bookkeeping.** Useful but tedious structure is kept up to
-  date by the AI as inferred data with provenance. The writer's corrections pin
-  values. Only conflicts and canon changes are escalated for review.
 - **Data boundaries** (`docs/rebuild/data-model-boundaries.md`). Content,
   annotations, world facts and discussions live in separate stores.
   Annotations never write to the content tree.
@@ -115,7 +110,7 @@ goes through an adapter. The old app is gone, and the checks pass.
 - **Commands first.** Actions are typed commands, the UI calls them, and an
   external agent (MCP, later) can call the same ones. Commands, projections
   and context assembly use no DOM or browser-only APIs, so they can run in a
-  Worker later (for example, background bookkeeping).
+  Worker later (for example, background jobs).
 - **Keep list, ported deliberately:**
   - `docs/philosophy.md`
   - AI segments and placeholders
@@ -141,6 +136,7 @@ In scope:
 - world entries and relations
 - generation and context
 - the storage adapter
+- story time
 - removing the old app
 
 Out of scope:

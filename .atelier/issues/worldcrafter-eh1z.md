@@ -11,7 +11,10 @@ relationships:
     id: "worldcrafter-8agg"
   children: []
   attachments: []
-  relates: []
+  relates:
+  - kind: "issue"
+    id: "worldcrafter-z9qs"
+    type: "related"
 schema: "atelier.issue"
 schema_version: 2
 status: "backlog"

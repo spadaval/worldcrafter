@@ -20,7 +20,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "backlog"
 title: "Increment 2: anchored prose and drafting from the structure"
-updated_at: "2026-10-29T22:23:11.180847578+00:00"
+updated_at: "2026-10-30T05:26:32.494448753+00:00"
 ---
 
 ## Goal
@@ -29,7 +29,7 @@ Prose is written by hand or drafted from the structure, and is marked stale when
 
 ## Done when
 
-Provisional: delivers T4. Drafting a beat assembles context from the actors' drives, the open questions and what the reader knows at that point, shown by scenario tests against a stub OpenAI-compatible server. Changing a beat marks its passages stale, and the writer can rewrite, redraft or keep each one.
+Provisional: delivers `anchored-prose`. Drafting a beat assembles context from the actors' drives, the open questions and what the reader knows at that point, shown by scenario tests against a stub OpenAI-compatible server. Changing a beat marks its passages stale, and the writer can rewrite, redraft or keep each one.
 
 ## Unknowns
 

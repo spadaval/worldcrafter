@@ -1,6 +1,6 @@
 ---
 status: draft
-last_changed: "2026-10-29: modelling questions settled by worldcrafter-ddha; drive time-indexing added as an unknown (Sumeet)"
+last_changed: "2026-10-30: criteria renamed to slugs; coarse-to-fine levels and arrangement checks reworded, arcs moved to lenses (Sumeet)"
 ---
 
 # Why
@@ -35,38 +35,45 @@ problems flagged. Prose is written by hand or drafted from the structure, and
 is marked stale when the structure under it changes. The app points out
 structural problems while they're still cheap to fix.
 
-Worth shipping on its own: T1–T3. Structure and arrangement with no AI at all
+Worth shipping on its own: `primitives`, `coarse-to-fine` and `arrangement`. Structure and arrangement with no AI at all
 already let a story grow outside the writer's head without being flattened.
 
 # Success Criteria
 
-- T1: Primitives. Actors, drives (with oppose and ally relations between
+- primitives: Actors, drives (with oppose and ally relations between
   them), questions (opened, progressed and answered at scenes), events and
   scenes exist as typed records in the world model, with typed commands to
   create and change each one. Shown by tests that call the commands directly.
-- T2: Coarse to fine. A story can exist as a premise alone and be refined into
-  arcs, scenes and beats. Outline and weave-grid (scenes × threads) views are
-  derived from the structure; neither is stored as a document. Shown by tests
-  over a fixture story at several levels of detail.
-- T3: Arrangement. Chapters are packaging over scenes. Moving a scene between
+- coarse-to-fine: A story can exist as a premise alone and be refined into
+  books and chapters, scenes and beats. Outline and weave-grid views are
+  derived from the structure; neither is stored as a document. The weave
+  grid's rows are questions and drives, and threads join them with `lenses`.
+  Shown by tests over a fixture story at several levels of detail.
+- arrangement: Chapters are packaging over scenes. Moving a scene between
   chapters, or reordering passages within a scene, carries the prose with it.
-  The manuscript is a view assembled from the arrangement. After a move,
-  reveal-order breaks are flagged using the story-time model (S10 of the
-  rebuild). Shown by scenario tests over a fixture with a flashback.
-- T4: Anchored prose. Each passage is anchored to a scene or beat. It can be
+  The manuscript is a view assembled from the arrangement. After a move, the
+  app flags questions progressed or answered before they open, story-time
+  constraints the new order breaks (S10 of the rebuild), and the seams: the
+  moved scene's opening and closing and the facing ends of its old and new
+  neighbours. Checking that a scene relies on something the reader hasn't
+  learned yet waits until the model records what scenes rely on. Shown by
+  scenario tests over a fixture with a flashback.
+- anchored-prose: Each passage is anchored to a scene or beat. It can be
   hand-written or drafted, and drafting assembles its context from the
   structure: the actors' drives, the open questions, and what the reader knows
   at that point. When a beat changes, the passages anchored to it are marked
   stale, and the writer chooses to rewrite, redraft or keep them. Shown by
   scenario tests against a stub OpenAI-compatible server.
-- T5: Inspection. A question ledger (questions open too long without
+- inspection: A question ledger (questions open too long without
   progress, promises with no planned payoff), a collision map (actors with no
   opposition, drives that never meet in a scene) and a scene check (each scene
   moves a question or pressures a drive) are computed from the model without
   the AI. Shown by tests over fixture stories with planted problems.
-- T6: Threads. The writer can create, name and curate threads over the
-  primitives. The AI can propose threads and their membership as inferred
-  data, and the writer's corrections win. Shown by scenario tests.
+- lenses: The writer can create, name and curate threads over the
+  primitives, and see them as weave-grid rows, and can trace an actor's arc
+  (its drives and state across scenes). The AI can propose threads and their
+  membership as inferred data, and the writer's corrections win. Shown by
+  scenario tests.
 
 # Shape
 
@@ -99,8 +106,8 @@ In scope:
 
 - the story primitives and their commands
 - outline and weave-grid views
-- arrangement: chapters, scene moves, passage reordering, seam and
-  reveal-order checks
+- arrangement: chapters, scene moves, passage reordering, seam,
+  question-order and story-time checks
 - anchored prose and staleness
 - deterministic inspection
 - threads as lenses
@@ -136,13 +143,15 @@ These must come back to the human:
 
 - The three modelling questions (where drives and questions live, beats,
   scenes and events) are settled by decision worldcrafter-ddha: their own
-  records in the world store, optional beats inside scenes, and scenes that
-  depict events.
+  typed records, optional beats inside scenes, and scenes that depict events.
+  `depicts` is descriptive; story-time placement alone says when a scene
+  happens.
 - Drives probably change over story time (that is what an arc is). The first
   increment stores them without time-indexing; whether they need `Fact`-style
   changes anchored to events is open until arcs are built.
 - Passages anchored to beats need anchors that survive editing. Stable block
   IDs (S2 of the rebuild) are the starting point, but a passage may span
-  several blocks.
+  several blocks, and splitting, pasting, dragging and undo all disturb them.
+  A spike settles the design before passages are built.
 - Deterministic inspection may be too noisy to trust. Fixture stories with
   planted problems are the check.

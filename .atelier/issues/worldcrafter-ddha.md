@@ -21,7 +21,7 @@ schema_version: 2
 closed_at: "2026-10-29T22:21:24.493785430+00:00"
 status: "done"
 title: "Story model records: where drives and questions live, beats, and how scenes relate to events"
-updated_at: "2026-10-29T22:21:24.493785430+00:00"
+updated_at: "2026-10-30T05:26:47.876822805+00:00"
 ---
 
 ## Context
@@ -47,6 +47,10 @@ Decided by Sumeet (2026-10-29), on the agent's recommendation:
 1. **Their own typed records in the world store**, one record per drive and per question. Neither needs a prose body, and both have a life across scenes and relations to other records, which facts on one entry would hide. Actors stay entry documents (worldcrafter-9zj1).
 2. **Optional beats inside scenes.** A scene can have no beats. A passage anchors to a beat if there is one, otherwise to its scene. This keeps coarse-to-fine refinement without forcing detail.
 3. **A scene is a telling unit that depicts one or more events.** The scene keeps its own scene event for its place in narrative order, as story time already does, and links to the events it depicts. A flashback scene depicts an earlier event.
+
+## Notes
+
+- 2026-10-30 [note] 2026-10-30 clarification by Sumeet, after review of the plan: (1) drives and questions are their own typed records in app/src/story/, alongside the world store rather than inside it; (3) 'depicts' is descriptive only. A scene's own event, placed in story time, alone says when the scene happens; narrative order comes from the outline, not the scene event. A flashback scene is placed earlier with placeScene and also depicts the earlier events it shows.
 
 ## Close Reason
 

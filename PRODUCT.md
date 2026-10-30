@@ -8,7 +8,7 @@ web
 
 ## Stack
 
-The app is being rebuilt from a fresh skeleton (decision worldcrafter-zyc2). It is web-first: an installable web app (PWA) built on Vite, TanStack Router, React 19 and Plate (a Slate-based rich-text editor), with local-first storage through Legend State on IndexedDB. A sync backend (a Cloudflare Worker) comes later so one writer can switch between laptop and phone (decision worldcrafter-gcox). Desktop and mobile wrappers may come later. The old app's styling stack (Tailwind with daisyUI and shadcn scaffolds) is evidence only and is not carried forward. The new styling approach is undecided.
+The app is being rebuilt from a fresh skeleton (decision worldcrafter-zyc2). It is web-first: a web app, to become an installable PWA, built on Vite, TanStack Router, React 19 and Plate (a Slate-based rich-text editor), with local-first storage on IndexedDB behind a storage adapter. A sync backend (a Cloudflare Worker) comes later so one writer can switch between laptop and phone (decision worldcrafter-gcox). Desktop and mobile wrappers may come later. The old app's styling stack (Tailwind with daisyUI and shadcn scaffolds) is evidence only and is not carried forward. The new styling approach is undecided.
 
 ## Users
 
@@ -42,12 +42,12 @@ Other tools either inject lore into prompts (Novelcrafter, NovelAI, Sudowrite), 
 
 - The content schema is restricted to node types whose AI projections are defined: paragraphs, headings, lists, quotes, rules, basic marks, links, AI segments and placeholders. Tables, media and callouts are excluded for now. The TypeScript model is the source of truth, and a world round-trips exactly through every storage and export adapter. It also exports to readable markdown, one-way.
 - **AI segments** are AI-written content that is visibly marked. You can accept it, which turns it into ordinary text, or regenerate it. Its provenance (the request, model and sampler) is kept alongside it.
-- **AI presence: a quiet colleague.** AI work is always visible and attributed, but it stays in the background: margins, underlines, an inbox, talk-page topics. It never takes the main stage from the prose.
+- **AI presence: a quiet colleague.** AI work is always visible and attributed, but it stays in the background: margins, underlines, an inbox, talk-page topics. It never takes the main stage from the writer's own work.
 - **Power controls on demand:** the assembled request can be viewed and edited, and sampler settings and logprobs are available, but none of these is in the way by default.
 - **Terminology:**
   - *entry*: a world document such as a character, place or faction
   - *topic*: a talk-page discussion
-  - *arc*: an entity's sequence of fact changes
+  - *arc*: an actor's drives and state traced across scenes (a lens; see `docs/rebuild/story-model.md`)
   - *timeline*, *frame*, *event*
   - *holds* and *revealed*
   - *inferred* and *asserted*: AI-inferred versus writer-confirmed data

@@ -42,12 +42,15 @@ Moving a scene to another chapter, or reordering passages within a scene, change
 
 Prose has seams. It refers outward ("later that night", a pronoun whose antecedent was two scenes back, a character acting on something the reader hasn't learned). After a move, the app flags:
 
-- **reveal-order breaks**, using the "revealed" model in `story-time.md`
+- **question-order breaks**: a question progressed or answered before it opens
+- **story-time breaks**: constraints in `story-time.md` that the new order contradicts
 - **seam passages**: the openings and closings that tie a scene to its neighbours
+
+Catching a character acting on something the reader hasn't learned needs a record of what a scene relies on. The model doesn't have one yet.
 
 ## Layers
 
-The story is worked through four layers, each from coarse to fine (snowflake-style: premise, arcs, chapters, scenes, beats, prose).
+The story is worked through four layers, each from coarse to fine (snowflake-style: premise, books and chapters, scenes, beats, prose).
 
 | Layer | What it holds | Narratology |
 |---|---|---|
@@ -85,18 +88,20 @@ These are what the writer thinks in. They are named, writer-owned groupings over
 - **Scene check**: each scene should move at least one question or put at least one drive under pressure.
 - **Playing an actor**: "given what X wants and knows at this point, what would X do?", using drives and the story-time knowledge model.
 - **Staleness**: prose anchored to beats that have since changed.
-- **Seam check**: reveal-order breaks and stale transitions after scenes or passages move.
+- **Seam check**: question-order and story-time breaks, and stale transitions, after scenes or passages move.
 - **Weave grid**: threads across scenes, with convergence visible where several questions close together.
 
 ## Effect on the plan
 
 Adopted on 2026-10-29 (worldcrafter-uicb). The rebuild mission (`docs/strategies/rebuild.md`) was narrowed to the foundation it had mostly built, and the story model continues as its own mission in `docs/strategies/structure-first.md`. Recognition, discovery and bookkeeping, AI edit proposals and talk pages moved to the backlog, to be re-planned under this model. Story time, AI segments, provenance and stable IDs keep their place.
 
-## Open questions
+## Records
 
-- How are drives and questions represented in the world-fact schema? Are they entries, facts on entries, or their own store?
-- How far down does the structure go before prose: beats inside scenes, or scenes only?
-- Is a scene part of the telling (syuzhet) only, or also a grouping of events (fabula)?
+Decision worldcrafter-ddha settled how the primitives are stored:
+
+- Drives and questions are their own typed records, not entries or facts on entries. Actors stay entry documents.
+- Beats are optional, inside scenes. A passage anchors to a beat if there is one, otherwise to its scene.
+- A scene is a telling unit that depicts one or more events. `depicts` is descriptive: the scene's own event, placed in story time, alone says when the scene happens. A flashback is placed earlier, and also depicts the earlier events it shows.
 
 ## Sources
 

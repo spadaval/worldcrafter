@@ -56,7 +56,7 @@ Status: proposal (2026-10-17). Settles the story-position decision (`worldcrafte
 - **Holds at scene S:** a fact holds at a scene if its change happens before that scene, and no later change to the same fact also happens before it. When the ordering is unknown, the fact is passed to the model as uncertain, not guessed.
 - **Changes during a long event** (decided by Sumeet, 2026-10-17): when a change is anchored to an event that lasts a while ("the border moved during the war"), the fact doesn't hold before the event starts, holds after it ends, and is uncertain during it. A scene's own changes don't hold at that scene; facts are read as the scene opens.
 - **Revealed at:** the first scene in narrative order that shows the fact. Discovery records this from the source paragraph.
-- **Arc:** an entity's sequence of fact changes ("Ardelia's arc"). It's a view, not a separate thing that's stored.
+- **Arc:** an entity's sequence of fact changes ("Ardelia's arc"). It's a view, not a separate thing that's stored. The arc lens in `story-model.md` adds an actor's drives to it.
 
 ### What generation sees
 

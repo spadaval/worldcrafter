@@ -3,6 +3,9 @@ created_at: "2026-10-30T05:27:09.964153408+00:00"
 id: "worldcrafter-0pxn"
 issue_type: "task"
 labels: []
+workflow_branch:
+  branch_base: master
+  work_branch: task/worldcrafter-0pxn
 priority: "P1"
 relationships:
   blocks: []
@@ -14,9 +17,9 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "todo"
+status: "in_progress"
 title: "Align design docs and PRODUCT.md with the replanned story model"
-updated_at: "2026-10-30T05:27:09.964153408+00:00"
+updated_at: "2026-10-30T05:27:10.046577923+00:00"
 ---
 
 ## Goal

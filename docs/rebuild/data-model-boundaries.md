@@ -23,6 +23,7 @@ There is no neat solution, because the tree will always hold more than the text.
 | **Annotations** | entity candidates, dismissals, AI provenance (prompt, messages, model, sampler, logprobs), comments | Sidecar store keyed by `blockId` (+ offset or quote anchor) | the system; the user only through UI actions |
 | **World facts** | doc type and template, frontmatter fields, aliases, typed relations, tags | Structured store (not in prose) | user, AI as *proposals* |
 | **Discussions** | talk-page topics and messages (see `talk-pages.md`) | Discussion store, scoped to world / document / block | user and AI; results go into the other three only as proposals |
+| **Story structure** | drives, questions, scene summaries and beats (see `story-model.md`) | Typed records in `app/src/story/` (decision worldcrafter-ddha) | user, AI as proposals |
 
 Rules:
 

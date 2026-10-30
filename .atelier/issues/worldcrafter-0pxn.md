@@ -17,9 +17,10 @@ relationships:
     type: "advances"
 schema: "atelier.issue"
 schema_version: 2
-status: "in_progress"
+closed_at: "2026-10-30T05:30:57.024949594+00:00"
+status: "done"
 title: "Align design docs and PRODUCT.md with the replanned story model"
-updated_at: "2026-10-30T05:27:10.046577923+00:00"
+updated_at: "2026-10-30T05:30:57.024949594+00:00"
 ---
 
 ## Goal
@@ -41,3 +42,7 @@ Those four files only.
 ## Context
 
 Findings R15 and R16 of the planning review (2026-10-30), noted on worldcrafter-z9qs.
+
+## Close Reason
+
+Docs and PRODUCT.md aligned with ddha and the replanned strategy; independently reviewed

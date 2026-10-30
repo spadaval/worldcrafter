@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Sync-ready storage: tombstones for deletes"
-updated_at: "2026-10-30T05:26:32.325372974+00:00"
+updated_at: "2026-10-30T05:29:56.199473769+00:00"
 ---
 
 ## Goal
@@ -29,8 +29,8 @@ Make every synced collection ready for a later sync backend (S9, decision worldc
 - The storage contract test (`app/src/storage/contract.ts`), run against the memory and IndexedDB adapters, shows for every keyed collection except snapshots: `delete` leaves a tombstone with `deletedAt`; `load` of a tombstoned key fails with `not_found`; `list` omits tombstones; `save` after a delete brings the record back.
 - The other read and write paths agree: `annotations.listForDocument` omits tombstoned annotations, and a `batch` that saves a document or annotation after its delete brings it back.
 - Listing tombstones returns each deleted key with its `deletedAt`, on both adapters and through `app/src/workspace/connected-storage.ts`, the adapter the app actually uses.
-- A test writes records into every collection of an IndexedDB database at the current version, upgrades it, and reads the same records back.
-- A compile-time check (a type over the `StorageAdapter` collections that fails `tsc` when broken) requires every synced record type to have a string `id` and a change time: `updatedAt`, or `createdAt` for stored requests.
+- If tombstones change the IndexedDB schema (`DB_VERSION` goes up), a test writes records into every collection of a database at the old version, upgrades it, and reads the same records back.
+- A compile-time check (a type over the `StorageAdapter` collections that fails `tsc` when broken) requires every synced record type to have a string key (`id`, or `documentId` for world entries) and a change time: `updatedAt`, or `createdAt` for stored requests.
 - `bun run check` passes in `app/`. Evidence recorded against S9.
 
 ## Scope

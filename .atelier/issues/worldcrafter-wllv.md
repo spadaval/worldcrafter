@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Manuscript view and arrangement checks"
-updated_at: "2026-10-30T05:26:32.419358668+00:00"
+updated_at: "2026-10-30T05:29:56.230421931+00:00"
 ---
 
 ## Goal
@@ -27,10 +27,8 @@ The manuscript is a view assembled from the arrangement, and moving scenes shows
 ## Done when
 
 - A function assembles the manuscript: books, chapters and their scenes' content in reading order. It extends the existing scene rail (`ManuscriptView` in `app/src/app/manuscript.ts`) rather than adding a second reading-order path. Nothing new is stored.
-- `arrangementProblems` reports, for the current arrangement:
-  - (a) question marks that come before the question's `opens` mark in reading order;
-  - (b) story-time problems the order causes, from the existing `timelineProblems` (for example, an explicit scene constraint the new order contradicts);
-  - (c) after a move, the seams to reread: the moved scene's first and last blocks, and the facing blocks of the scenes before and after it, at both its old and its new place.
+- `arrangementProblems` reports, for the current arrangement: (a) question marks that come before the question's `opens` mark in reading order; (b) story-time problems the order causes, from the existing `timelineProblems` (for example, an explicit scene constraint the new order contradicts).
+- `seamsAfterMove(before, after, sceneId)`, given the outlines before and after a move, lists the seams to reread: the moved scene's first and last blocks, and the facing blocks of the scenes before and after it, at both its old and its new place.
 - A scenario test over a fixture with a flashback moves a scene with the existing `moveScene` command, sees each kind of problem appear, moves it back and sees (a) and (b) clear. A placed (flashback) scene keeps its story time when moved; an unplaced one follows the main line.
 - `bun run check` passes.
 

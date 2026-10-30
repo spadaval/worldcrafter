@@ -8,12 +8,15 @@ relationships:
   blocks: []
   children: []
   attachments: []
-  relates: []
+  relates:
+  - kind: "issue"
+    id: "worldcrafter-0pxn"
+    type: "blocked_by"
 schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Spike: passage anchoring design"
-updated_at: "2026-10-30T05:25:24.173863179+00:00"
+updated_at: "2026-10-30T05:29:56.260536139+00:00"
 ---
 
 ## Goal
@@ -38,6 +41,6 @@ Experiments in a scratch branch or test file, deleted afterwards. No production 
 
 ## Context
 
-- Stable block IDs (S2 of the rebuild): `app/src/editor/block-id-plugin.ts`. A split gives the trailing half a new ID (`docs/rebuild/data-model-boundaries.md`, Boundary 1 rules and block ID notes).
+- Stable block IDs (S2 of the rebuild): `app/src/editor/block-id-plugin.ts`. A split gives the trailing half a new ID (`docs/rebuild/data-model-boundaries.md`, Boundary 4).
 - Document session: `app/src/workspace/document-session.ts`.
 - Scene structure record: worldcrafter-8tbh. Decision worldcrafter-ddha (optional beats; a passage anchors to a beat or to its scene).

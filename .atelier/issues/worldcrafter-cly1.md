@@ -17,7 +17,7 @@ schema: "atelier.issue"
 schema_version: 2
 status: "todo"
 title: "Story commands: create and change drives, questions and scene structure"
-updated_at: "2026-10-30T05:26:32.356956380+00:00"
+updated_at: "2026-10-30T05:29:56.215224496+00:00"
 ---
 
 ## Goal
@@ -30,7 +30,7 @@ Every change to the story records is a typed command callable without the UI (`p
 - Tests call each command directly and cover each error: unknown or wrong-kind actor, unknown scene document, unknown event, unknown drive or question, a drive related to itself, a relation that already exists in either direction, duplicate IDs, and a beat or mark for a scene not in the outline.
 - Removing a drive removes it from other drives' relations and from every scene's `pressures`. Removing a question removes its marks.
 - References may dangle: to a scene removed with `removeScene`, a removed event, or a record a cascade didn't reach because a write failed part-way. Derivations skip dangling references, and a pure `storyProblems` lists them, as the outline lists its `dangling` scenes. Tests cover a scene removed after it has marks, structure and pressures.
-- Events can be renamed and removed: `renameEvent` and `removeEvent` in `app/src/time/commands.ts`. Removing an event fails with a typed error while a fact change, a constraint or a reveal refers to it; scene events cannot be removed this way.
+- Events can be renamed and removed: `renameEvent` and `removeEvent` in `app/src/time/commands.ts`. Removing an event also removes its positions, and fails with a typed error while anything else refers to it: a constraint, a scene placement, a correspondence, a reveal, or a fact change on a world entry (checked in the timeline store, which holds the world store). Scene events cannot be removed this way.
 - `bun run check` passes.
 
 ## Scope
